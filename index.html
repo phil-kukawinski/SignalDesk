@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SignalDesk — Social Publishing Workspace</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div><strong>signal<span>desk</span></strong><small>Social workspace</small></div>
+      </div>
+      <button class="workspace-switcher"><span class="workspace-dot"></span><span><b>PK Works Studio</b><small>Agency workspace</small></span><span class="chevron">⌄</span></button>
+      <div class="nav-label">WORKSPACE</div>
+      <nav id="main-nav">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">▦</span> Command Center <span class="nav-count">4</span></button>
+        <button class="nav-item" data-view="calendar"><span class="nav-icon">▦</span> Content Calendar</button>
+        <button class="nav-item" data-view="composer"><span class="nav-icon">＋</span> Publishing Studio</button>
+        <button class="nav-item" data-view="library"><span class="nav-icon">▤</span> Content Library</button>
+        <button class="nav-item" data-view="inbox"><span class="nav-icon">✉</span> Social Inbox <span class="nav-count muted">8</span></button>
+        <button class="nav-item" data-view="analytics"><span class="nav-icon">⌁</span> Analytics & Reports</button>
+      </nav>
+      <div class="nav-label spaced">MANAGE</div>
+      <nav>
+        <button class="nav-item" data-view="clients"><span class="nav-icon">♧</span> Clients & Accounts</button>
+        <button class="nav-item" data-view="approvals"><span class="nav-icon">✓</span> Team & Approvals <span class="nav-count warning">3</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card"><div class="help-icon">✦</div><b>Your workspace, connected.</b><p>Plan content, coordinate approvals, and keep every brand moving.</p><button data-view="clients">Manage accounts <span>→</span></button></div>
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
+        <div class="profile"><div class="avatar">PK</div><div><b>Workspace Admin</b><small>Owner access</small></div><span class="chevron">•••</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>PK Works Studio</span><span class="slash">/</span><b id="crumb">Command Center</b></div>
+        <div class="top-actions"><div class="status-pill"><span></span> Demo workspace</div><button class="icon-button" title="Notifications">♧<i></i></button><div class="avatar small">PK</div></div>
+      </header>
+      <div class="page-wrap">
+        <section class="page active" id="view-overview">
+          <div class="page-heading">
+            <div><div class="eyebrow">THURSDAY, OCTOBER 16, 2026</div><h1>Good morning. <span>Here's your pulse.</span></h1><p class="subheading">A clear view of what’s happening across your social channels.</p></div>
+            <button class="primary-button" data-view="composer"><span>＋</span> Create a post</button>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-top"><span>Posts scheduled</span><span class="stat-symbol purple">▦</span></div><div class="stat-number">24</div><div class="stat-foot"><span class="trend up">↗ 18%</span> vs. last week</div><div class="mini-bars"><i style="height:35%"></i><i style="height:52%"></i><i style="height:43%"></i><i style="height:70%"></i><i style="height:60%"></i><i style="height:83%"></i><i style="height:100%"></i></div></div>
+            <div class="stat-card"><div class="stat-top"><span>Awaiting approval</span><span class="stat-symbol amber">◷</span></div><div class="stat-number">3</div><div class="stat-foot"><span class="trend neutral">Needs attention</span> from your team</div><div class="stat-progress"><span style="width:34%"></span></div></div>
+            <div class="stat-card"><div class="stat-top"><span>Total engagement</span><span class="stat-symbol green">♡</span></div><div class="stat-number">8.42k</div><div class="stat-foot"><span class="trend up">↗ 12.6%</span> vs. last month</div><div class="sparkline"><svg viewBox="0 0 160 40" preserveAspectRatio="none"><path d="M0 33 C14 30 15 20 28 24 S45 32 58 18 S77 25 90 15 S113 18 125 9 S146 14 160 3" fill="none" stroke="currentColor" stroke-width="2.5"/></svg></div></div>
+            <div class="stat-card"><div class="stat-top"><span>Connected accounts</span><span class="stat-symbol blue">◎</span></div><div class="stat-number">12<span class="stat-denom">/ 14</span></div><div class="stat-foot"><span class="trend neutral">2 need setup</span> across 5 clients</div><div class="account-dots"><i>f</i><i>◎</i><i>in</i><i>▶</i><i>𝕏</i></div></div>
+          </div>
+          <div class="content-grid">
+            <div class="panel schedule-panel">
+              <div class="panel-header"><div><h2>Upcoming content</h2><p>Your next scheduled posts across all clients.</p></div><button class="text-button" data-view="calendar">View calendar →</button></div>
+              <div class="filter-row"><button class="filter-chip selected">All clients <span>⌄</span></button><button class="filter-chip">All channels <span>⌄</span></button><div class="push"></div><button class="view-toggle active">☰</button><button class="view-toggle">▦</button></div>
+              <div class="post-list" id="upcoming-list"></div>
+            </div>
+            <div class="panel approval-panel">
+              <div class="panel-header"><div><h2>Needs your attention</h2><p>Keep the approval queue moving.</p></div><span class="count-badge">3</span></div>
+              <div class="approval-list">
+                <div class="approval-item"><div class="client-avatar coral">BS</div><div class="approval-copy"><b>Fall classroom essentials</b><span>Bright School Kits · Instagram</span><small>Submitted by Jamie Lee · 2h ago</small></div><span class="pending-dot"></span></div>
+                <div class="approval-item"><div class="client-avatar blue-bg">PK</div><div class="approval-copy"><b>Behind the scenes: our process</b><span>PK Works · LinkedIn</span><small>Submitted by You · Yesterday</small></div><span class="pending-dot"></span></div>
+                <div class="approval-item"><div class="client-avatar gold">RR</div><div class="approval-copy"><b>Meet the makers</b><span>Revere Rum · Facebook</span><small>Submitted by Jamie Lee · Yesterday</small></div><span class="pending-dot"></span></div>
+              </div>
+              <button class="secondary-button full" data-view="approvals">Review approval queue <span>→</span></button>
+            </div>
+          </div>
+          <div class="panel performance-panel">
+            <div class="panel-header"><div><h2>Performance snapshot</h2><p>Engagement across your connected channels.</p></div><button class="filter-chip">Last 30 days <span>⌄</span></button></div>
+            <div class="performance-content"><div class="chart-wrap"><div class="chart-y"><span>10k</span><span>7.5k</span><span>5k</span><span>2.5k</span><span>0</span></div><div class="chart"><div class="chart-grid"><i></i><i></i><i></i><i></i><i></i></div><svg viewBox="0 0 600 170" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#6f67d8" stop-opacity=".22"/><stop offset="100%" stop-color="#6f67d8" stop-opacity="0"/></linearGradient></defs><path d="M0 140 C35 135 36 100 70 112 S105 130 140 90 S180 110 215 82 S260 105 290 62 S340 90 365 55 S410 76 445 45 S480 64 510 27 S560 45 600 10 L600 170 L0 170Z" fill="url(#area)"/><path d="M0 140 C35 135 36 100 70 112 S105 130 140 90 S180 110 215 82 S260 105 290 62 S340 90 365 55 S410 76 445 45 S480 64 510 27 S560 45 600 10" fill="none" stroke="#6f67d8" stroke-width="3" stroke-linecap="round"/></svg><div class="chart-x"><span>Sep 17</span><span>Sep 22</span><span>Sep 27</span><span>Oct 2</span><span>Oct 7</span><span>Oct 12</span><span>Oct 16</span></div></div></div><div class="channel-rank"><div class="rank-title">By channel <span>Engagements</span></div><div class="rank-row"><span class="platform-icon facebook">f</span><div class="rank-copy"><b>Facebook</b><div class="rank-bar"><i style="width:84%"></i></div></div><strong>3,820</strong></div><div class="rank-row"><span class="platform-icon instagram">◎</span><div class="rank-copy"><b>Instagram</b><div class="rank-bar"><i style="width:67%;background:#d96da5"></i></div></div><strong>2,940</strong></div><div class="rank-row"><span class="platform-icon linkedin">in</span><div class="rank-copy"><b>LinkedIn</b><div class="rank-bar"><i style="width:36%;background:#4b92d6"></i></div></div><strong>1,120</strong></div><div class="rank-row"><span class="platform-icon x-platform">𝕏</span><div class="rank-copy"><b>X</b><div class="rank-bar"><i style="width:18%;background:#8d97a8"></i></div></div><strong>540</strong></div></div></div>
+          </div>
+        </section>
+
+        <section class="page" id="view-calendar">
+          <div class="page-heading"><div><div class="eyebrow">PLAN AHEAD</div><h1>Content calendar</h1><p class="subheading">See every planned post in one place.</p></div><button class="primary-button" data-view="composer">＋ Create a post</button></div>
+          <div class="panel calendar-panel"><div class="calendar-toolbar"><div><button class="secondary-button" id="prev-month">‹</button> <button class="secondary-button" id="next-month">›</button> <button class="text-button" id="today-button">Today</button> <b id="calendar-month">October 2026</b></div><div class="calendar-controls"><button class="filter-chip">All clients ⌄</button><button class="filter-chip">All statuses ⌄</button><button class="view-toggle active">Month</button><button class="view-toggle">Week</button></div></div><div class="calendar-grid" id="calendar-grid"></div><div class="calendar-legend"><span><i class="legend-dot purple-dot"></i> PK Works</span><span><i class="legend-dot coral-dot"></i> Bright School Kits</span><span><i class="legend-dot gold-dot"></i> Revere Rum</span><span><i class="legend-dot green-dot"></i> STEM Story Kits</span></div></div>
+        </section>
+
+        <section class="page" id="view-composer">
+          <div class="page-heading"><div><div class="eyebrow">MAKE SOMETHING GREAT</div><h1>Publishing studio</h1><p class="subheading">Draft, tailor, and schedule content for your channels.</p></div><button class="secondary-button" id="clear-draft">Clear draft</button></div>
+          <div class="composer-layout"><div class="panel composer-panel"><div class="composer-step"><span class="step-number">1</span><div><h2>Choose where to publish</h2><p>Select one or more connected accounts.</p></div></div><label class="field-label">Client</label><select id="client-select" class="field"><option>PK Works</option><option>Bright School Kits</option><option>Revere Rum</option><option>STEM Story Kits</option></select><div class="account-select"><label class="account-choice"><input type="checkbox" checked><span class="platform-icon facebook">f</span><span><b>Facebook</b><small>PK Works Page</small></span><span class="connected">Connected</span></label><label class="account-choice"><input type="checkbox" checked><span class="platform-icon instagram">◎</span><span><b>Instagram</b><small>@pkworks</small></span><span class="connected">Connected</span></label><label class="account-choice"><input type="checkbox"><span class="platform-icon linkedin">in</span><span><b>LinkedIn</b><small>PK Works</small></span><span class="connected">Connected</span></label></div><div class="divider"></div><div class="composer-step"><span class="step-number">2</span><div><h2>Craft your post</h2><p>Write once, customize for each platform.</p></div></div><label class="field-label" for="post-copy">Post copy</label><textarea id="post-copy" class="field post-textarea" placeholder="What do you want your audience to know?"></textarea><div class="editor-footer"><span id="char-count">0 characters</span><div><button class="icon-button" title="Add emoji" id="emoji-button">☺</button><button class="icon-button" title="Add hashtag" id="hashtag-button">#</button><button class="icon-button" title="Add link" id="link-button">↗</button></div></div><div class="upload-zone" id="upload-zone"><div class="upload-symbol">↑</div><b>Drop media here or <u>browse files</u></b><p>Images and video · Demo upload area</p><input type="file" id="media-input" accept="image/*,video/*" hidden></div><div class="divider"></div><div class="composer-step"><span class="step-number">3</span><div><h2>Publishing options</h2><p>Choose a time or send for approval.</p></div></div><div class="schedule-fields"><div><label class="field-label">Date</label><input type="date" id="schedule-date" class="field" value="2026-10-19"></div><div><label class="field-label">Time</label><input type="time" id="schedule-time" class="field" value="10:00"></div></div><div class="composer-actions"><button class="secondary-button" id="save-draft">Save as draft</button><button class="secondary-button" id="submit-review">Send for approval</button><button class="primary-button" id="schedule-post">Schedule post</button></div><p class="demo-note">Demo mode: posts are saved in this browser only. Nothing will be published to live social networks.</p></div><div class="preview-column"><div class="panel preview-panel"><div class="panel-header"><div><h2>Post preview</h2><p>Approximate platform preview</p></div><span class="live-label">LIVE PREVIEW</span></div><div class="social-preview"><div class="preview-profile"><div class="preview-logo">PK</div><div><b id="preview-account">PK Works</b><small>Sponsored · Just now · 🌐</small></div><span>•••</span></div><div id="preview-copy" class="preview-copy">Your post copy will appear here as you write.</div><div class="preview-media" id="preview-media"><div class="media-placeholder">▧<small>Your image or video will appear here</small></div></div><div class="preview-reactions"><span>👍 ❤️ 👏</span><span>0 comments · 0 shares</span></div><div class="preview-actions"><span>♡ Like</span><span>▢ Comment</span><span>↗ Share</span></div></div></div><div class="panel tips-panel"><h3>Quick checklist</h3><div class="check-item"><span class="check-circle">✓</span> Account selected</div><div class="check-item"><span class="check-circle" id="copy-check">○</span> Post copy added</div><div class="check-item"><span class="check-circle">○</span> Media attached <small>(optional)</small></div><div class="check-item"><span class="check-circle">✓</span> Publishing time set</div></div></div></div>
+        </section>
+
+        <section class="page" id="view-library">
+          <div class="page-heading"><div><div class="eyebrow">YOUR CREATIVE HUB</div><h1>Content library</h1><p class="subheading">Keep brand assets, evergreen copy, and campaign ideas organized.</p></div><button class="primary-button" id="add-asset">＋ Add asset</button></div>
+          <div class="library-toolbar"><input class="field search-field" id="library-search" placeholder="⌕  Search content library"><button class="filter-chip">All clients ⌄</button><button class="filter-chip">All types ⌄</button></div><div class="asset-grid" id="asset-grid"></div>
+        </section>
+
+        <section class="page" id="view-inbox">
+          <div class="page-heading"><div><div class="eyebrow">CONVERSATIONS, TOGETHER</div><h1>Social inbox</h1><p class="subheading">A unified view of comments and messages across accounts.</p></div><button class="secondary-button">All caught up? <span>✓</span></button></div>
+          <div class="panel inbox-panel"><div class="inbox-sidebar"><div class="inbox-search">⌕ Search conversations</div><div class="inbox-filter active">All messages <b>8</b></div><div class="inbox-filter">Unread <b>5</b></div><div class="inbox-filter">Assigned to me <b>2</b></div><div class="inbox-filter">Resolved</div><div class="inbox-label">ACCOUNTS</div><div class="inbox-account"><i class="platform-icon facebook">f</i> All Facebook <b>4</b></div><div class="inbox-account"><i class="platform-icon instagram">◎</i> All Instagram <b>4</b></div></div><div class="conversation-list"><div class="conversation active"><div class="contact-avatar coral">JM</div><div><b>Jordan Miller</b><p>Love this idea! Where can I find…</p><small>Bright School Kits · Instagram</small></div><time>9:42 AM</time></div><div class="conversation"><div class="contact-avatar lavender">AS</div><div><b>Alex Smith</b><p>Do you ship to Canada?</p><small>PK Works · Facebook</small></div><time>9:18 AM</time></div><div class="conversation"><div class="contact-avatar green-bg">TR</div><div><b>Taylor Reed</b><p>This looks amazing 🙌</p><small>STEM Story Kits · Instagram</small></div><time>Yesterday</time></div><div class="conversation"><div class="contact-avatar gold">MC</div><div><b>Morgan Clark</b><p>Can I get more information?</p><small>Revere Rum · Facebook</small></div><time>Yesterday</time></div></div><div class="conversation-detail"><div class="detail-header"><div class="contact-avatar coral">JM</div><div><b>Jordan Miller</b><small>Comment on Bright School Kits post</small></div><button class="icon-button">•••</button></div><div class="message-stream"><div class="message-date">TODAY · 9:42 AM</div><div class="message-bubble">Love this idea! Where can I find more information about the kits?</div><div class="message-meta">Instagram comment · Bright School Kits</div></div><div class="reply-box"><textarea id="reply-text" placeholder="Write a reply…"></textarea><div><span>Replying as Bright School Kits</span><button class="primary-button" id="send-reply">Send reply ↗</button></div></div></div></div><p class="demo-note">Inbox conversations are sample data. Live messaging requires platform API permissions and account connections.</p>
+        </section>
+
+        <section class="page" id="view-analytics">
+          <div class="page-heading"><div><div class="eyebrow">MEASURE WHAT MATTERS</div><h1>Analytics & reports</h1><p class="subheading">Understand what resonates and report on progress.</p></div><button class="primary-button" id="export-report">↓ Export report</button></div>
+          <div class="analytics-controls"><select class="field"><option>All clients</option><option>PK Works</option><option>Bright School Kits</option><option>Revere Rum</option></select><select class="field"><option>Last 30 days</option><option>Last 7 days</option><option>This quarter</option></select></div><div class="stats-grid analytics-stats"><div class="stat-card"><div class="stat-top"><span>Impressions</span><span class="stat-symbol purple">◉</span></div><div class="stat-number">142.8k</div><div class="stat-foot"><span class="trend up">↗ 16.4%</span> period over period</div></div><div class="stat-card"><div class="stat-top"><span>Engagements</span><span class="stat-symbol green">♡</span></div><div class="stat-number">8,420</div><div class="stat-foot"><span class="trend up">↗ 12.6%</span> period over period</div></div><div class="stat-card"><div class="stat-top"><span>Engagement rate</span><span class="stat-symbol blue">％</span></div><div class="stat-number">5.9%</div><div class="stat-foot"><span class="trend up">↗ 0.8%</span> period over period</div></div><div class="stat-card"><div class="stat-top"><span>Published posts</span><span class="stat-symbol amber">▤</span></div><div class="stat-number">86</div><div class="stat-foot"><span class="trend neutral">Across 4 clients</span></div></div></div><div class="panel report-panel"><div class="panel-header"><div><h2>Engagement over time</h2><p>Sample data for demonstration purposes.</p></div><span class="trend up">↗ 12.6%</span></div><div class="large-chart"><div class="large-chart-y"><span>2,000</span><span>1,500</span><span>1,000</span><span>500</span><span>0</span></div><svg viewBox="0 0 900 230" preserveAspectRatio="none"><path d="M0 190 C60 180 60 140 120 158 S170 175 225 128 S275 145 330 105 S385 125 440 95 S490 120 550 65 S620 92 675 70 S730 95 785 38 S850 48 900 20 L900 230 L0 230Z" fill="#e9e7fb"/><path d="M0 190 C60 180 60 140 120 158 S170 175 225 128 S275 145 330 105 S385 125 440 95 S490 120 550 65 S620 92 675 70 S730 95 785 38 S850 48 900 20" fill="none" stroke="#6f67d8" stroke-width="3" stroke-linecap="round"/></svg></div></div>
+        </section>
+
+        <section class="page" id="view-clients">
+          <div class="page-heading"><div><div class="eyebrow">MULTI-BRAND MANAGEMENT</div><h1>Clients & accounts</h1><p class="subheading">Keep client workspaces and social channels organized.</p></div><button class="primary-button" id="add-client">＋ Add client</button></div><div class="client-grid" id="client-grid"></div>
+        </section>
+
+        <section class="page" id="view-approvals">
+          <div class="page-heading"><div><div class="eyebrow">KEEP WORK MOVING</div><h1>Team & approvals</h1><p class="subheading">Review drafts, leave feedback, and keep publishing on track.</p></div><button class="filter-chip">All statuses ⌄</button></div><div class="panel approvals-full"><div class="approval-table-head"><span>POST</span><span>CLIENT / CHANNEL</span><span>SUBMITTED BY</span><span>STATUS</span><span>ACTIONS</span></div><div id="approval-table"></div></div>
+        </section>
+
+        <section class="page" id="view-settings">
+          <div class="page-heading"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Settings</h1><p class="subheading">Workspace preferences and account setup.</p></div></div><div class="settings-grid"><div class="panel settings-nav"><b>Workspace</b><a class="selected">General</a><a>Team members</a><a>Notifications</a><a>Brand defaults</a><a>Connected apps</a></div><div class="panel settings-form"><h2>Workspace settings</h2><p>Manage how your team uses SignalDesk.</p><label class="field-label">Workspace name</label><input class="field" value="PK Works Studio"><label class="field-label">Default timezone</label><select class="field"><option>Eastern Time (US & Canada)</option><option>Central Time (US & Canada)</option><option>Pacific Time (US & Canada)</option></select><label class="field-label">Default post approval</label><select class="field"><option>Require approval before publishing</option><option>Allow direct scheduling</option></select><div class="settings-toggle"><div><b>Approval notifications</b><small>Notify team members when posts need review.</small></div><input type="checkbox" checked></div><div class="settings-toggle"><div><b>Weekly performance digest</b><small>Receive a summary of content performance.</small></div><input type="checkbox" checked></div><button class="primary-button" id="save-settings">Save changes</button></div></div>
+        </section>
+        <footer class="app-footer"><span>SignalDesk · Prototype workspace</span><span>Sample data · No live publishing enabled</span></footer>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="js/app.js"></script>
+</body>
+</html>
