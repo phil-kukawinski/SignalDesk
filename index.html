@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SignalDesk — Social Publishing Workspace</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
   <div class="app-shell">
@@ -26,6 +27,7 @@
       <div class="nav-label spaced">MANAGE</div>
       <nav>
         <button class="nav-item" data-view="clients"><span class="nav-icon">♧</span> Clients & Accounts</button>
+        <button class="nav-item" data-view="social-accounts"><span class="nav-icon">◎</span> Social Accounts</button>
         <button class="nav-item" data-view="approvals"><span class="nav-icon">✓</span> Team & Approvals <span class="nav-count warning">3</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -38,7 +40,7 @@
     <main class="main-area">
       <header class="topbar">
         <div class="breadcrumbs"><span>PK Works Studio</span><span class="slash">/</span><b id="crumb">Command Center</b></div>
-        <div class="top-actions"><div class="status-pill"><span></span> Demo workspace</div><button class="icon-button" title="Notifications">♧<i></i></button><div class="avatar small">PK</div></div>
+        <div class="top-actions"><div class="status-pill"><span></span><b id="storage-status-label">Browser storage</b></div><button class="secondary-button auth-button" id="auth-button" type="button">Connect account</button><button class="icon-button" title="Notifications">♧<i></i></button><div class="avatar small">PK</div></div>
       </header>
       <div class="page-wrap">
         <section class="page active" id="view-overview">
@@ -103,6 +105,13 @@
           <div class="page-heading"><div><div class="eyebrow">MULTI-BRAND MANAGEMENT</div><h1>Clients & accounts</h1><p class="subheading">Keep client workspaces and social channels organized.</p></div><button class="primary-button" id="add-client">＋ Add client</button></div><div class="client-grid" id="client-grid"></div>
         </section>
 
+        <section class="page" id="view-social-accounts">
+          <div class="page-heading"><div><div class="eyebrow">CONNECTED CHANNELS</div><h1>Social accounts</h1><p class="subheading">Connect and manage each client’s social profiles.</p></div><div class="account-actions"><button class="secondary-button" id="refresh-social-accounts" type="button" title="Refresh connections">↻ Refresh</button><button class="primary-button" id="connect-social-accounts" type="button">＋ Connect accounts</button></div></div>
+          <div class="accounts-toolbar"><label class="field-label" for="accounts-client-select">Client workspace</label><select id="accounts-client-select" class="field"></select><span id="social-accounts-status" role="status">Sign in and configure the provider to connect social profiles.</span></div>
+          <div class="social-account-grid" id="social-account-grid"></div>
+          <p class="integration-note">Publishing and account features vary by network. X requires your own developer credentials. Messaging is available only on supported networks.</p>
+        </section>
+
         <section class="page" id="view-approvals">
           <div class="page-heading"><div><div class="eyebrow">KEEP WORK MOVING</div><h1>Team & approvals</h1><p class="subheading">Review drafts, leave feedback, and keep publishing on track.</p></div><button class="filter-chip">All statuses ⌄</button></div><div class="panel approvals-full"><div class="approval-table-head"><span>POST</span><span>CLIENT / CHANNEL</span><span>SUBMITTED BY</span><span>STATUS</span><span>ACTIONS</span></div><div id="approval-table"></div></div>
         </section>
@@ -115,6 +124,25 @@
     </main>
   </div>
   <div id="toast" class="toast" role="status"></div>
+  <dialog id="auth-dialog" class="auth-dialog">
+    <form class="auth-form" method="dialog">
+      <h2>Connect your account</h2>
+      <p id="auth-description">Configure Supabase to sync this workspace across devices. Without it, changes are saved in this browser.</p>
+      <label for="auth-email">Email</label>
+      <input id="auth-email" type="email" autocomplete="email" required>
+      <label for="auth-password">Password</label>
+      <input id="auth-password" type="password" autocomplete="current-password" minlength="8" required>
+      <p id="auth-message" class="auth-message" role="status"></p>
+      <div class="auth-actions">
+        <button class="primary-button" id="auth-sign-in" type="button">Sign in</button>
+        <button class="secondary-button" id="auth-sign-up" type="button">Create account</button>
+        <button class="secondary-button" id="auth-sign-out" type="button" hidden>Sign out</button>
+        <button class="icon-button" id="auth-close" type="button" title="Close">×</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
