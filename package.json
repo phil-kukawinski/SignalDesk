@@ -1,0 +1,9 @@
+{
+  "name": "signaldesk",
+  "private": true,
+  "description": "SignalDesk social publishing workspace",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0"
+  }
+}
