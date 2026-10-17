@@ -33,14 +33,19 @@ function send(res, status, payload) {
 
 function getConfig() {
   const encryptionKey = Buffer.from(process.env.SOCIAL_PROFILE_ENCRYPTION_KEY || '', 'base64');
+  // Ayrshare is optional: direct connections cover Facebook, Instagram, LinkedIn, and Pinterest.
   const missing = [
-    'AYRSHARE_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY',
+    'SUPABASE_URL', 'SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY', 'SOCIAL_PROFILE_ENCRYPTION_KEY'
   ].filter((name) => !process.env[name]);
   if (process.env.SOCIAL_PROFILE_ENCRYPTION_KEY && encryptionKey.length !== 32) {
     missing.push('SOCIAL_PROFILE_ENCRYPTION_KEY (must be base64 for 32 bytes)');
   }
   return { encryptionKey, missing };
+}
+
+function ayrshareConfigured() {
+  return Boolean(process.env.AYRSHARE_API_KEY);
 }
 
 function getBearerToken(req) {
@@ -109,6 +114,7 @@ function getTwitterHeaders() {
 }
 
 async function ayrshareRequest(path, { method = 'GET', profileKey, body, query } = {}) {
+  if (!ayrshareConfigured()) throw httpError(503, 'Ayrshare isn’t configured. Add AYRSHARE_API_KEY to use it for this network.');
   const url = new URL(`${AYRSHARE_BASE}${path}`);
   Object.entries(query || {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
@@ -260,6 +266,18 @@ function validatePostOptions(options, platforms) {
       return { comment, delayMinutes };
     });
   }
+  if (platforms.includes('pinterest') && options.pinterest && typeof options.pinterest === 'object') {
+    const pin = {};
+    const title = typeof options.pinterest.title === 'string' ? options.pinterest.title.trim() : '';
+    const link = typeof options.pinterest.link === 'string' ? options.pinterest.link.trim() : '';
+    if (title.length > 100) throw httpError(400, 'Pin titles can be up to 100 characters.');
+    if (link && (link.length > 2000 || !/^https?:\/\/\S+$/i.test(link))) throw httpError(400, 'The Pin link must be a full web address.');
+    if (options.pinterest.boardId !== undefined && options.pinterest.boardId !== '' && !/^[\w-]{1,64}$/.test(String(options.pinterest.boardId))) throw httpError(400, 'Choose a valid Pinterest board.');
+    if (title) pin.title = title;
+    if (link) pin.link = link;
+    if (options.pinterest.boardId) pin.boardId = String(options.pinterest.boardId);
+    if (Object.keys(pin).length) clean.pinterest = pin;
+  }
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
     const repeat = Number(options.autoRepost.repeat), days = Number(options.autoRepost.days);
     if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10 || !Number.isInteger(days) || days < 2) {
@@ -270,8 +288,8 @@ function validatePostOptions(options, platforms) {
   return clean;
 }
 
-function buildPostBody({ text, platforms, mediaUrls, scheduleDate, requiresApproval, options = {} }) {
-  const body = { post: text, platforms, idempotencyKey: crypto.randomUUID() };
+function buildPostBody({ text, platforms, mediaUrls, scheduleDate, requiresApproval, options = {}, idempotencyKey = crypto.randomUUID() }) {
+  const body = { post: text, platforms, idempotencyKey };
   if (mediaUrls?.length) body.mediaUrls = mediaUrls;
   if (platforms.includes('youtube')) body.youTubeOptions = { title: text.slice(0, 100), ...options.youtube };
   if (platforms.includes('linkedin') && options.linkedin) body.linkedInOptions = options.linkedin;
@@ -307,7 +325,7 @@ async function queueFollowUpComments({ workspaceId, clientId, userId, postId, pl
 
 async function processDueComments({ workspaceId, encryptionKey, limit = 25 } = {}) {
   const query = new URLSearchParams({
-    select: 'id,workspace_id,client_id,provider_post_id,platforms,comment,attempts,created_by',
+    select: 'id,workspace_id,client_id,provider_post_id,job_id,platforms,comment,attempts,created_by',
     status: 'eq.pending',
     run_at: `lte.${new Date().toISOString()}`,
     order: 'run_at.asc',
@@ -318,6 +336,13 @@ async function processDueComments({ workspaceId, encryptionKey, limit = 25 } = {
   let posted = 0;
   for (const item of due) {
     let patch;
+    if (item.job_id) {
+      patch = await commentOnJob(item, encryptionKey);
+      if (patch.status === 'posted') posted += 1;
+      await databaseRequest(`scheduled_comments?id=eq.${item.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+      if (patch.status === 'failed' && item.created_by) await notifyCommentFailed(item, patch.last_error);
+      continue;
+    }
     try {
       const profile = await getProfile(item.workspace_id, item.client_id, encryptionKey);
       if (!profile) throw new Error('The client no longer has connected accounts.');
@@ -335,14 +360,34 @@ async function processDueComments({ workspaceId, encryptionKey, limit = 25 } = {
         : { attempts, last_error: error.message, run_at: new Date(Date.now() + COMMENT_RETRY_MINUTES * 60000).toISOString() };
     }
     await databaseRequest(`scheduled_comments?id=eq.${item.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify(patch) });
-    if (patch.status === 'failed' && item.created_by) {
-      await require('./notify').notify({
-        workspaceId: item.workspace_id, audience: 'users', userIds: [item.created_by], type: 'comment_failed', category: 'publishing',
-        title: 'A scheduled comment could not be posted', body: `“${item.comment.slice(0, 120)}” — ${patch.last_error}`, view: 'composer'
-      });
-    }
+    if (patch.status === 'failed' && item.created_by) await notifyCommentFailed(item, patch.last_error);
   }
   return { due: due.length, posted };
+}
+
+// Comments tied to a SignalDesk publish job wait until that job is live.
+async function commentOnJob(item, encryptionKey) {
+  const job = (await databaseRequest(`publish_jobs?id=eq.${item.job_id}&select=*`))?.[0];
+  if (!job || ['failed', 'unknown', 'canceled'].includes(job.status)) {
+    return { status: 'failed', last_error: 'The post didn’t publish, so this comment was skipped.' };
+  }
+  if (job.status !== 'published') return { run_at: new Date(Date.now() + 5 * 60000).toISOString() };
+  try {
+    await require('./publishing').postJobComment(job, item.comment, encryptionKey);
+    return { status: 'posted', posted_at: new Date().toISOString(), last_error: null };
+  } catch (error) {
+    const attempts = item.attempts + 1;
+    return attempts >= COMMENT_MAX_ATTEMPTS
+      ? { status: 'failed', attempts, last_error: error.message }
+      : { attempts, last_error: error.message, run_at: new Date(Date.now() + COMMENT_RETRY_MINUTES * 60000).toISOString() };
+  }
+}
+
+async function notifyCommentFailed(item, message) {
+  await require('./notify').notify({
+    workspaceId: item.workspace_id, audience: 'users', userIds: [item.created_by], type: 'comment_failed', category: 'publishing',
+    title: 'A scheduled comment could not be posted', body: `“${item.comment.slice(0, 120)}” — ${message}`, view: 'calendar'
+  });
 }
 
 // --- RSS Autopilot ---
@@ -590,8 +635,9 @@ async function runFeed(feed, { encryptionKey, timeZone }) {
       await patchFeed({ last_error: null, feed_title: parsed.title || feed.feed_title });
       return { created: 0 };
     }
-    const profile = await getProfile(feed.workspace_id, feed.client_id, encryptionKey);
-    if (!profile) throw new Error('Connect social accounts for this client before Autopilot can post.');
+    const { createScheduledPost, resolveDestinations } = require('./publishing');
+    // Fail the whole run early with a clear message if an account isn't connected.
+    await resolveDestinations(feed.workspace_id, feed.client_id, feed.platforms, encryptionKey);
     const taken = new Set(seen.filter((row) => row.scheduled_for).map((row) => Date.parse(row.scheduled_for)));
     const slots = upcomingSlots(feed, timeZone, taken, queue.length);
     let created = 0;
@@ -609,14 +655,12 @@ async function runFeed(feed, { encryptionKey, timeZone }) {
         continue;
       }
       try {
-        const result = await ayrshareRequest('/post', {
-          method: 'POST', profileKey: profile.profileKey,
-          body: buildPostBody({
-            text: renderTemplate(feed.template, item, parsed.title), platforms, mediaUrls: media,
-            scheduleDate: row.scheduled_for, requiresApproval: feed.mode === 'review'
-          })
+        const post = await createScheduledPost({
+          workspaceId: feed.workspace_id, clientId: feed.client_id, userId: feed.created_by, source: 'autopilot',
+          title: item.title || parsed.title || 'Autopilot post', platforms, text: renderTemplate(feed.template, item, parsed.title),
+          mediaUrls: media, scheduledFor: slot, held: feed.mode === 'review', encryptionKey
         });
-        await insertAutopilotItems([{ ...row, status: feed.mode === 'review' ? 'in_review' : 'scheduled', provider_post_id: result.id || result.posts?.[0]?.id || null }]);
+        await insertAutopilotItems([{ ...row, status: feed.mode === 'review' ? 'in_review' : 'scheduled', post_id: post.id }]);
         created += 1;
       } catch (error) {
         await insertAutopilotItems([{ ...row, status: 'failed', error: error.message }]);
@@ -663,7 +707,8 @@ async function runAutopilot({ workspaceId, encryptionKey, staleMinutes = 0, limi
 
 module.exports = {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
-  httpError, send, getConfig, getBearerToken, getUser, databaseRequest, ayrshareRequest,
+  httpError, send, getConfig, ayrshareConfigured, getBearerToken, getUser, databaseRequest, ayrshareRequest,
+  encryptSecret: encryptProfileKey, decryptSecret: decryptProfileKey, assertPublicUrl,
   getMembership, getWorkspaceState, validateClientId, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms,
   validatePostOptions, buildPostBody, queueFollowUpComments, processDueComments,

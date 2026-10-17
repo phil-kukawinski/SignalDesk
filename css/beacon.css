@@ -295,3 +295,45 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .proof-actions{display:flex;gap:10px}
 .checklist .text-button{justify-self:start;font-size:10px;padding:0}
 @media (max-width:720px){.calendar-timeline .calendar-event{font-size:10px;padding:4px 6px}.timeline-scroll{height:520px}}
+/* Publishing queue: post details, account connections, Pinterest options */
+[data-open-post]{cursor:pointer}
+.post-row[data-open-post]:hover{background:#fdf6f0}
+.calendar-event.is-failed{box-shadow:inset 0 0 0 2px #c97a72}
+.status.in-review{background:#f5d6d3;color:#9b5e58}
+.status.publishing{background:#d6e4f0;color:#416e94}
+.status.partly-published{background:#f3e3c7;color:#7d5c26}
+.status.canceled{background:#ece9e6;color:#8a8e9a}
+.post-dialog{width:min(580px,calc(100vw - 28px))}
+.post-dialog-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.post-dialog-head small{color:#8a8e9a;font-size:11px}
+.post-dialog-head h2{margin:4px 0}
+.post-dialog-head p{margin:0;color:#606779;font-size:12px}
+.post-dialog-copy{margin:14px 0 8px;padding:12px;border-radius:10px;background:#fdf6f0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;max-height:180px;overflow:auto}
+.post-dialog-media{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.post-dialog-media img,.post-dialog-video{width:72px;height:72px;border-radius:8px;object-fit:cover;background:#ece9e6}
+.post-dialog-video{display:grid;place-items:center;font-size:11px;color:#606779}
+.job-list{display:grid;gap:8px;margin:14px 0}
+.job-row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px;border:1px solid #e8e0dc;border-radius:10px}
+.job-row b{display:block;font-size:12px}.job-row small{display:block;color:#8a8e9a;font-size:11px;margin-top:2px}
+.job-row.failed,.job-row.unknown,.job-row.overdue{border-color:#e6b9b3;background:#fdf3f1}
+.job-row.published{border-color:#c8d4b8}
+.job-detail{margin:6px 0 0;font-size:11px;line-height:1.5;color:#9b5e58;overflow-wrap:anywhere}
+.job-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.post-dialog-reschedule{margin:4px 0 8px}
+.post-dialog-reschedule>div{display:flex;gap:8px;flex-wrap:wrap}
+.post-dialog-reschedule input{flex:1;min-width:200px}
+.secondary-button.danger{color:#9b5e58;border-color:#e6b9b3}
+.social-account-buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.social-account-buttons .primary-button,.social-account-buttons .secondary-button{padding:6px 12px;font-size:11px}
+.social-account-state.warning{background:#f5d6d3;color:#9b5e58}
+.connect-group{margin-top:12px}
+.connect-choice{align-items:flex-start}
+.connect-choice span b{display:block;font-size:12px}.connect-choice span small{display:block;color:#8a8e9a;font-size:11px}
+.connect-group select{margin:2px 0 6px 24px;width:calc(100% - 24px)}
+.approval-empty{margin:0;padding:18px;color:#8a8e9a;font-size:12px}
+label.settings-toggle{cursor:pointer}
+label.settings-toggle input{width:18px;height:18px;accent-color:#5b8db8;flex:none}
+@media(max-width:620px){.job-row{grid-template-columns:28px minmax(0,1fr)}.job-actions{grid-column:2;flex-direction:row;align-items:center}}
+.auth-form .connect-choice{display:flex;gap:10px;align-items:flex-start;margin:6px 0;font-size:12px;font-weight:500;color:#1a1f3a}
+.auth-form .connect-choice input{width:auto;flex:none;margin:2px 0 0;padding:0}
+.auth-form .connect-group legend{margin-bottom:2px}

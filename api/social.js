@@ -1,25 +1,41 @@
+const crypto = require('node:crypto');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
-  httpError, send, getConfig, getUser, databaseRequest, ayrshareRequest,
+  httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
   getMembership, getWorkspaceState, assertClientInWorkspace,
-  getProfile, getOrCreateProfile, requirePlatforms,
-  validatePostOptions, buildPostBody, queueFollowUpComments, processDueComments,
+  getProfile, getOrCreateProfile, requirePlatforms, decryptSecret,
+  validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
 } = require('./_lib/core');
+const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured } = require('./_lib/platforms');
+const {
+  PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, approvePost, rejectPost,
+  cancelPost, reschedulePost, retryJob
+} = require('./_lib/publishing');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
 const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
 const { checkLink } = require('./_lib/core');
 
-const CLIENT_ACTIONS = new Set(['connect', 'accounts', 'publish', 'approve', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
+const CLIENT_ACTIONS = new Set([
+  'connect', 'accounts', 'publish', 'analytics', 'comments', 'post-comment', 'messages', 'reply',
+  'oauth-start', 'disconnect'
+]);
+// Actions that go through Ayrshare and need its per-client profile.
+const AYRSHARE_ACTIONS = new Set(['connect', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
 const WORKSPACE_ACTIONS = new Set([
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
-  'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times'
+  'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
+  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish'
 ]);
-// Users may load accounts, submit posts, and use trends; everything else is reserved for admins.
-const USER_ACTIONS = new Set(['accounts', 'publish', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread']);
+// Users may load accounts, submit and view posts, withdraw their own pending posts, and use
+// trends and checks; everything else is reserved for admins.
+const USER_ACTIONS = new Set([
+  'accounts', 'publish', 'posts', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread'
+]);
+const OAUTH_SESSION_MINUTES = 15;
 const TREND_CACHE_HOURS = 6;
 const TREND_DAILY_LIMIT = 12;
 const ROLES = new Set(['admin', 'user']);
@@ -33,22 +49,53 @@ function allowedOrigin(req) {
   return origin;
 }
 
-function publicAccounts(profile) {
-  const active = new Set(profile.activeSocialAccounts || []);
-  const details = new Map((profile.displayNames || []).map((item) => [item.platform, item]));
+function integrations() {
+  return {
+    meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), pinterest: providerConfigured('pinterest'),
+    ayrshare: ayrshareConfigured()
+  };
+}
+
+// Direct connections win; Ayrshare covers the other networks when it is configured.
+function publicAccounts({ connections = [], ayrshare = null }) {
+  const active = new Set(ayrshare?.activeSocialAccounts || []);
+  const details = new Map((ayrshare?.displayNames || []).map((item) => [item.platform, item]));
+  const ayrshareReady = ayrshareConfigured();
   return [...PLATFORM_KEYS].map((platform) => {
+    const directAvailable = Boolean(DIRECT_PLATFORMS[platform] && providerConfigured(DIRECT_PLATFORMS[platform]));
+    const ayrshareAvailable = ayrshareReady && (platform !== 'twitter' || Boolean(process.env.X_TWITTER_OAUTH1_API_KEY && process.env.X_TWITTER_OAUTH1_API_SECRET));
+    const direct = connections.find((item) => item.platform === platform);
+    if (direct) {
+      return {
+        platform, linked: direct.status === 'active', provider: 'direct', status: direct.status, directAvailable, ayrshareAvailable,
+        available: true, username: direct.username || '', displayName: direct.display_name || '', profileUrl: direct.profile_url || '',
+        userImage: direct.image_url || '', error: direct.status === 'active' ? '' : direct.last_error || '',
+        // Networks with refresh tokens renew on their own until the refresh token itself runs out.
+        autoRenews: Boolean(direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now()),
+        expiresAt: direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now() ? direct.refresh_expires_at : direct.token_expires_at,
+        ...(platform === 'pinterest' ? { boards: direct.meta?.boards || [], boardId: direct.meta?.boardId || '' } : {}),
+        ...(platform === 'linkedin' ? { kind: direct.meta?.kind || 'member' } : {})
+      };
+    }
     const linked = active.has(platform);
     const detail = details.get(platform) || {};
     return {
-      platform,
-      linked,
-      available: platform !== 'twitter' || Boolean(process.env.X_TWITTER_OAUTH1_API_KEY && process.env.X_TWITTER_OAUTH1_API_SECRET),
+      platform, linked, provider: linked ? 'ayrshare' : null, status: linked ? 'active' : 'disconnected', directAvailable, ayrshareAvailable,
+      available: directAvailable || ayrshareAvailable,
       username: detail.username || '',
       displayName: detail.displayName || detail.pageName || detail.channelTitle || '',
       profileUrl: detail.profileUrl || '',
       userImage: detail.userImage || ''
     };
   });
+}
+
+function validUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value);
+}
+
+async function clientName(workspaceId, clientId) {
+  return ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === clientId)?.name || 'a client';
 }
 
 function providerResponseError(error, res) {
@@ -170,7 +217,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const since = new Date(Date.now() - 62 * 86400000).toISOString();
     const [feeds, items, comments] = await Promise.all([
       databaseRequest(`autopilot_feeds?${scope}&select=*&order=created_at.asc`),
-      databaseRequest(`autopilot_items?${scope}&status=in.(scheduled,in_review,failed,skipped)&created_at=gte.${since}&select=id,feed_id,title,link,image_url,status,scheduled_for,provider_post_id,platforms,error&order=scheduled_for.asc.nullslast&limit=500`),
+      databaseRequest(`autopilot_items?${scope}&status=in.(scheduled,in_review,failed,skipped)&created_at=gte.${since}&select=id,feed_id,title,link,image_url,status,scheduled_for,provider_post_id,post_id,platforms,error&order=scheduled_for.asc.nullslast&limit=500`),
       databaseRequest(`scheduled_comments?${scope}&status=in.(pending,failed)&select=id,provider_post_id,comment,run_at,status,attempts,last_error&order=run_at.asc&limit=200`)
     ]);
     return send(res, 200, { feeds: feeds || [], items: items || [], comments: comments || [] });
@@ -251,18 +298,20 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'top-posts') {
     await assertClientInWorkspace(workspaceId, body.clientId);
     const client = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
-    const profile = await getProfile(workspaceId, body.clientId, encryptionKey);
-    if (!profile) return send(res, 400, { error: `Connect social accounts for ${client.name} to see Top Posts.` });
+    const profile = ayrshareConfigured() ? await getProfile(workspaceId, body.clientId, encryptionKey) : null;
+    const connections = await listConnections(workspaceId, body.clientId);
+    if (!profile && !connections.length) return send(res, 400, { error: `Connect social accounts for ${client.name} to see Top Posts.` });
+    const reportInput = { profile, workspaceId, encryptionKey, clientId: client.id, clientName: client.name };
     if (body.range === 'last7' || !body.range) {
       const end = Date.now();
-      return send(res, 200, { report: await buildTopPostsReport({ profile, clientId: client.id, clientName: client.name, start: end - 7 * 86400000, end }), range: 'last7' });
+      return send(res, 200, { report: await buildTopPostsReport({ ...reportInput, start: end - 7 * 86400000, end }), range: 'last7' });
     }
     if (typeof body.range !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.range)) return send(res, 400, { error: 'Choose a valid week.' });
     const stored = await databaseRequest(`weekly_reports?${scope}&client_id=eq.${encodeURIComponent(client.id)}&week_start=eq.${body.range}&select=data`);
     if (stored?.length && body.refresh !== true) return send(res, 200, { report: stored[0].data, range: body.range, stored: true });
     const { start, end } = weekRange(body.range, await workspaceTimeZone(workspaceId));
     if (start > Date.now()) return send(res, 400, { error: 'That week has not started yet.' });
-    const report = await buildTopPostsReport({ profile, clientId: client.id, clientName: client.name, start, end });
+    const report = await buildTopPostsReport({ ...reportInput, start, end });
     if (end < Date.now()) await saveWeeklyReport(workspaceId, client.id, body.range, report);
     return send(res, 200, { report, range: body.range, stored: end < Date.now() });
   }
@@ -293,6 +342,77 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, { report, cached: false });
   }
 
+  if (action === 'posts') {
+    const from = Date.parse(body.from), to = Date.parse(body.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 100 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
+    return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
+  }
+
+  if (action === 'approve') {
+    const { post, late } = await approvePost(workspaceId, body.postId, user.id);
+    if (post.created_by && post.created_by !== user.id) {
+      await notify({
+        workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
+        title: 'Your post was approved',
+        body: `“${post.title || 'Your post'}” was approved by ${membership.email || 'an admin'}${late ? ' and is publishing now because its time had passed' : ' and will publish as scheduled'}.`,
+        view: 'calendar', data: { postId: post.id }
+      });
+    }
+    return send(res, 200, { approved: true, late });
+  }
+
+  if (action === 'reject') {
+    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+    const post = await rejectPost(workspaceId, body.postId, note);
+    if (post.created_by && post.created_by !== user.id) {
+      await notify({
+        workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
+        title: 'Your post needs changes', body: `“${post.title || 'Your post'}” wasn’t approved${note ? `: ${note}` : '.'}`, view: 'composer', data: { postId: post.id }
+      });
+    }
+    return send(res, 200, { rejected: true });
+  }
+
+  if (action === 'cancel-post') {
+    return send(res, 200, await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' }));
+  }
+
+  if (action === 'reschedule-post') {
+    return send(res, 200, await reschedulePost(workspaceId, body.postId, Date.parse(body.scheduleDate)));
+  }
+
+  if (action === 'retry-job') {
+    return send(res, 200, await retryJob(workspaceId, body.jobId, { confirmed: body.confirmed === true }));
+  }
+
+  if (action === 'oauth-session' || action === 'oauth-finish') {
+    if (!validUuid(body.sessionId)) return send(res, 400, { error: 'Start connecting again.' });
+    const rows = await databaseRequest(`oauth_sessions?id=eq.${body.sessionId}&workspace_id=eq.${workspaceId}&user_id=eq.${user.id}&select=*`);
+    const session = rows?.[0];
+    if (!session) return send(res, 404, { error: 'That sign-in was not found. Start connecting again.' });
+    if (action === 'oauth-session') {
+      return send(res, 200, { status: session.status, provider: session.provider, clientId: session.client_id, candidates: session.candidates, error: session.error });
+    }
+    if (session.status !== 'authorized' || !session.secret_ciphertext || Date.parse(session.expires_at) < Date.now()) {
+      return send(res, 409, { error: 'This sign-in expired. Start connecting again.' });
+    }
+    const selections = Array.isArray(body.selections) ? body.selections.slice(0, 4) : [];
+    const chosen = selections.map((selection) => ({ selection, candidate: session.candidates.find((item) => item.key === selection?.key) }));
+    if (!chosen.length || chosen.some((item) => !item.candidate)) return send(res, 400, { error: 'Choose at least one account to connect.' });
+    if (new Set(chosen.map((item) => item.candidate.platform)).size !== chosen.length) return send(res, 400, { error: 'Choose one account per network for each client.' });
+    await assertClientInWorkspace(workspaceId, session.client_id);
+    const secret = JSON.parse(decryptSecret(session.secret_ciphertext, encryptionKey));
+    const adapter = PROVIDERS[session.provider];
+    for (const { candidate, selection } of chosen) {
+      const connection = adapter.connectionFor(candidate, secret, selection);
+      await saveConnection({ workspaceId, clientId: session.client_id, userId: user.id, candidate, connection, encryptionKey });
+    }
+    await databaseRequest(`oauth_sessions?id=eq.${session.id}`, {
+      method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'completed', secret_ciphertext: null })
+    });
+    return send(res, 200, { connected: chosen.map((item) => item.candidate.platform) });
+  }
+
   if (action === 'autopilot-run') {
     const [feeds, comments] = await Promise.all([
       runAutopilot({ workspaceId, encryptionKey }),
@@ -304,17 +424,17 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   return send(res, 400, { error: 'Unknown workspace action.' });
 }
 
-async function publish(body, { user, membership, profile, clientId }, res) {
+async function publish(body, { user, membership, clientId, encryptionKey }, res) {
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   const platforms = body.platforms;
   requirePlatforms(platforms);
+  if (new Set(platforms).size !== platforms.length) return send(res, 400, { error: 'Choose each network once.' });
   const mediaUrls = body.mediaUrls || [];
-  const isMediaList = (urls) => Array.isArray(urls) && urls.every((url) => typeof url === 'string' && url.startsWith('https://'));
+  const isMediaList = (urls) => Array.isArray(urls) && urls.length <= 10 && urls.every((url) => typeof url === 'string' && url.startsWith('https://') && url.length <= 2000);
   if (!isMediaList(mediaUrls)) return send(res, 400, { error: 'Media must use publicly accessible HTTPS URLs.' });
   const overrides = body.platformContent && typeof body.platformContent === 'object' ? body.platformContent : {};
   const options = validatePostOptions(body.options, platforms);
-  // Platforms that end up with identical copy and media share one provider post.
-  const groups = new Map();
+  const platformContent = {};
   for (const platform of platforms) {
     const override = overrides[platform] || {};
     const postText = typeof override.text === 'string' ? override.text.trim() : text;
@@ -325,62 +445,32 @@ async function publish(body, { user, membership, profile, clientId }, res) {
     if (MEDIA_REQUIRED_PLATFORMS.has(platform) && !postMedia.length) {
       return send(res, 400, { error: `${platform} requires media. Attach an image or video for it before publishing.` });
     }
-    const key = JSON.stringify([postText, postMedia]);
-    if (!groups.has(key)) groups.set(key, { text: postText, mediaUrls: postMedia, platforms: [] });
-    groups.get(key).platforms.push(platform);
+    const custom = {};
+    if (postText !== text) custom.text = postText;
+    if (override.mediaUrls !== undefined) custom.media = postMedia;
+    if (Object.keys(custom).length) platformContent[platform] = custom;
   }
-  let scheduleDate;
+  let scheduledFor = Date.now();
   if (body.scheduleDate) {
-    const scheduledAt = Date.parse(body.scheduleDate);
-    if (!Number.isFinite(scheduledAt) || scheduledAt <= Date.now()) {
-      return send(res, 400, { error: 'Choose a valid future schedule time.' });
-    }
-    scheduleDate = new Date(scheduledAt).toISOString();
+    scheduledFor = Date.parse(body.scheduleDate);
+    if (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now()) return send(res, 400, { error: 'Choose a valid future schedule time.' });
   }
   // Posts from members with the User role are always held until an admin approves them.
-  const requiresApproval = membership.role !== 'admin' || body.requiresApproval === true;
-  const results = [];
-  let queuedComments = 0;
-  for (const group of groups.values()) {
-    try {
-      const result = await ayrshareRequest('/post', {
-        method: 'POST', profileKey: profile.profileKey,
-        body: buildPostBody({ ...group, scheduleDate, requiresApproval, options })
-      });
-      results.push(result);
-      queuedComments += await queueFollowUpComments({
-        workspaceId: membership.workspace_id, clientId, userId: user.id, postId: result.id,
-        platforms: group.platforms, comments: options.followUpComments, baseTime: scheduleDate
-      });
-    } catch (error) {
-      if (groups.size === 1) throw error;
-      results.push({ status: 'error', platforms: group.platforms, errors: [{ message: error.message }] });
-    }
-  }
-  const heldIds = results.filter((result) => result.status !== 'error' && result.id).map((result) => result.id);
-  if (requiresApproval && heldIds.length) {
-    const title = text.split('\n')[0].slice(0, 120) || Object.values(overrides).find((item) => item?.text)?.text?.split('\n')[0].slice(0, 120) || 'Untitled post';
-    const client = ((await getWorkspaceState(membership.workspace_id)).clients || []).find((item) => item.id === clientId);
-    await databaseRequest('post_submissions?on_conflict=workspace_id,provider_post_id', {
-      method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(heldIds.map((id) => ({ workspace_id: membership.workspace_id, provider_post_id: id, client_id: clientId, submitted_by: user.id, title, platforms })))
-    }).catch((error) => console.error('Could not record submission:', error.message));
+  const held = membership.role !== 'admin' || body.requiresApproval === true;
+  const title = (text || Object.values(platformContent).find((item) => item.text)?.text || '').split('\n')[0].slice(0, 120) || 'Untitled post';
+  const post = await createScheduledPost({
+    workspaceId: membership.workspace_id, clientId, userId: user.id, title, platforms, text, mediaUrls, platformContent, options,
+    scheduledFor, held, encryptionKey
+  });
+  if (held) {
     await notify({
       workspaceId: membership.workspace_id, audience: 'admins', excludeUserId: user.id, type: 'approval_requested', category: 'approvals',
-      title: `New post awaiting approval for ${client?.name || 'a client'}`,
-      body: `${membership.email || user.email || 'A teammate'} submitted “${title}” for ${platforms.join(', ')}.`,
-      view: 'approvals', data: { postIds: heldIds, clientId }
+      title: `New post awaiting approval for ${await clientName(membership.workspace_id, clientId)}`,
+      body: `${membership.email || user.email || 'A teammate'} submitted “${title}” for ${platforms.map((platform) => PLATFORM_LABELS[platform] || platform).join(', ')}.`,
+      view: 'approvals', data: { postId: post.id, clientId }
     });
   }
-  if (results.length === 1) return send(res, 200, { ...results[0], requiresApproval, queuedComments });
-  const failed = results.filter((result) => result.status === 'error');
-  return send(res, 200, {
-    status: failed.length === results.length ? 'error' : failed.length ? 'partial' : 'success',
-    posts: results.filter((result) => result.status !== 'error'),
-    errors: failed.flatMap((result) => (result.errors || [{ message: result.message || 'Publishing failed.' }]).map((item) => ({ ...item, platforms: result.platforms }))),
-    requiresApproval,
-    queuedComments
-  });
+  return send(res, 200, { status: held ? 'pending_approval' : 'scheduled', post, requiresApproval: held, queuedComments: post.queuedComments });
 }
 
 module.exports = async function handler(req, res) {
@@ -407,14 +497,46 @@ module.exports = async function handler(req, res) {
     const workspaceId = membership.workspace_id;
     const clientId = body.clientId;
     await assertClientInWorkspace(workspaceId, clientId);
-    const origin = action === 'connect' ? allowedOrigin(req) : null;
-    const profile = action === 'accounts'
-      ? await getProfile(workspaceId, clientId, encryptionKey)
-      : await getOrCreateProfile(workspaceId, clientId, encryptionKey);
 
-    if (action === 'accounts' && !profile) {
-      return send(res, 200, { accounts: publicAccounts({}), refId: null, role: membership.role });
+    if (action === 'accounts') {
+      const [connections, profile] = await Promise.all([
+        listConnections(workspaceId, clientId),
+        ayrshareConfigured() ? getProfile(workspaceId, clientId, encryptionKey) : null
+      ]);
+      let ayrshare = null;
+      let warning = '';
+      if (profile) {
+        try { ayrshare = await ayrshareRequest('/user', { profileKey: profile.profileKey }); } catch (error) { warning = `Couldn't load Ayrshare accounts: ${error.message}`; }
+      }
+      return send(res, 200, { accounts: publicAccounts({ connections, ayrshare }), refId: profile?.refId || null, role: membership.role, integrations: integrations(), warning });
     }
+
+    if (action === 'publish') return await publish(body, { user, membership, clientId, encryptionKey }, res);
+
+    if (action === 'oauth-start') {
+      if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose Meta, LinkedIn, or Pinterest.' });
+      if (!providerConfigured(body.provider)) return send(res, 503, { error: `${body.provider === 'meta' ? 'Meta' : body.provider === 'linkedin' ? 'LinkedIn' : 'Pinterest'} isn't set up on the server yet. Add its app ID and secret.` });
+      const state = crypto.randomBytes(32).toString('base64url');
+      const url = PROVIDERS[body.provider].authorizeUrl(state);
+      const [session] = await databaseRequest('oauth_sessions', {
+        method: 'POST', headers: { prefer: 'return=representation' },
+        body: JSON.stringify({ state, workspace_id: workspaceId, user_id: user.id, client_id: clientId, provider: body.provider, expires_at: new Date(Date.now() + OAUTH_SESSION_MINUTES * 60000).toISOString() })
+      });
+      return send(res, 200, { sessionId: session.id, url });
+    }
+
+    if (action === 'disconnect') {
+      if (!DIRECT_PLATFORMS[body.platform]) return send(res, 400, { error: 'Choose a directly connected network.' });
+      const scope = `workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(clientId)}`;
+      const waiting = await databaseRequest(`publish_jobs?${scope}&platform=eq.${body.platform}&provider=eq.direct&status=in.(held,queued)&select=id`) || [];
+      await databaseRequest(`social_connections?${scope}&platform=eq.${body.platform}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+      return send(res, 200, { disconnected: true, waitingPosts: waiting.length });
+    }
+
+    if (!AYRSHARE_ACTIONS.has(action)) return send(res, 400, { error: 'Unknown social integration action.' });
+    if (!ayrshareConfigured()) return send(res, 503, { error: 'This needs Ayrshare, which isn’t configured on the server.' });
+    const origin = action === 'connect' ? allowedOrigin(req) : null;
+    const profile = await getOrCreateProfile(workspaceId, clientId, encryptionKey);
 
     if (action === 'connect') {
       const allowedSocial = [...PLATFORM_KEYS].filter((platform) => platform !== 'twitter' || process.env.X_TWITTER_OAUTH1_API_KEY);
@@ -426,40 +548,6 @@ module.exports = async function handler(req, res) {
         body: sessionBody
       });
       return send(res, 200, { url: session.url, expiresAt: session.expiresAt, title: session.title });
-    }
-
-    if (action === 'accounts') {
-      const data = await ayrshareRequest('/user', { profileKey: profile.profileKey });
-      return send(res, 200, { accounts: publicAccounts(data), refId: profile.refId, role: membership.role });
-    }
-
-    if (action === 'publish') return await publish(body, { user, membership, profile, clientId }, res);
-
-    if (action === 'approve') {
-      if (typeof body.postId !== 'string' || !body.postId.trim()) return send(res, 400, { error: 'A provider post ID is required for approval.' });
-      const result = await ayrshareRequest('/post', {
-        method: 'PATCH', profileKey: profile.profileKey,
-        body: { id: body.postId, approved: true }
-      });
-      const submissions = await databaseRequest(`post_submissions?workspace_id=eq.${workspaceId}&provider_post_id=eq.${encodeURIComponent(body.postId)}&select=submitted_by,title,decided_at`) || [];
-      const submission = submissions[0];
-      if (submission && !submission.decided_at) {
-        await databaseRequest(`post_submissions?workspace_id=eq.${workspaceId}&provider_post_id=eq.${encodeURIComponent(body.postId)}`, {
-          method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ decided_by: user.id, decided_at: new Date().toISOString() })
-        });
-        if (submission.submitted_by && submission.submitted_by !== user.id) {
-          await notify({
-            workspaceId, audience: 'users', userIds: [submission.submitted_by], type: 'approval_decided', category: 'approvals',
-            title: 'Your post was approved', body: `“${submission.title || 'Your post'}” was approved by ${membership.email || 'an admin'} and will publish as scheduled.`, view: 'composer'
-          });
-        }
-      }
-      if (typeof body.autopilotItemId === 'string' && /^[0-9a-f-]{36}$/i.test(body.autopilotItemId)) {
-        await databaseRequest(`autopilot_items?workspace_id=eq.${workspaceId}&id=eq.${body.autopilotItemId}`, {
-          method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'scheduled' })
-        });
-      }
-      return send(res, 200, result);
     }
 
     if (action === 'analytics') {

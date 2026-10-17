@@ -1,4 +1,4 @@
-const { databaseRequest, ayrshareRequest, getProfile, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc } = require('./core');
+const { databaseRequest, ayrshareRequest, ayrshareConfigured, getProfile, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc } = require('./core');
 
 // Ayrshare returns each network's own field names. These map them onto one set of
 // metrics; the first path that holds a number wins, and "+" sums several fields.
@@ -54,6 +54,12 @@ function normalizeMetrics(platform, raw) {
   const watchMs = pick('watchMs'), avgWatchMs = pick('avgWatchMs');
   metrics.watchMinutes = pick('watchMinutes') ?? (watchMs !== null ? Math.round(watchMs / 6000) / 10 : null);
   metrics.avgWatchSeconds = pick('avgWatchSeconds') ?? (avgWatchMs !== null ? Math.round(avgWatchMs / 100) / 10 : null);
+  return finishMetrics(metrics);
+}
+
+// Fills in every metric key and derives engagements and engagement rate.
+function finishMetrics(input) {
+  const metrics = Object.fromEntries(METRIC_KEYS.map((key) => [key, toNumber(input?.[key])]));
   if (metrics.engagements === null) {
     const parts = ['likes', 'comments', 'shares', 'saves', 'clicks'].map((key) => metrics[key]).filter((value) => value !== null);
     metrics.engagements = parts.length ? parts.reduce((sum, value) => sum + value, 0) : null;
@@ -81,13 +87,16 @@ async function mapLimit(items, limit, worker) {
   return results;
 }
 
-async function buildTopPostsReport({ profile, clientId, clientName, start, end }) {
-  const history = await ayrshareRequest('/history', {
-    profileKey: profile.profileKey,
-    query: { startDate: new Date(start).toISOString(), endDate: new Date(end).toISOString(), status: 'success', limit: '200' }
-  });
-  const posts = (Array.isArray(history.history) ? history.history : Array.isArray(history) ? history : []).filter((post) => post?.id).slice(0, 60);
+async function buildTopPostsReport({ profile, workspaceId, encryptionKey, clientId, clientName, start, end }) {
   const errors = [];
+  let posts = [];
+  if (profile && ayrshareConfigured()) {
+    const history = await ayrshareRequest('/history', {
+      profileKey: profile.profileKey,
+      query: { startDate: new Date(start).toISOString(), endDate: new Date(end).toISOString(), status: 'success', limit: '200' }
+    });
+    posts = (Array.isArray(history.history) ? history.history : Array.isArray(history) ? history : []).filter((post) => post?.id).slice(0, 60);
+  }
   const analytics = await mapLimit(posts, 4, (post) => ayrshareRequest('/analytics/post', { method: 'POST', profileKey: profile.profileKey, body: { id: post.id } })
     .catch((error) => { errors.push({ postId: post.id, message: error.message }); return {}; }));
   const rows = [];
@@ -111,12 +120,19 @@ async function buildTopPostsReport({ profile, clientId, clientName, start, end }
       });
     }
   });
+  if (workspaceId) {
+    // Posts SignalDesk published directly get their numbers from each network's own API.
+    const direct = await require('./publishing').directPostRows({ workspaceId, clientId, start, end, encryptionKey });
+    errors.push(...direct.errors);
+    direct.rows.forEach(({ raw, ...row }) => rows.push({ ...row, metrics: finishMetrics(raw) }));
+  }
   const totals = Object.fromEntries(METRIC_KEYS.filter((key) => key !== 'engagementRate' && key !== 'avgWatchSeconds').map((key) => {
     const values = rows.map((row) => row.metrics[key]).filter((value) => value !== null);
     return [key, values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null];
   }));
   totals.engagementRate = totals.engagements !== null && (totals.reach || totals.views) ? Math.round((totals.engagements / (totals.reach || totals.views)) * 10000) / 100 : null;
-  return { clientId, clientName, start: new Date(start).toISOString(), end: new Date(end).toISOString(), generatedAt: new Date().toISOString(), postCount: posts.length, rows, totals, errors };
+  const postCount = posts.length + rows.filter((row) => row.id.startsWith('job:')).length;
+  return { clientId, clientName, start: new Date(start).toISOString(), end: new Date(end).toISOString(), generatedAt: new Date().toISOString(), postCount, rows, totals, errors };
 }
 
 function weekRange(weekStart, timeZone) {
@@ -144,7 +160,15 @@ async function saveWeeklyReport(workspaceId, clientId, weekStart, data) {
 
 // Builds last week's report for each connected client once the week is over, then tells admins.
 async function runWeeklyReports({ encryptionKey, limit = 3 } = {}) {
-  const profiles = await databaseRequest('social_profiles?select=workspace_id,client_id') || [];
+  const [profileRows, connectionRows] = await Promise.all([
+    databaseRequest('social_profiles?select=workspace_id,client_id'),
+    databaseRequest('social_connections?select=workspace_id,client_id')
+  ]);
+  const seen = new Set();
+  const profiles = [...(profileRows || []), ...(connectionRows || [])].filter((row) => {
+    const key = `${row.workspace_id}:${row.client_id}`;
+    return !seen.has(key) && seen.add(key);
+  });
   const built = new Map();
   let count = 0;
   for (const row of profiles) {
@@ -159,7 +183,7 @@ async function runWeeklyReports({ encryptionKey, limit = 3 } = {}) {
     try {
       const profile = await getProfile(row.workspace_id, row.client_id, encryptionKey);
       const { start, end } = weekRange(weekStart, timeZone);
-      const report = await buildTopPostsReport({ profile, clientId: client.id, clientName: client.name, start, end });
+      const report = await buildTopPostsReport({ profile, workspaceId: row.workspace_id, encryptionKey, clientId: client.id, clientName: client.name, start, end });
       await saveWeeklyReport(row.workspace_id, row.client_id, weekStart, report);
       count += 1;
       if (!built.has(row.workspace_id)) built.set(row.workspace_id, []);
@@ -182,4 +206,4 @@ async function runWeeklyReports({ encryptionKey, limit = 3 } = {}) {
   return { built: count };
 }
 
-module.exports = { METRIC_KEYS, normalizeMetrics, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };
+module.exports = { METRIC_KEYS, normalizeMetrics, finishMetrics, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };

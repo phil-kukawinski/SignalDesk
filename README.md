@@ -24,37 +24,65 @@ On first sign-in, existing browser-local workspace data is copied to the new acc
 Cloud sync uses team workspaces. The first person to sign in becomes the workspace **Admin**. Admins invite teammates in **Settings → Team members** as **Admin** or **User**; the invitee joins automatically after creating a SignalDesk account with that email and confirming it.
 
 - **Admins** manage team members, clients, social accounts, settings, Autopilot, the calendar, inbox, analytics, and approvals.
-- **Users** see the Command Center, Content Library, and Publishing Studio. Every post a User submits is held with the provider until an Admin approves it in **Team & Approvals**.
+- **Users** see the Command Center, Content Library, and Publishing Studio. Every post a User submits is held until an Admin approves it in **Team & Approvals**.
 
-Roles are enforced server-side: `/api/social` rejects admin-only actions for Users and always sets `requiresApproval` on their posts, and a database trigger blocks Users from changing clients, settings, or approval status in shared workspace state. Each person's in-progress draft is stored separately in `user_drafts`. A person can belong to one workspace at a time.
+Running SignalDesk on your own? Turn on **Settings → Personal mode** to hide the Social Inbox and team members.
+
+Roles are enforced server-side: `/api/social` rejects admin-only actions for Users and always holds their posts for approval, and a database trigger blocks Users from changing clients, settings, or approval status in shared workspace state. Each person's in-progress draft is stored separately in `user_drafts`. A person can belong to one workspace at a time.
 
 Re-running `supabase/schema.sql` on an older install migrates each existing account into its own workspace as Admin, keeping its clients, posts, and linked social profiles.
 
-## Social API setup
+## Publishing setup
 
-Social account linking and API calls run through the Vercel serverless endpoint in `api/social.js`; provider credentials must never go in browser code.
+SignalDesk publishes posts itself. When you schedule a post, `/api/social` saves it in Supabase with one job per network. A worker (`/api/cron`) runs every minute, claims the jobs that are due, publishes them, and records the result, so posts go out with the browser closed. Each network succeeds, fails, and retries on its own:
 
-1. Create an Ayrshare Launch/Business account and enable the networks your users may connect. Launch supports up to 10 Ayrshare user profiles; this app creates one profile per SignalDesk client workspace. Review current plan, messaging, and usage charges with Ayrshare before onboarding clients.
-2. Run the current `supabase/schema.sql` in the Supabase SQL editor. It creates user-scoped encrypted provider-profile storage and a public `social-media` bucket with uploads restricted to the signed-in user's folder. If that bucket already exists, the migration does not change its visibility; make it public only if you intend its media to be available to social networks.
-3. Set `url` and `anonKey` in `js/config.js` to the Supabase project URL and public anon/publishable key. That key is expected to be browser-visible; never use the Supabase service-role key there.
-4. Add the variables in `.env.example` to the Vercel project's server-side Environment Variables. Set `APP_ORIGINS` to the exact local HTTP and deployed HTTPS origins, comma-separated. Generate `SOCIAL_PROFILE_ENCRYPTION_KEY` with `openssl rand -base64 32`. Do not commit actual secret values.
-5. In Ayrshare, enable your desired networks and configure the hosted account-linking page. The Connect button provisions a client profile only when linking begins.
-6. For X, create an X Developer App, enable Read and Write (and Direct Messages if needed), set its callback URLs to `https://profile.ayrshare.com/social-accounts` and `https://app.ayrshare.com/social-accounts`, buy X API credits, and set the two X variables in Vercel. X is omitted from the linking page until both keys are configured.
+- Temporary problems (network errors, rate limits, outages) retry automatically with backoff, up to 6 tries.
+- Expired or revoked sign-ins mark the account **Reconnect needed** and notify admins.
+- If the connection drops after a post was sent, the job is marked **Check the account** instead of retrying, so nothing is posted twice. After checking, an admin can post it again from the post's details.
 
-7. Set `CRON_SECRET` (for example `openssl rand -hex 32`) and schedule `/api/cron` every 10 minutes. It checks Autopilot feeds and posts scheduled follow-up comments. On Vercel Pro, add a `vercel.json` with `{"crons":[{"path":"/api/cron","schedule":"*/10 * * * *"}]}`; Vercel sends the secret automatically. On Vercel Hobby (daily cron only), use the commented `pg_cron` block at the end of `supabase/schema.sql` instead. Admins can also run both jobs on demand with **Check feeds now** on the calendar.
+Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect **directly** through each network's official API, with no publishing-provider fee. Other networks (TikTok, YouTube, X, and so on) can still go through Ayrshare if you add an Ayrshare key; direct connections always take priority.
 
-8. For notification emails, create a [Resend](https://resend.com) account, verify your sending domain, and set `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` (for example `SignalDesk <alerts@yourdomain.com>`), and `APP_URL` (the deployed site, used for email links). Without them, notifications still appear in the app.
-9. For Trend signals in the Content Library, set `ANTHROPIC_API_KEY`. Scans use Claude Opus 5.5 with web search; each scan is billed per token plus per web search (up to 8 searches per scan). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans per day.
-10. `package.json` pins `@anthropic-ai/sdk`; Vercel installs it on deploy (run `npm install` for `vercel dev`). `vercel.json` raises the API time limit to 300 seconds because trend scans and Top Posts can take a minute or more; that limit needs Vercel's Fluid Compute (on by default for new projects) — lower it to 60 if your plan rejects it.
+1. **Supabase.** Run `supabase/schema.sql` in the SQL editor and set `url` and `anonKey` in `js/config.js`. Those two values are browser-visible; never put the service-role key there. The schema creates a public `social-media` bucket for uploads, because networks download media from a public link.
+2. **Server settings.** Add the variables in `.env.example` to the Vercel project's Environment Variables:
+   - The Supabase values.
+   - `SOCIAL_PROFILE_ENCRYPTION_KEY`, from `openssl rand -base64 32`. It encrypts every stored token.
+   - `APP_URL`, your deployed address such as `https://signaldesk.vercel.app`. Sign-in redirects go to `APP_URL/api/oauth`.
+   - `APP_ORIGINS`, the exact local and deployed origins, separated by commas.
+   - `CRON_SECRET`, from `openssl rand -hex 32`.
+3. **The scheduler.** This works on any Vercel plan. In Supabase, enable the `pg_cron` and `pg_net` extensions, fill in your URL and `CRON_SECRET` in the commented block at the end of `schema.sql`, and run it. It creates two jobs: `/api/cron?only=publish` every minute, and the full worker every 10 minutes (Autopilot, comments, token upkeep, reports, digests). On Vercel Pro you can use Vercel Cron for the same two schedules instead. **Until a scheduler runs, scheduled posts wait**; the post details warn when a post is past due.
+4. **Meta (Facebook + Instagram).**
+   - Create a Business-type app at developers.facebook.com and add Facebook Login for Business plus the Instagram API with Facebook Login.
+   - Add `APP_URL/api/oauth` as a valid OAuth redirect URI.
+   - Set `META_APP_ID` and `META_APP_SECRET`. If your Login for Business setup uses a configuration ID, set `META_LOGIN_CONFIG_ID`; otherwise SignalDesk requests: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_engagement`, `read_insights`, `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_insights`, `business_management`.
+   - Instagram accounts must be Business or Creator accounts linked to a Facebook Page you manage.
+   - While the app is in Development mode, only people with a role on the app can sign in. That's fine for personal use; confirm with Meta whether you need App Review for your setup.
+5. **LinkedIn.**
+   - Create an app at linkedin.com/developers, linked to a LinkedIn Page, and add the **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn** products.
+   - Add `APP_URL/api/oauth` as a redirect URL and set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET`. That lets you post as yourself.
+   - To post as company Pages, apply for the **Community Management API**. Once approved, set `LINKEDIN_ORGANIZATIONS=true`; the sign-in then lists the Pages you administer.
+   - LinkedIn sign-ins typically last about 60 days. SignalDesk renews them automatically when LinkedIn issues a refresh token, and otherwise warns admins a week before they expire.
+6. **Pinterest.**
+   - Create an app at developers.pinterest.com, add `APP_URL/api/oauth` as a redirect URI, and set `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET`.
+   - New apps start with limited trial access, so check what yours allows before scheduling real Pins. For testing against Pinterest's sandbox, set `PINTEREST_SANDBOX=true`.
+   - You choose a default board when connecting, and you can pick another board per post under **Post options → Pinterest**.
+7. **Connect accounts.** In **Social Accounts**, choose a client and select **Connect** on a network. Sign in on the network's own page, then choose which Page, Instagram account, LinkedIn profile or Page, or Pinterest account (and board) belongs to that client. Tokens stay on the server, encrypted; the browser never sees them.
+8. **Optional: Ayrshare** for other networks, the Social Inbox, and account-level analytics. Set `AYRSHARE_API_KEY` and use **Connect via Ayrshare**. For X, also create an X Developer App and set the two `X_TWITTER_*` variables.
+9. **Notification emails.** Create a [Resend](https://resend.com) account, verify your sending domain, and set `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL` (for example `SignalDesk <alerts@yourdomain.com>`). Without them, notifications still appear in the app.
+10. **AI features.** For Trend signals and AI proofreading, set `ANTHROPIC_API_KEY`. Both use Claude Opus 5.5. A trend scan is billed per token plus per web search (up to 8 searches). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans a day.
+11. **Dependencies and time limits.** `package.json` pins `@anthropic-ai/sdk`; Vercel installs it on deploy (run `npm install` for `vercel dev`). `vercel.json` allows the API up to 300 seconds, which needs Vercel's Fluid Compute (on by default for new projects); lower it to 60 if your plan rejects it.
 
-Local static-file or Live Server previews cannot run `/api/social`; use a Vercel deployment or `vercel dev` for end-to-end integration testing. Do not paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
+API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `202607`. Override them with `META_GRAPH_VERSION` and `LINKEDIN_API_VERSION` when the networks retire those versions. LinkedIn supports each version for about a year.
+
+Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
 ## Included in this prototype
 - Command Center with sample performance metrics and upcoming content
 - Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters
-- Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, post scheduling, and provider approval submission
+- Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
+- Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
+- Post details from the calendar or Command Center: status and links for each network, retry, move, cancel, approve, or request changes
 - Publishing checklist with optional checks: proofreading (instant quick checks plus AI suggestions you can apply), platform fit (character limits, required media, hashtag counts, unclickable caption links), and link validation
-- Post options: Instagram collaborators and photo tags, LinkedIn/YouTube/TikTok privacy, a first comment, scheduled follow-up comments, and automatic reshares (Ayrshare `autoRepost`)
+- Post options: Instagram collaborators and photo tags, LinkedIn/YouTube/TikTok privacy, a first comment, scheduled follow-up comments, Pinterest board, title, and link, and automatic reposts (each scheduled as its own post)
 - Autopilot: connect RSS/Atom feeds per client; new articles fill posting-time slots on the calendar and are either auto-scheduled or sent to the approval queue, with keyword filters and article images
 - Team workspaces with Admin and User roles
 - Notifications: an in-app bell for approvals requested and decided, Autopilot posts awaiting approval or feed errors, failed scheduled comments, weekly reports, and new teammates; plus per-person email delivery — immediately, a daily digest at 8 AM, a weekly wrap-up on a chosen day, or off
@@ -64,44 +92,49 @@ Local static-file or Live Server previews cannot run `/api/social`; use a Vercel
 - Social Inbox with connected DM conversations, direct replies, and post-comment tools for supported accounts
 - Analytics dashboard with provider-backed account metrics and CSV export
 - Client workspaces and add-client demo flow
-- Team approval queue with provider approval release for API-submitted posts; sample approvals are local examples
+- Approval queue for held posts, with approve and request-changes actions; sample approvals appear only in demo mode
 - Settings page
 
 ## Important prototype limitations
-- Overview metrics, calendar examples, approvals, and much of the content library remain sample data; they are not automatically populated from social APIs. Approval is an Ayrshare post hold released by an Admin.
+- Overview metrics and much of the content library remain sample data. When signed in, the calendar, upcoming posts, and approvals show only real scheduled posts; sample posts appear in demo mode.
+- The direct integrations haven't been run against the live Meta, LinkedIn, or Pinterest APIs yet. They were tested against simulated responses, so expect small fixes on first connection.
+- Direct publishing supports text, images, and video on Facebook and Instagram (Reels and carousels of up to 10 items), and text and images on LinkedIn and Pinterest. LinkedIn and Pinterest video aren't supported yet. Instagram Stories aren't supported.
+- Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
 - Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live.
-- Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed does not cancel posts it already scheduled with the provider.
-- Instagram tags are spaced along the bottom of a single image; there is no drag-to-position UI yet. Collaborator invites must be accepted on Instagram. Reshares require a paid Ayrshare plan, and how Ayrshare combines `autoRepost` with approval holds has not been verified.
-- Top Posts covers posts published through SignalDesk/Ayrshare. Networks report different metrics; anything a network doesn't provide shows as —, and Facebook reach includes paid reach because Meta no longer reports organic reach separately.
+- Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed doesn't cancel posts it already scheduled; cancel them from the calendar.
+- Instagram tags are spaced along the bottom of a single image; there is no drag-to-position UI yet. Collaborator invites must be accepted on Instagram. Reposts copy the post's text and media but not its comments, and approving a post approves its reposts too.
+- Top Posts covers posts SignalDesk published. For direct posts, numbers come from each network's API and are cached for 6 hours: Instagram insights, Facebook reactions, comments, and shares (reach when Meta provides it), Pinterest Pin analytics, and LinkedIn likes and comments (which may need extra LinkedIn permissions). Anything a network doesn't provide shows as —.
 - Best-time bands need about 10 published posts with metrics in weekly Top Posts reports (last 12 weeks); until then the calendar shows clearly labeled starter windows that are general guidance, not your data. Times are shown in the viewer's local time zone.
 - Link checks run from the server and only reach public websites. Some sites block automated checks; those links are marked “couldn't confirm” rather than broken.
 - Trend signals are AI research from public web results at scan time, not platform data feeds. Links are limited to pages the search actually returned, but summaries can still be wrong; confirm trends and audio licensing before using them.
 - Digests and weekly reports run from `/api/cron`, so they need the scheduler from step 7. Notifications refresh every minute while the app is open.
-- Follow-up comments retry every 30 minutes (up to 12 times) if the post is not live yet, for example while it awaits approval.
-- The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts** through Ayrshare's hosted OAuth page.
-- The Ayrshare integration remains inactive until Vercel secrets and the Supabase schema are configured. Per-client provider profile keys are encrypted server-side; social network credentials are entered only on their provider login pages.
-- Provider coverage varies by network. Publishing supports the requested services plus others, but DMs are limited to Facebook, Instagram, X, and WhatsApp (WhatsApp access is beta). Instagram, Pinterest, TikTok, and YouTube publishing require media.
+- First comments and follow-ups wait until their post is live, then retry every 30 minutes (up to 12 times) if posting fails. Pinterest doesn't support comments.
+- The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
+- The Social Inbox and account-level analytics still use Ayrshare and stay inactive without it. DMs are limited to Facebook, Instagram, X, and WhatsApp. Instagram, Pinterest, TikTok, and YouTube publishing require media.
 - X requires your own developer app and API credits. Provider app reviews, account eligibility, rate limits, message windows, and network policy apply.
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Clearing a draft drops its media reference but does not delete the public object, because a scheduled post may still use it; orphan cleanup is not implemented yet.
 
 ## Suggested next build phase
-1. Configure Ayrshare, Supabase, X, and Vercel secrets using the setup steps above.
-2. Test linking, publishing, analytics, comments, and messaging against approved accounts.
-3. Replace remaining sample dashboard data with live histories and provider webhooks.
-4. Add audit logs, live collaboration updates, and production monitoring.
+1. Create the Meta, LinkedIn, and Pinterest developer apps, then configure Supabase, the scheduler, and Vercel using the setup steps above.
+2. Connect your own accounts first and schedule test posts to each network, including an image, a carousel, and an Instagram video.
+3. Add LinkedIn and Pinterest video, Instagram Stories, and drag-to-reschedule on the calendar.
+4. Replace remaining sample dashboard data, and add audit logs and production monitoring.
 
 ## Project structure
 - `index.html` — page structure
 - `css/styles.css` — responsive visual design
 - `js/app.js` — demo data, navigation, and interactions
-- `api/social.js` — authenticated social, team, and Autopilot API
-- `api/cron.js` — scheduled worker for Autopilot feeds and follow-up comments
+- `api/social.js` — authenticated publishing, account, team, and Autopilot API
+- `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
+- `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
+- `api/_lib/publishing.js` — the publishing queue, connections, and post management
+- `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors
 - `api/_lib/core.js` — shared provider, database, post-option, and RSS helpers
 - `api/_lib/notify.js` — in-app notifications, immediate emails, and digests
 - `api/_lib/reports.js` — Top Posts metrics and weekly reports
 - `api/_lib/trends.js` — Claude-powered trend research
 - `api/_lib/proofread.js` — Claude-powered proofreading
-- `supabase/schema.sql` — tables, migration, row-level security, and the `ensure_workspace` function
+- `supabase/schema.sql` — tables, migration, row-level security, the `ensure_workspace` function, and the publishing queue's claim and status functions
 
 ## Import into Replit
 Push this folder to a GitHub repository, then import the repository into Replit. Keep Git as the source of truth and avoid editing the same files independently in VS Code and Replit without committing/syncing.

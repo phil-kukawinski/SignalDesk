@@ -1,10 +1,13 @@
 const crypto = require('node:crypto');
 const { send, getConfig, getBearerToken, processDueComments, runAutopilot } = require('./_lib/core');
+const { processPublishQueue, maintainConnections } = require('./_lib/publishing');
 const { processEmailDigests } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 
-// Runs Autopilot feeds, due follow-up comments, weekly Top Posts reports, and email digests. Call it on a schedule with
-// `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this header automatically).
+// Publishes due posts, then runs Autopilot feeds, due comments, token upkeep, weekly Top Posts
+// reports, and email digests. Call it on a schedule with `Authorization: Bearer $CRON_SECRET`
+// (Vercel Cron sends this header automatically). `?only=publish` runs just the publishing
+// queue, for a frequent schedule.
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   const secret = process.env.CRON_SECRET || '';
@@ -14,12 +17,17 @@ module.exports = async function handler(req, res) {
   }
   const { encryptionKey, missing } = getConfig();
   if (missing.length) return send(res, 503, { error: 'Social integrations are not configured.', missing });
+  const onlyPublish = new URL(req.url || '/', 'http://localhost').searchParams.get('only') === 'publish';
+  const started = Date.now();
   try {
+    const publishing = await processPublishQueue({ encryptionKey, limit: 15, deadline: started + 200000 });
     const comments = await processDueComments({ encryptionKey, limit: 50 });
+    if (onlyPublish) return send(res, 200, { publishing, comments });
+    const connections = await maintainConnections({ encryptionKey });
     const feeds = await runAutopilot({ encryptionKey, staleMinutes: 10, limit: 25 });
     const reports = await runWeeklyReports({ encryptionKey, limit: 3 });
     const digests = await processEmailDigests({ limit: 40 });
-    return send(res, 200, { comments, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests });
+    return send(res, 200, { publishing, comments, connections, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     return send(res, 500, { error: 'Scheduled run failed.' });
