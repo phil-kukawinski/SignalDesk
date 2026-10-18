@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { send, getConfig, getBearerToken, processDueComments, runAutopilot } = require('./_lib/core');
-const { processPublishQueue, maintainConnections, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth } = require('./_lib/publishing');
+const { processPublishQueue, maintainConnections, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth, recycleEvergreen } = require('./_lib/publishing');
 const { processEmailDigests } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia } = require('./_lib/media');
@@ -13,7 +13,7 @@ function authorized(req) {
   return Boolean(secret) && token.length === secret.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(secret));
 }
 
-// Publishes due posts, then runs Autopilot feeds, due comments, token upkeep, metrics, weekly
+// Publishes due posts, then runs Autopilot feeds, due comments, token upkeep, metrics, evergreen reposts, weekly
 // Top Posts reports, email digests, and a daily media cleanup. Call it on a schedule with
 // `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this header automatically).
 // `?only=publish` runs just the publishing queue, for an every-minute schedule.
@@ -33,6 +33,7 @@ module.exports = async function handler(req, res) {
     if (only === 'publish') return send(res, 200, { publishing, comments });
     const connections = await maintainConnections({ encryptionKey });
     const metrics = await refreshRecentMetrics({ encryptionKey, limit: 10 });
+    const evergreen = await recycleEvergreen({ encryptionKey });
     const feeds = await runAutopilot({ encryptionKey, staleMinutes: 10, limit: 25 });
     const reports = await runWeeklyReports({ encryptionKey, limit: 3 });
     const digests = await processEmailDigests({ limit: 40 });
@@ -44,7 +45,7 @@ module.exports = async function handler(req, res) {
     }
     const health = await checkWorkerHealth();
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { publishing, comments, connections, metrics, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, media, health });
+    return send(res, 200, { publishing, comments, connections, metrics, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     return send(res, 500, { error: 'Scheduled run failed.' });

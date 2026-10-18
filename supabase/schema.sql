@@ -328,6 +328,44 @@ create table if not exists public.publish_attempts (
 );
 create index if not exists publish_attempts_job_idx on public.publish_attempts (job_id);
 
+-- Campaign labels, evergreen recycling, and the client's review decision on scheduled posts.
+alter table public.scheduled_posts add column if not exists campaign text;
+alter table public.scheduled_posts add column if not exists evergreen boolean not null default false;
+alter table public.scheduled_posts add column if not exists recycled_at timestamptz;
+alter table public.scheduled_posts add column if not exists client_status text;
+alter table public.scheduled_posts drop constraint if exists scheduled_posts_client_status_check;
+alter table public.scheduled_posts add constraint scheduled_posts_client_status_check check (client_status in ('approved', 'changes_requested'));
+create index if not exists scheduled_posts_campaign_idx on public.scheduled_posts (workspace_id, campaign);
+
+-- Private links that let a client review upcoming posts without a SignalDesk account.
+-- Only a hash of each link's secret is stored.
+create table if not exists public.review_links (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  token_hash text not null unique,
+  label text,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  last_used_at timestamptz
+);
+
+-- Conversation on a post: team notes and client comments or decisions.
+create table if not exists public.post_notes (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.scheduled_posts (id) on delete cascade,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  author_id uuid references auth.users (id) on delete set null,
+  author_name text not null,
+  author_kind text not null check (author_kind in ('team', 'client')),
+  body text not null default '',
+  decision text check (decision in ('approved', 'changes_requested')),
+  created_at timestamptz not null default now()
+);
+create index if not exists post_notes_post_idx on public.post_notes (post_id, created_at);
+
 -- When each background job last ran, so a stopped scheduler can be noticed.
 create table if not exists public.worker_runs (
   name text primary key,
@@ -512,17 +550,19 @@ alter table public.scheduled_posts enable row level security;
 alter table public.publish_jobs enable row level security;
 alter table public.publish_attempts enable row level security;
 alter table public.worker_runs enable row level security;
+alter table public.review_links enable row level security;
+alter table public.post_notes enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
-  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs from anon, authenticated;
+  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
-  public.publish_jobs, public.publish_attempts, public.worker_runs to service_role;
+  public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

@@ -32,7 +32,7 @@ Respect the brand's voice: casual tone, emoji, hashtags, @mentions, intentional 
 
 For each issue, copy the exact text being replaced into "original" (short, but long enough to be unique in that text) and give the corrected text in "suggestion". If a text has no problems, return no issues for it.`;
 
-async function proofreadTexts(texts) {
+async function proofreadTexts(texts, brandNotes = '') {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Proofreading is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
   const client = new Anthropic();
   const body = texts.map((item) => `<text key="${item.key}" label="${item.label.replace(/"/g, "'")}">\n${item.text}\n</text>`).join('\n\n');
@@ -42,7 +42,7 @@ async function proofreadTexts(texts) {
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     output_config: { effort: 'low', format: { type: 'json_schema', schema: ISSUES_SCHEMA } },
-    system: SYSTEM_PROMPT,
+    system: brandNotes ? `${SYSTEM_PROMPT}\n\nThis client's brand guidelines (flag copy that clearly breaks them, with type "clarity"):\n${brandNotes}` : SYSTEM_PROMPT,
     messages: [{ role: 'user', content: `Proofread these texts from one post:\n\n${body}` }]
   });
   if (response.stop_reason === 'refusal') throw Object.assign(new Error('Proofreading was declined for this post.'), { status: 422 });

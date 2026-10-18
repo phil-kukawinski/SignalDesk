@@ -278,6 +278,7 @@ function validatePostOptions(options, platforms) {
     if (options.pinterest.boardId) pin.boardId = String(options.pinterest.boardId);
     if (Object.keys(pin).length) clean.pinterest = pin;
   }
+  if (options.utm === true) clean.utm = true;
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
     const repeat = Number(options.autoRepost.repeat), days = Number(options.autoRepost.days);
     if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10 || !Number.isInteger(days) || days < 2) {

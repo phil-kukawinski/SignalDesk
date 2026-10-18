@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Content review</title>
+  <link rel="stylesheet" href="css/review.css">
+</head>
+<body>
+  <header class="review-header">
+    <div class="review-brand"><div class="review-logo" id="review-logo" aria-hidden="true"></div><div><small id="review-workspace">Content review</small><h1 id="review-client">Loading…</h1></div></div>
+    <label class="review-name">Your name<input id="review-name" autocomplete="name" maxlength="80" placeholder="So the team knows who reviewed"></label>
+  </header>
+  <main class="review-main">
+    <p class="review-intro" id="review-intro">Loading upcoming posts…</p>
+    <div class="review-filter" id="review-filter" hidden>
+      <button type="button" class="active" data-filter="all">All upcoming</button>
+      <button type="button" data-filter="waiting">Waiting for you</button>
+    </div>
+    <div id="review-list" class="review-list"></div>
+  </main>
+  <div id="review-toast" class="review-toast" role="status" aria-live="polite"></div>
+  <script src="js/review.js"></script>
+</body>
+</html>

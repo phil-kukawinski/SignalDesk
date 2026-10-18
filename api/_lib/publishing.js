@@ -131,13 +131,36 @@ function contentFor(post, platform) {
   };
 }
 
+// Adds UTM tags to links so clicks show up in the client's web analytics. Links that
+// already carry utm_source are left alone. Applied when publishing, so saved copy stays clean.
+function tagLinks(text, { source, campaign }) {
+  return String(text).replace(/https?:\/\/[^\s<>"')\]]+/g, (match) => {
+    const trailing = /[.,!?;:]+$/.exec(match)?.[0] || '';
+    const raw = trailing ? match.slice(0, -trailing.length) : match;
+    let url;
+    try { url = new URL(raw); } catch { return match; }
+    if (url.searchParams.has('utm_source')) return match;
+    url.searchParams.set('utm_source', source);
+    url.searchParams.set('utm_medium', 'social');
+    url.searchParams.set('utm_campaign', String(campaign).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'signaldesk');
+    return url.href + trailing;
+  });
+}
+
+function withTracking(post, platform, content, options) {
+  if (!options.utm) return { content, options };
+  const campaign = post.campaign || post.client_id;
+  const pinterest = options.pinterest?.link ? { ...options.pinterest, link: tagLinks(options.pinterest.link, { source: platform, campaign }) } : options.pinterest;
+  return { content: { ...content, text: tagLinks(content.text, { source: platform, campaign }) }, options: { ...options, ...(pinterest ? { pinterest } : {}) } };
+}
+
 function commentableFor(provider, platform) {
   return provider === 'direct' ? COMMENTABLE.has(platform) : COMMENT_PLATFORMS.has(platform);
 }
 
 async function createScheduledPost({
   workspaceId, clientId, userId, title, platforms, text, mediaUrls = [], platformContent = {}, options = {},
-  scheduledFor, held = false, source = 'composer', encryptionKey
+  scheduledFor, held = false, source = 'composer', campaign = null, evergreen = false, encryptionKey
 }) {
   const destinations = await resolveDestinations(workspaceId, clientId, platforms, encryptionKey);
   const { followUpComments = [], autoRepost, ...stored } = options;
@@ -155,7 +178,9 @@ async function createScheduledPost({
     status: held ? 'pending_approval' : 'scheduled', content,
     // Reposts carry the same copy but not the comments.
     options: index === 0 ? { ...stored, followUpComments, reposts: autoRepost || null } : { ...stored, firstComment: undefined, repostOf: occurrences[0].id },
-    parent_id: item.parent
+    parent_id: item.parent,
+    campaign: campaign || null,
+    evergreen: index === 0 && evergreen
   }));
   const jobs = occurrences.flatMap((item) => destinations.map((destination) => ({
     id: crypto.randomUUID(), post_id: item.id, workspace_id: workspaceId, client_id: clientId,
@@ -240,19 +265,19 @@ async function runJob(job, encryptionKey) {
       await patchJob({ status: 'canceled', ...unlock });
       return 'canceled';
     }
-    const content = contentFor(post, job.platform);
+    const { content, options: postOptions } = withTracking(post, job.platform, contentFor(post, job.platform), post.options || {});
     const markSent = () => patchJob({ sent_at: nowIso() });
     const saveStage = async (patch) => { stage = { ...stage, ...patch }; await patchJob({ stage }); };
     let outcome;
     if (job.provider === 'ayrshare') {
-      outcome = await publishViaAyrshare({ job, post, content, markSent, encryptionKey });
+      outcome = await publishViaAyrshare({ job, post: { ...post, options: postOptions }, content, markSent, encryptionKey });
     } else {
       let connection = await loadConnection(job.connection_id, encryptionKey);
       if (!connection) throw new PublishError('auth', `The ${label(job.platform)} account was disconnected. Reconnect it, then retry.`);
       if (connection.status === 'needs_reauth') throw new PublishError('auth', connection.last_error || `Reconnect ${label(job.platform)} in Social Accounts, then retry.`);
       if (!providerConfigured(DIRECT_PLATFORMS[job.platform])) throw new PublishError('invalid', `${label(job.platform)} publishing isn't configured on the server.`);
       connection = await ensureFreshToken(connection, encryptionKey);
-      outcome = await adapterFor(job.platform).publish({ connection, job, content, options: post.options || {}, stage, saveStage, markSent });
+      outcome = await adapterFor(job.platform).publish({ connection, job, content, options: postOptions, stage, saveStage, markSent });
     }
     if (outcome.pending) {
       // Media is still processing; check again soon without using up an attempt.
@@ -386,6 +411,7 @@ function publicPost(row) {
     id: row.id, clientId: row.client_id, title: row.title, status: row.status, source: row.source,
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
     approvedAt: row.approved_at, decisionNote: row.decision_note, createdAt: row.created_at,
+    campaign: row.campaign || '', evergreen: Boolean(row.evergreen), clientStatus: row.client_status || null,
     text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {},
     options: row.options || {},
     jobs: (row.publish_jobs || []).map((job) => ({
@@ -507,7 +533,7 @@ const METRICS_CACHE_MS = 6 * 3600000;
 
 async function directPostRows({ workspaceId, clientId, start, end, encryptionKey }) {
   const query = new URLSearchParams({
-    select: 'id,platform,external_id,external_url,published_at,connection_id,metrics,metrics_at,scheduled_posts(title,content)',
+    select: 'id,platform,external_id,external_url,published_at,connection_id,metrics,metrics_at,scheduled_posts(title,content,campaign)',
     workspace_id: `eq.${workspaceId}`, client_id: `eq.${clientId}`, provider: 'eq.direct', status: 'eq.published', order: 'published_at.desc', limit: '60'
   });
   query.append('published_at', `gte.${new Date(start).toISOString()}`);
@@ -534,7 +560,7 @@ async function directPostRows({ workspaceId, clientId, start, end, encryptionKey
     }
     const content = contentFor({ content: job.scheduled_posts?.content || {} }, job.platform);
     rows.push({
-      id: `job:${job.id}`, providerPostId: job.id, platform: job.platform, text: content.text.slice(0, 500), url: job.external_url || '',
+      id: `job:${job.id}`, providerPostId: job.id, platform: job.platform, text: content.text.slice(0, 500), url: job.external_url || '', campaign: job.scheduled_posts?.campaign || '',
       media: content.media[0] || null, publishedAt: job.published_at, raw: metrics || {}, hasData: Boolean(metrics && Object.values(metrics).some((value) => value !== null))
     });
   }
@@ -657,6 +683,130 @@ async function overviewData(workspaceId, timeZone) {
   };
 }
 
+// --- Posting queues and evergreen posts ---
+
+// A client's queue: posting days (0 = Sunday) and times, plus how long evergreen posts rest.
+function queueConfig(client) {
+  const queue = client?.queue;
+  if (!queue || typeof queue !== 'object') return null;
+  const days = [...new Set(Array.isArray(queue.days) ? queue.days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6) : [])];
+  const times = [...new Set(Array.isArray(queue.times) ? queue.times.filter((time) => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)) : [])].sort();
+  const recycleDays = Math.min(365, Math.max(7, parseInt(queue.recycleDays, 10) || 30));
+  return days.length && times.length ? { days, times, recycleDays } : { days: [], times: [], recycleDays };
+}
+
+function nextSlot(queue, timeZone, taken, fromMs) {
+  const { zonedParts, zonedToUtc } = require('./core');
+  const start = zonedParts(new Date(fromMs), timeZone);
+  for (let offset = 0; offset < 90; offset += 1) {
+    const day = new Date(Date.UTC(start.year, start.month - 1, start.day + offset));
+    if (!queue.days.includes(day.getUTCDay())) continue;
+    for (const time of queue.times) {
+      const [hour, minute] = time.split(':').map(Number);
+      const at = zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), hour, minute, timeZone);
+      if (at >= fromMs && !taken.has(at)) return at;
+    }
+  }
+  return null;
+}
+
+async function takenSlots(workspaceId, clientId, fromMs) {
+  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(clientId)}&status=in.(pending_approval,scheduled,publishing)&scheduled_for=gte.${new Date(fromMs).toISOString()}&select=scheduled_for&limit=1000`) || [];
+  return new Set(rows.map((row) => Date.parse(row.scheduled_for)));
+}
+
+// The next open queue slot for a client, at least 10 minutes from now.
+async function nextQueueSlot(workspaceId, client, timeZone, fromMs = Date.now() + 10 * 60000) {
+  const queue = queueConfig(client);
+  if (!queue?.days.length) throw httpError(400, `Set up a posting queue for ${client?.name || 'this client'} in its brand kit first.`);
+  const slot = nextSlot(queue, timeZone, await takenSlots(workspaceId, client.id, fromMs), fromMs);
+  if (!slot) throw httpError(400, 'The queue has no open slots in the next 90 days.');
+  return slot;
+}
+
+// Puts published evergreen posts back in their client's queue after a rest period.
+async function recycleEvergreen({ encryptionKey, limit = 10 } = {}) {
+  const rows = await databaseRequest(`scheduled_posts?evergreen=eq.true&status=eq.published&recycled_at=is.null&select=*,publish_jobs(platform,status)&limit=${limit}`) || [];
+  let recycled = 0;
+  for (const post of rows) {
+    await databaseRequest(`scheduled_posts?id=eq.${post.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ recycled_at: nowIso() }) });
+    try {
+      const state = await getWorkspaceState(post.workspace_id);
+      const client = (state.clients || []).find((item) => item.id === post.client_id);
+      if (!client) continue;
+      const { WORKSPACE_TIMEZONES } = require('./core');
+      const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
+      const queue = queueConfig(client) || { days: [], times: [], recycleDays: 30 };
+      const from = Math.max(Date.now() + 10 * 60000, Date.parse(post.scheduled_for) + queue.recycleDays * 86400000);
+      let at = queue.days.length ? nextSlot(queue, timeZone, await takenSlots(post.workspace_id, post.client_id, from), from) : null;
+      if (!at) at = from;
+      const { followUpComments, reposts, repostOf, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
+      const platforms = [...new Set(post.publish_jobs.filter((job) => job.status === 'published').map((job) => job.platform))];
+      if (!platforms.length) continue;
+      await createScheduledPost({
+        workspaceId: post.workspace_id, clientId: post.client_id, userId: post.created_by, title: post.title, platforms,
+        text: post.content?.text || '', mediaUrls: post.content?.media || [], platformContent: post.content?.platformContent || {},
+        options, scheduledFor: at, source: post.source, campaign: post.campaign, evergreen: true, encryptionKey
+      });
+      recycled += 1;
+    } catch (error) {
+      console.error('Evergreen recycle failed:', post.id, error.message);
+    }
+  }
+  return { recycled };
+}
+
+// --- Comments on published posts ---
+
+async function publishedDirectJob(workspaceId, jobId, encryptionKey) {
+  if (typeof jobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(jobId)) throw httpError(400, 'Choose a published post.');
+  const job = (await databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&id=eq.${jobId}&select=*`))?.[0];
+  if (!job) throw httpError(404, 'Post not found.');
+  if (job.status !== 'published' || job.provider !== 'direct' || !COMMENTABLE.has(job.platform)) throw httpError(400, 'Comments are available for posts SignalDesk published directly to Facebook, Instagram, or LinkedIn.');
+  let connection = await loadConnection(job.connection_id, encryptionKey);
+  if (!connection || connection.status !== 'active') throw httpError(400, `Reconnect ${label(job.platform)} to see its comments.`);
+  connection = await ensureFreshToken(connection, encryptionKey);
+  return { job, connection, adapter: adapterFor(job.platform) };
+}
+
+async function listJobComments(workspaceId, jobId, encryptionKey) {
+  const { job, connection, adapter } = await publishedDirectJob(workspaceId, jobId, encryptionKey);
+  try {
+    return await adapter.listComments({ connection, job });
+  } catch (error) {
+    throw httpError(error.kind === 'auth' ? 400 : 502, error.message);
+  }
+}
+
+async function replyToComment(workspaceId, jobId, commentId, text, encryptionKey) {
+  if (typeof commentId !== 'string' || !commentId || commentId.length > 300) throw httpError(400, 'Choose a comment to reply to.');
+  const { job, connection, adapter } = await publishedDirectJob(workspaceId, jobId, encryptionKey);
+  try {
+    return await adapter.reply({ connection, job, commentId, text });
+  } catch (error) {
+    throw httpError(error.kind === 'auth' ? 400 : 502, error.message);
+  }
+}
+
+// --- Notes and client comments on a post ---
+
+async function listNotes(workspaceId, postId, { clientOnly = false } = {}) {
+  const query = new URLSearchParams({ select: 'id,post_id,author_name,author_kind,body,decision,created_at', workspace_id: `eq.${workspaceId}`, order: 'created_at.asc', limit: '200' });
+  query.set('post_id', Array.isArray(postId) ? `in.(${postId.join(',')})` : `eq.${postId}`);
+  if (clientOnly) query.set('author_kind', 'eq.client');
+  return (await databaseRequest(`post_notes?${query}`) || []).map((note) => ({
+    id: note.id, postId: note.post_id, author: note.author_name, kind: note.author_kind, body: note.body, decision: note.decision, at: note.created_at
+  }));
+}
+
+async function addNote({ workspaceId, postId, authorId = null, authorName, kind, body, decision = null }) {
+  const [note] = await databaseRequest('post_notes', {
+    method: 'POST', headers: { prefer: 'return=representation' },
+    body: JSON.stringify({ workspace_id: workspaceId, post_id: postId, author_id: authorId, author_name: authorName.slice(0, 80), author_kind: kind, body: body.slice(0, 2000), decision })
+  });
+  return note;
+}
+
 // --- Editing a scheduled post ---
 
 const EDIT_LEAD_MS = 2 * 60000;
@@ -681,6 +831,8 @@ async function replacePost(workspaceId, original, replacementId) {
     await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
     throw httpError(409, 'The original started publishing while you were editing, so your changes weren’t saved.');
   }
+  // The conversation stays with the post; the client's decision doesn't, since the content changed.
+  await databaseRequest(`post_notes?post_id=in.(${ids.join(',')})`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
   if (original.source === 'autopilot') {
     await databaseRequest(`autopilot_items?post_id=eq.${original.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
     await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ source: 'autopilot' }) });
@@ -692,5 +844,5 @@ module.exports = {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, assertEditable, replacePost
+  refreshRecentMetrics, overviewData, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks
 };

@@ -89,15 +89,26 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Notifications: an in-app bell for approvals requested and decided, Autopilot posts awaiting approval or feed errors, failed scheduled comments, weekly reports, and new teammates; plus per-person email delivery — immediately, a daily digest at 8 AM, a weekly wrap-up on a chosen day, or off
 - Weekly Top Posts in Analytics: every published post for a week or the last 7 days, ranked by views, engagement, engagement rate, comments, likes, organic reach, shares, saves, clicks, video views, or watch time, with CSV export. Last week's report is built automatically each Monday and summarized in weekly wrap-up emails
 - Trend signals in the Content Library: AI web research on trending hashtags, audio, formats, and standout posts, with source links and client-specific ideas you can drop into a draft
-- Content Library with searchable sample assets
-- Social Inbox with connected DM conversations, direct replies, and post-comment tools for supported accounts
+- **Brand kits** per client (Clients → Brand kit): voice, hashtags to always include, words to avoid, colors, logo, watch terms, a default for link tracking, and a posting queue. The checklist's optional **On brand** item flags avoid-list words and missing hashtags, and AI proofreading checks copy against the voice
+- **Client review links** (Clients → Review link): a private page (`review.html`) where a client sees the next 60 days of posts for each network, approves them, asks for changes, or comments, with no account. Links expire (7–90 days) and can be turned off; only a hash of each link is stored. Approving a post that's waiting for approval schedules it. Clients never see team notes
+- **Notes on posts:** a team thread in each post's details, alongside client comments and decisions
+- **Templates and snippets** in the Publishing Studio, saved per client or for all clients. Templates fill in `{client}`, `{date}`, and `{campaign}`
+- **Posting queues:** set weekly days and times per client, then use **Add to queue** to take the next open slot. **Evergreen** posts go back into the queue after a rest period (default 30 days)
+- **Campaigns:** label posts and filter the calendar, client reports, and Top Posts rows by campaign
+- **Link tracking:** optional UTM tags (`utm_source` = network, `utm_medium=social`, `utm_campaign` = campaign or client), added when each network's post goes out so saved copy stays clean
+- **Instagram grid preview** (Calendar → Grid) for a client's recent and scheduled Instagram posts
+- **Holiday overlay** on the calendar: US holidays and common marketing days, which you can toggle off
+- **Comments on your posts** in the Social Inbox: read and reply to comments on posts SignalDesk published to Facebook, Instagram, and LinkedIn
+- **Client reports** (Analytics → Client report): a branded summary for last month, this month, or the last 30 or 90 days, optionally for one campaign. It opens in a new tab, ready to save as a PDF
+- Content Library: when signed in, upload images and videos, tag them, filter by client and type, and add them to a post. Demo mode shows sample collections
+- Social Inbox: comments on your published posts, plus Ayrshare DMs when Ayrshare is configured
 - Analytics dashboard with provider-backed account metrics and CSV export
 - Client workspaces and add-client demo flow
 - Approval queue for held posts, with approve and request-changes actions; sample approvals appear only in demo mode
 - Settings page
 
 ## Important prototype limitations
-- Much of the content library is still sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
+- In demo mode the content library shows sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
 - Command Center engagement counts posts SignalDesk published. The worker refreshes metrics for the last 30 days of posts every 12 hours or so (10 posts per run), so new numbers can take a few hours to appear.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
 - The direct integrations haven't been run against the live Meta, LinkedIn, or Pinterest APIs yet. They were tested against simulated responses, so expect small fixes on first connection.
@@ -115,6 +126,10 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
 - The Social Inbox and account-level analytics still use Ayrshare and stay inactive without it. DMs are limited to Facebook, Instagram, X, and WhatsApp. Instagram, Pinterest, TikTok, and YouTube publishing require media.
 - X requires your own developer app and API credits. Provider app reviews, account eligibility, rate limits, message windows, and network policy apply.
+- Client review pages show post images from their public links, so anyone who has a review link can see that client's upcoming posts until it expires or is turned off. Share links only with the client.
+- Comment authors on LinkedIn show as "LinkedIn member" without extra LinkedIn profile permissions. LinkedIn replies are posted as replies to the comment, and that request format hasn't been checked against the live API yet.
+- Queues and evergreen reposting use the workspace time zone. If a client has no queue, evergreen posts come back at the same time of day after the rest period.
+- The holiday overlay is a fixed list of US dates and common marketing days, not a live calendar feed.
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Suggested next build phase
@@ -132,6 +147,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - `js/app.js` — demo data, navigation, and interactions
 - `api/social.js` — authenticated publishing, account, team, and Autopilot API
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
+- `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors

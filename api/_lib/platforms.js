@@ -163,6 +163,23 @@ const meta = {
     return { id: result.id };
   },
 
+  async listComments({ connection, job }) {
+    if (job.platform === 'instagram') {
+      const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,text,username,timestamp,replies{id,text,username,timestamp}', limit: '50' } });
+      const shape = (item) => ({ id: item.id, author: item.username ? `@${item.username}` : 'Instagram user', text: item.text || '', at: item.timestamp || null });
+      return (result.data || []).map((item) => ({ ...shape(item), replies: (item.replies?.data || []).map(shape) }));
+    }
+    const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,message,from{name},created_time,comments.limit(20){id,message,from{name},created_time}', limit: '50', order: 'reverse_chronological' } });
+    const shape = (item) => ({ id: item.id, author: item.from?.name || 'Facebook user', text: item.message || '', at: item.created_time || null });
+    return (result.data || []).map((item) => ({ ...shape(item), replies: (item.comments?.data || []).map(shape) }));
+  },
+
+  async reply({ connection, job, commentId, text }) {
+    const path = job.platform === 'instagram' ? `${commentId}/replies` : `${commentId}/comments`;
+    const result = await graph(path, { method: 'POST', token: connection.token, params: { message: text } });
+    return { id: result.id };
+  },
+
   async metrics({ connection, job }) {
     if (job.platform === 'instagram') {
       const insights = await graph(`${job.external_id}/insights`, { token: connection.token, params: { metric: 'views,reach,likes,comments,shares,saved,total_interactions' } });
@@ -443,6 +460,22 @@ const linkedin = {
   async comment({ connection, externalId, text }) {
     const { headers } = await linkedIn(`socialActions/${encodeURIComponent(externalId)}/comments`, {
       method: 'POST', token: connection.token, body: { actor: connection.external_id, object: externalId, message: { text } }
+    });
+    return { id: headers.get('x-restli-id') || '' };
+  },
+
+  async listComments({ connection, job }) {
+    const { payload } = await linkedIn(`socialActions/${encodeURIComponent(job.external_id)}/comments?count=50`, { token: connection.token });
+    // LinkedIn returns member IDs, not names, without extra profile permissions.
+    return (payload.elements || []).map((item) => ({
+      id: item.$URN || item.commentUrn || item.id, text: item.message?.text || '',
+      author: item.actor === connection.external_id ? 'You' : 'LinkedIn member', at: item.created?.time ? new Date(item.created.time).toISOString() : null, replies: []
+    }));
+  },
+
+  async reply({ connection, job, commentId, text }) {
+    const { headers } = await linkedIn(`socialActions/${encodeURIComponent(job.external_id)}/comments`, {
+      method: 'POST', token: connection.token, body: { actor: connection.external_id, object: job.external_id, parentComment: commentId, message: { text } }
     });
     return { id: headers.get('x-restli-id') || '' };
   },

@@ -91,11 +91,17 @@ async function buildTopPostsReport({ profile, workspaceId, encryptionKey, client
   const errors = [];
   let posts = [];
   if (profile && ayrshareConfigured()) {
-    const history = await ayrshareRequest('/history', {
-      profileKey: profile.profileKey,
-      query: { startDate: new Date(start).toISOString(), endDate: new Date(end).toISOString(), status: 'success', limit: '200' }
-    });
-    posts = (Array.isArray(history.history) ? history.history : Array.isArray(history) ? history : []).filter((post) => post?.id).slice(0, 60);
+    // An Ayrshare outage shouldn't hide the posts SignalDesk published directly.
+    try {
+      const history = await ayrshareRequest('/history', {
+        profileKey: profile.profileKey,
+        query: { startDate: new Date(start).toISOString(), endDate: new Date(end).toISOString(), status: 'success', limit: '200' }
+      });
+      posts = (Array.isArray(history.history) ? history.history : Array.isArray(history) ? history : []).filter((post) => post?.id).slice(0, 60);
+    } catch (error) {
+      if (!workspaceId) throw error;
+      errors.push({ postId: null, message: `Couldn't load Ayrshare posts: ${error.message}` });
+    }
   }
   const analytics = await mapLimit(posts, 4, (post) => ayrshareRequest('/analytics/post', { method: 'POST', profileKey: profile.profileKey, body: { id: post.id } })
     .catch((error) => { errors.push({ postId: post.id, message: error.message }); return {}; }));
@@ -126,13 +132,19 @@ async function buildTopPostsReport({ profile, workspaceId, encryptionKey, client
     errors.push(...direct.errors);
     direct.rows.forEach(({ raw, ...row }) => rows.push({ ...row, metrics: finishMetrics(raw) }));
   }
+  const totals = reportTotals(rows);
+  const postCount = posts.length + rows.filter((row) => row.id.startsWith('job:')).length;
+  return { clientId, clientName, start: new Date(start).toISOString(), end: new Date(end).toISOString(), generatedAt: new Date().toISOString(), postCount, rows, totals, errors };
+}
+
+// Sums each metric across rows; engagement rate is recomputed from the sums.
+function reportTotals(rows) {
   const totals = Object.fromEntries(METRIC_KEYS.filter((key) => key !== 'engagementRate' && key !== 'avgWatchSeconds').map((key) => {
     const values = rows.map((row) => row.metrics[key]).filter((value) => value !== null);
     return [key, values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null];
   }));
   totals.engagementRate = totals.engagements !== null && (totals.reach || totals.views) ? Math.round((totals.engagements / (totals.reach || totals.views)) * 10000) / 100 : null;
-  const postCount = posts.length + rows.filter((row) => row.id.startsWith('job:')).length;
-  return { clientId, clientName, start: new Date(start).toISOString(), end: new Date(end).toISOString(), generatedAt: new Date().toISOString(), postCount, rows, totals, errors };
+  return totals;
 }
 
 function weekRange(weekStart, timeZone) {
@@ -206,4 +218,4 @@ async function runWeeklyReports({ encryptionKey, limit = 3 } = {}) {
   return { built: count };
 }
 
-module.exports = { METRIC_KEYS, normalizeMetrics, finishMetrics, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };
+module.exports = { METRIC_KEYS, normalizeMetrics, finishMetrics, reportTotals, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };

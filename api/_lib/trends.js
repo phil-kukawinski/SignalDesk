@@ -11,7 +11,7 @@ const stringList = { type: 'array', items: { type: 'string' } };
 const REPORT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['summary', 'hashtags', 'audio', 'formats', 'topPosts', 'ideas'],
+  required: ['summary', 'hashtags', 'audio', 'formats', 'topPosts', 'ideas', 'mentions'],
   properties: {
     summary: { type: 'string', description: 'Two or three sentences on the biggest shifts this week.' },
     hashtags: {
@@ -52,6 +52,19 @@ const REPORT_SCHEMA = {
         properties: {
           creator: { type: 'string' }, platform: { type: 'string' }, description: { type: 'string' }, whyItWorks: { type: 'string' },
           url: { type: 'string', description: 'Link to the post itself if a search result contained it, otherwise an empty string.' },
+          sourceUrls: stringList
+        }
+      }
+    },
+    mentions: {
+      type: 'array',
+      description: 'Recent public posts or coverage mentioning the watched terms. Empty when there are no watched terms or nothing current was found.',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['term', 'platform', 'summary', 'url', 'sourceUrls'],
+        properties: {
+          term: { type: 'string' }, platform: { type: 'string', description: 'Network or outlet.' }, summary: { type: 'string' },
+          url: { type: 'string', description: 'Link to the post or article if a search result contained it, otherwise an empty string.' },
           sourceUrls: stringList
         }
       }
@@ -109,18 +122,19 @@ function cleanReport(input, sources) {
     audio: list(input.audio, 8),
     formats: list(input.formats, 6),
     topPosts: list(input.topPosts, 6).map((item) => ({ ...item, url: /^https:\/\//.test(item.url || '') && sources.has(item.url) ? item.url : '' })),
-    ideas: Array.isArray(input.ideas) ? input.ideas.slice(0, 8) : []
+    ideas: Array.isArray(input.ideas) ? input.ideas.slice(0, 8) : [],
+    mentions: list(input.mentions, 10).map((item) => ({ ...item, url: /^https:\/\//.test(item.url || '') && sources.has(item.url) ? item.url : '' }))
   };
 }
 
-async function generateTrendReport({ clients, focus, platforms, today }) {
+async function generateTrendReport({ clients, focus, platforms, today, watchTerms = [] }) {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Trend research is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
   const client = new Anthropic();
   const clientLines = clients.map((item) => `- ${item.name}: ${item.desc || 'No description yet.'}`).join('\n') || '- No clients yet.';
   const platformNames = platforms.map((platform) => TREND_PLATFORMS[platform]).join(', ');
   const messages = [{
     role: 'user',
-    content: `Today is ${today}. Build this week's trend report for: ${platformNames}.\n\nFocus: ${focus}\n\nClients:\n${clientLines}`
+    content: `Today is ${today}. Build this week's trend report for: ${platformNames}.\n\nFocus: ${focus}\n\nClients:\n${clientLines}\n\n${watchTerms.length ? `Watched terms (brand names, hashtags, competitors): ${watchTerms.join(', ')}. Also search for notable public posts or coverage from the past week that mention them, and report those in mentions.` : 'There are no watched terms, so leave mentions empty.'}`
   }];
   const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }, submitTool()];
   const sources = new Map();

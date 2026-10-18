@@ -10,8 +10,10 @@ const {
 const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured } = require('./_lib/platforms');
 const {
   PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
-  cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost
+  cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment
 } = require('./_lib/publishing');
+const { reportTotals } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
 const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
@@ -28,13 +30,16 @@ const WORKSPACE_ACTIONS = new Set([
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
-  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview'
+  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
+  'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
-  'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread'
+  'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
+  'post-notes', 'add-note', 'next-slot'
 ]);
+const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
 const TREND_CACHE_HOURS = 6;
 const TREND_DAILY_LIMIT = 12;
@@ -271,7 +276,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const texts = Array.isArray(body.texts) ? body.texts.filter((item) => item && typeof item.key === 'string' && /^[\w:-]{1,40}$/.test(item.key) && typeof item.text === 'string' && item.text.trim()) : [];
     if (!texts.length || texts.length > 20) return send(res, 400, { error: 'Add post copy to proofread.' });
     if (texts.reduce((sum, item) => sum + item.text.length, 0) > 30000) return send(res, 400, { error: 'This post is too long to proofread at once.' });
-    const issues = await proofreadTexts(texts.map((item) => ({ key: item.key, label: typeof item.label === 'string' ? item.label.slice(0, 60) : item.key, text: item.text })));
+    const brand = typeof body.brand === 'string' ? body.brand.slice(0, 2000) : '';
+    const issues = await proofreadTexts(texts.map((item) => ({ key: item.key, label: typeof item.label === 'string' ? item.label.slice(0, 60) : item.key, text: item.text })), brand);
     return send(res, 200, { issues });
   }
 
@@ -334,7 +340,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (cached && !(body.force === true && membership.role === 'admin')) return send(res, 200, { report: cached, cached: true });
     if (recent.length >= TREND_DAILY_LIMIT) return send(res, 429, { error: `This workspace has used its ${TREND_DAILY_LIMIT} trend refreshes for today. Try again tomorrow.` });
     const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
-    const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today });
+    const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
+    const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms });
     const [report] = await databaseRequest('trend_reports', {
       method: 'POST', headers: { prefer: 'return=representation' },
       body: JSON.stringify({ workspace_id: workspaceId, focus: focus.key, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources }, model: result.model, created_by: user.id })
@@ -346,6 +353,81 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const from = Date.parse(body.from), to = Date.parse(body.to);
     if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 100 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
     return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
+  }
+
+  if (action === 'post-notes') {
+    await getPost(workspaceId, body.postId);
+    return send(res, 200, { notes: await listNotes(workspaceId, body.postId) });
+  }
+
+  if (action === 'add-note') {
+    const post = await getPost(workspaceId, body.postId);
+    const text = typeof body.body === 'string' ? body.body.trim() : '';
+    if (!text || text.length > 2000) return send(res, 400, { error: 'Write a note up to 2,000 characters.' });
+    const note = await addNote({ workspaceId, postId: post.id, authorId: user.id, authorName: membership.email || user.email || 'Teammate', kind: 'team', body: text });
+    if (post.created_by && post.created_by !== user.id) {
+      await notify({ workspaceId, audience: 'users', userIds: [post.created_by], type: 'post_note', category: 'approvals', title: `New note on “${post.title || 'your post'}”`, body: `${membership.email || 'A teammate'}: ${text.slice(0, 160)}`, view: 'calendar', data: { postId: post.id } });
+    }
+    return send(res, 200, { note });
+  }
+
+  if (action === 'next-slot') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const state = await getWorkspaceState(workspaceId);
+    const client = (state.clients || []).find((item) => item.id === body.clientId);
+    return send(res, 200, { slot: new Date(await nextQueueSlot(workspaceId, client, WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York')).toISOString() });
+  }
+
+  if (action === 'review-links') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const links = await databaseRequest(`review_links?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(body.clientId)}&revoked_at=is.null&select=id,label,created_at,expires_at,last_used_at&order=created_at.desc`) || [];
+    return send(res, 200, { links });
+  }
+
+  if (action === 'create-review-link') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const days = Number.isInteger(body.days) ? Math.min(REVIEW_LINK_DAYS.max, Math.max(REVIEW_LINK_DAYS.min, body.days)) : REVIEW_LINK_DAYS.default;
+    const label = typeof body.label === 'string' ? body.label.trim().slice(0, 80) : '';
+    const token = crypto.randomBytes(32).toString('base64url');
+    const [link] = await databaseRequest('review_links', {
+      method: 'POST', headers: { prefer: 'return=representation' },
+      body: JSON.stringify({ workspace_id: workspaceId, client_id: body.clientId, token_hash: crypto.createHash('sha256').update(token).digest('hex'), label: label || null, created_by: user.id, expires_at: new Date(Date.now() + days * 86400000).toISOString() })
+    });
+    // The secret is only ever shown here; SignalDesk keeps just its hash.
+    return send(res, 200, { link: { id: link.id, label: link.label, expires_at: link.expires_at }, token });
+  }
+
+  if (action === 'revoke-review-link') {
+    if (!validUuid(body.id)) return send(res, 400, { error: 'Choose a link.' });
+    await databaseRequest(`review_links?workspace_id=eq.${workspaceId}&id=eq.${body.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+    return send(res, 200, { revoked: true });
+  }
+
+  if (action === 'client-report') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const start = Date.parse(body.start), end = Date.parse(body.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 93 * 86400000) return send(res, 400, { error: 'Choose a period of up to 3 months.' });
+    const client = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
+    const profile = ayrshareConfigured() ? await getProfile(workspaceId, client.id, encryptionKey) : null;
+    const report = await buildTopPostsReport({ profile, workspaceId, encryptionKey, clientId: client.id, clientName: client.name, start, end: Math.min(end, Date.now()) });
+    const campaign = typeof body.campaign === 'string' ? body.campaign.trim() : '';
+    if (campaign) {
+      report.rows = report.rows.filter((row) => row.campaign === campaign);
+      report.totals = reportTotals(report.rows);
+      report.postCount = new Set(report.rows.map((row) => row.providerPostId)).size;
+    }
+    const posts = await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(client.id)}&scheduled_for=gte.${new Date(start).toISOString()}&scheduled_for=lt.${new Date(end).toISOString()}${campaign ? `&campaign=eq.${encodeURIComponent(campaign)}` : ''}&select=status`) || [];
+    return send(res, 200, { report, campaign, scheduled: posts.filter((post) => ['scheduled', 'pending_approval'].includes(post.status)).length });
+  }
+
+  if (action === 'job-comments') {
+    return send(res, 200, { comments: await listJobComments(workspaceId, body.jobId, encryptionKey) });
+  }
+
+  if (action === 'reply-comment') {
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text || text.length > 2000) return send(res, 400, { error: 'Write a reply up to 2,000 characters.' });
+    return send(res, 200, { reply: await replyToComment(workspaceId, body.jobId, body.commentId, text, encryptionKey) });
   }
 
   if (action === 'overview') {
@@ -465,11 +547,18 @@ function validatePublishInput(body) {
     if (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now()) throw httpError(400, 'Choose a valid future schedule time.');
   }
   const title = (text || Object.values(platformContent).find((item) => item.text)?.text || '').split('\n')[0].slice(0, 120) || 'Untitled post';
-  return { text, platforms, mediaUrls, platformContent, options, scheduledFor, title };
+  const campaign = typeof body.campaign === 'string' ? body.campaign.trim().replace(/\s+/g, ' ') : '';
+  if (campaign.length > 60) throw httpError(400, 'Campaign names can be up to 60 characters.');
+  return { text, platforms, mediaUrls, platformContent, options, scheduledFor, title, campaign: campaign || null, evergreen: body.evergreen === true };
 }
 
 async function publish(body, { user, membership, clientId, encryptionKey }, res) {
   const input = validatePublishInput(body);
+  if (body.queue === true) {
+    const state = await getWorkspaceState(membership.workspace_id);
+    const client = (state.clients || []).find((item) => item.id === clientId);
+    input.scheduledFor = await nextQueueSlot(membership.workspace_id, client, WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York');
+  }
   // Posts from members with the User role are always held until an admin approves them.
   const held = membership.role !== 'admin' || body.requiresApproval === true;
   let original = null;
