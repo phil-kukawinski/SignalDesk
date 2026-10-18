@@ -35,6 +35,12 @@ function providerConfigured(provider) {
   return false;
 }
 
+// An image description for networks that accept one, when the post has it.
+function altParam(content, url, name) {
+  const text = content.alt?.[url];
+  return text ? { [name]: text.slice(0, 1000) } : {};
+}
+
 function mediaKind(url) {
   return VIDEO_PATTERN.test(url) ? 'video' : 'image';
 }
@@ -209,7 +215,7 @@ async function publishFacebook({ connection, job, content, stage, saveStage, mar
   }
   if (images.length === 1) {
     await markSent();
-    const result = await graph(`${page}/photos`, { method: 'POST', token: connection.token, params: { url: images[0], message: content.text }, sending: true });
+    const result = await graph(`${page}/photos`, { method: 'POST', token: connection.token, params: { url: images[0], message: content.text, ...altParam(content, images[0], 'alt_text_custom') }, sending: true });
     const id = result.post_id || result.id;
     return { externalId: id, url: `https://www.facebook.com/${id}` };
   }
@@ -217,7 +223,7 @@ async function publishFacebook({ connection, job, content, stage, saveStage, mar
   if (images.length > 1 && photoIds.length !== images.length) {
     // Unpublished photos are uploaded first, then attached to a single post.
     photoIds = [];
-    for (const url of images) photoIds.push((await graph(`${page}/photos`, { method: 'POST', token: connection.token, params: { url, published: false } })).id);
+    for (const url of images) photoIds.push((await graph(`${page}/photos`, { method: 'POST', token: connection.token, params: { url, published: false, ...altParam(content, url, 'alt_text_custom') } })).id);
     await saveStage({ photoIds });
   }
   await markSent();
@@ -244,7 +250,7 @@ async function publishInstagram({ connection, job, content, options, stage, save
       const video = mediaKind(media[0]) === 'video';
       const params = video
         ? { media_type: 'REELS', video_url: media[0], caption: content.text, share_to_feed: true, ...collaborators }
-        : { image_url: media[0], caption: content.text, ...collaborators };
+        : { image_url: media[0], caption: content.text, ...collaborators, ...altParam(content, media[0], 'alt_text') };
       if (instagram.userTags?.length) params.user_tags = tags(!video);
       const id = await create(params);
       containers = { parent: id, children: [] };
@@ -252,7 +258,7 @@ async function publishInstagram({ connection, job, content, options, stage, save
       const children = [];
       for (const [index, url] of media.entries()) {
         const video = mediaKind(url) === 'video';
-        const params = video ? { media_type: 'VIDEO', video_url: url, is_carousel_item: true } : { image_url: url, is_carousel_item: true };
+        const params = video ? { media_type: 'VIDEO', video_url: url, is_carousel_item: true } : { image_url: url, is_carousel_item: true, ...altParam(content, url, 'alt_text') };
         if (index === 0 && !video && instagram.userTags?.length) params.user_tags = tags(true);
         children.push(await create(params));
       }
@@ -445,8 +451,9 @@ const linkedin = {
       lifecycleState: 'PUBLISHED',
       isReshareDisabledByAuthor: false
     };
-    if (imageUrns.length === 1) body.content = { media: { id: imageUrns[0] } };
-    else if (imageUrns.length > 1) body.content = { multiImage: { images: imageUrns.map((id) => ({ id })) } };
+    const withAlt = (id, index) => ({ id, ...(content.alt?.[images[index]] ? { altText: content.alt[images[index]].slice(0, 4086) } : {}) });
+    if (imageUrns.length === 1) body.content = { media: withAlt(imageUrns[0], 0) };
+    else if (imageUrns.length > 1) body.content = { multiImage: { images: imageUrns.map(withAlt) } };
     else if (firstLink(content.text)) {
       const link = firstLink(content.text);
       body.content = { article: { source: link, title: firstLine(content.text, 200) || new URL(link).hostname } };
@@ -560,6 +567,7 @@ const pinterest = {
       media_source: images.length === 1 ? { source_type: 'image_url', url: images[0] } : { source_type: 'multiple_image_urls', items: images.map((url) => ({ url })) }
     };
     if (link) body.link = link;
+    if (content.alt?.[images[0]]) body.alt_text = content.alt[images[0]].slice(0, 500);
     await markSent();
     const result = await pinterestApi('pins', { method: 'POST', token: connection.token, body, sending: true });
     return { externalId: result.id, url: `https://www.pinterest.com/pin/${result.id}/` };

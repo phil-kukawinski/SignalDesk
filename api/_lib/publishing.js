@@ -13,10 +13,12 @@ const MAX_ATTEMPTS = 6;
 const RETRY_MINUTES = [1, 5, 15, 30, 60];
 const REFRESH_WINDOW_MS = 7 * 86400000;
 const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest' };
+// Networks or formats you post to yourself. SignalDesk sends a reminder with the copy and media at the scheduled time.
+const MANUAL_PLATFORMS = { instagram_story: 'Instagram Story', tiktok: 'TikTok', youtube_shorts: 'YouTube Shorts', x: 'X', threads: 'Threads', other: 'Other' };
 const CONNECTION_FIELDS = 'id,workspace_id,client_id,platform,external_id,display_name,username,profile_url,image_url,status,token_expires_at,refresh_expires_at,meta,last_error,expiry_notified_at,updated_at';
 
 function label(platform) {
-  return PLATFORM_LABELS[platform] || platform;
+  return PLATFORM_LABELS[platform] || MANUAL_PLATFORMS[platform] || platform;
 }
 
 function nowIso() {
@@ -125,10 +127,51 @@ async function resolveDestinations(workspaceId, clientId, platforms, encryptionK
 
 function contentFor(post, platform) {
   const override = post.content?.platformContent?.[platform] || {};
+  const media = Array.isArray(override.media) ? override.media : post.content?.media || [];
+  const alts = post.content?.mediaAlt || {};
   return {
     text: typeof override.text === 'string' ? override.text : post.content?.text || '',
-    media: Array.isArray(override.media) ? override.media : post.content?.media || []
+    media,
+    // Image descriptions for screen readers, keyed by media URL.
+    alt: Object.fromEntries(media.filter((url) => typeof alts[url] === 'string' && alts[url]).map((url) => [url, alts[url]]))
   };
+}
+
+// The time of each occurrence, keeping the same local time across daylight saving changes.
+function occurrenceTimes(base, autoRepost, timeZone) {
+  const times = [base];
+  if (!autoRepost) return times;
+  const { zonedParts, zonedToUtc } = require('./core');
+  const start = zonedParts(new Date(base), timeZone);
+  for (let index = 1; index <= autoRepost.repeat; index += 1) {
+    let year, month, day;
+    if (autoRepost.every === 'month') {
+      const total = start.month - 1 + index;
+      year = start.year + Math.floor(total / 12);
+      month = (total % 12) + 1;
+      day = Math.min(start.day, new Date(Date.UTC(year, month, 0)).getUTCDate());
+    } else {
+      const date = new Date(Date.UTC(start.year, start.month - 1, start.day + index * autoRepost.days));
+      year = date.getUTCFullYear(); month = date.getUTCMonth() + 1; day = date.getUTCDate();
+    }
+    times.push(zonedToUtc(year, month, day, start.hour, start.minute, timeZone));
+  }
+  return times;
+}
+
+// --- History ---
+
+async function addHistory(workspaceId, postId, action, { actorName = null, detail = {} } = {}) {
+  const ids = Array.isArray(postId) ? postId : [postId];
+  await databaseRequest('post_history', {
+    method: 'POST', headers: { prefer: 'return=minimal' },
+    body: JSON.stringify(ids.map((id) => ({ workspace_id: workspaceId, post_id: id, action, actor_name: actorName, detail })))
+  }).catch((error) => console.error('Could not record history:', error.message));
+}
+
+async function listHistory(workspaceId, postId) {
+  const rows = await databaseRequest(`post_history?workspace_id=eq.${workspaceId}&post_id=eq.${postId}&select=id,action,actor_name,detail,created_at&order=created_at.asc&limit=200`) || [];
+  return rows.map((row) => ({ id: row.id, action: row.action, actor: row.actor_name, detail: row.detail, at: row.created_at }));
 }
 
 // Adds UTM tags to links so clicks show up in the client's web analytics. Links that
@@ -155,23 +198,25 @@ function withTracking(post, platform, content, options) {
 }
 
 function commentableFor(provider, platform) {
+  if (provider === 'manual') return false;
   return provider === 'direct' ? COMMENTABLE.has(platform) : COMMENT_PLATFORMS.has(platform);
 }
 
 async function createScheduledPost({
   workspaceId, clientId, userId, title, platforms, text, mediaUrls = [], platformContent = {}, options = {},
-  scheduledFor, held = false, source = 'composer', campaign = null, evergreen = false, encryptionKey
+  scheduledFor, held = false, source = 'composer', campaign = null, evergreen = false, encryptionKey,
+  manual = [], mediaAlt = {}, timeZone = 'America/New_York', actorName = null
 }) {
-  const destinations = await resolveDestinations(workspaceId, clientId, platforms, encryptionKey);
+  const destinations = [
+    ...(platforms.length ? await resolveDestinations(workspaceId, clientId, platforms, encryptionKey) : []),
+    ...manual.map((platform) => ({ platform, provider: 'manual', connectionId: null }))
+  ];
+  if (!destinations.length) throw httpError(400, 'Choose at least one network or reminder.');
   const { followUpComments = [], autoRepost, ...stored } = options;
-  const content = { text, media: mediaUrls, platformContent };
+  const content = { text, media: mediaUrls, platformContent, ...(Object.keys(mediaAlt).length ? { mediaAlt } : {}) };
   const base = scheduledFor;
-  const occurrences = [{ id: crypto.randomUUID(), at: base, parent: null }];
-  if (autoRepost) {
-    for (let index = 1; index <= autoRepost.repeat; index += 1) {
-      occurrences.push({ id: crypto.randomUUID(), at: base + index * autoRepost.days * 86400000, parent: occurrences[0].id });
-    }
-  }
+  const occurrences = occurrenceTimes(base, autoRepost, timeZone).map((at, index) => ({ id: crypto.randomUUID(), at, parent: null, index }));
+  occurrences.slice(1).forEach((item) => { item.parent = occurrences[0].id; });
   const posts = occurrences.map((item, index) => ({
     id: item.id, workspace_id: workspaceId, client_id: clientId, created_by: userId, source,
     title: (title || '').slice(0, 200), scheduled_for: new Date(item.at).toISOString(),
@@ -211,6 +256,9 @@ async function createScheduledPost({
     await databaseRequest(`scheduled_posts?id=in.(${occurrences.map((item) => item.id).join(',')})`, { method: 'DELETE', headers: { prefer: 'return=minimal' } }).catch(() => {});
     throw error;
   }
+  await addHistory(workspaceId, occurrences.map((item) => item.id), source === 'autopilot' ? 'created_by_autopilot' : 'created', {
+    actorName, detail: { scheduledFor: posts[0].scheduled_for, networks: destinations.map((item) => item.platform), held }
+  });
   return {
     id: occurrences[0].id,
     status: held ? 'pending_approval' : 'scheduled',
@@ -269,6 +317,12 @@ async function runJob(job, encryptionKey) {
     const markSent = () => patchJob({ sent_at: nowIso() });
     const saveStage = async (patch) => { stage = { ...stage, ...patch }; await patchJob({ stage }); };
     let outcome;
+    if (job.provider === 'manual') {
+      await patchJob({ status: 'manual_due', ...unlock });
+      await notifyManualDue(job, post, content);
+      await record('reminded');
+      return 'manual';
+    }
     if (job.provider === 'ayrshare') {
       outcome = await publishViaAyrshare({ job, post: { ...post, options: postOptions }, content, markSent, encryptionKey });
     } else {
@@ -286,6 +340,7 @@ async function runJob(job, encryptionKey) {
     }
     await patchJob({ status: 'published', external_id: outcome.externalId || null, external_url: outcome.url || null, published_at: nowIso(), last_error: null, error_kind: null, ...unlock });
     await record('published');
+    await addHistory(job.workspace_id, job.post_id, 'published', { detail: { network: job.platform, url: outcome.url || null } });
     return 'published';
   } catch (error) {
     const kind = classify(error);
@@ -297,8 +352,34 @@ async function runJob(job, encryptionKey) {
     ).catch((failure) => console.error('Could not update job:', failure.message));
     if (kind === 'auth' && job.connection_id) await markNeedsReauth(job.connection_id, error.message).catch(() => {});
     await record(retry ? 'retrying' : kind === 'unknown' ? 'unknown' : 'failed', error);
+    if (!retry) await addHistory(job.workspace_id, job.post_id, kind === 'unknown' ? 'outcome_unknown' : 'failed', { detail: { network: job.platform, error: error.message } });
     return retry ? 'retrying' : 'failed';
   }
+}
+
+async function notifyManualDue(job, post, content) {
+  const { notify } = require('./notify');
+  const client = ((await getWorkspaceState(post.workspace_id)).clients || []).find((item) => item.id === post.client_id);
+  const payload = {
+    workspaceId: post.workspace_id, type: 'manual_due', category: 'publishing',
+    title: `Time to post on ${label(job.platform)}${client ? ` for ${client.name}` : ''}`,
+    body: `${content.text.slice(0, 280)}${content.media.length ? ` (${content.media.length} media file${content.media.length === 1 ? '' : 's'} attached in SignalDesk)` : ''}`,
+    view: 'calendar', data: { postId: post.id, jobId: job.id }
+  };
+  await notify({ ...payload, audience: 'admins', excludeUserId: post.created_by });
+  if (post.created_by) await notify({ ...payload, audience: 'users', userIds: [post.created_by] });
+}
+
+async function markManualDone(workspaceId, jobId, { url, userId, admin, actorName }) {
+  if (typeof jobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(jobId)) throw httpError(400, 'Choose a reminder.');
+  const job = (await databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&id=eq.${jobId}&select=id,post_id,provider,status,platform,scheduled_posts(created_by)`))?.[0];
+  if (!job || job.provider !== 'manual') throw httpError(404, 'Reminder not found.');
+  if (!admin && job.scheduled_posts?.created_by !== userId) throw httpError(403, 'Only admins or the post’s author can mark it posted.');
+  if (!['manual_due', 'queued'].includes(job.status)) throw httpError(409, 'This reminder is already done or canceled.');
+  const link = typeof url === 'string' && /^https:\/\/\S{3,1990}$/.test(url.trim()) ? url.trim() : null;
+  await patchJobs(`id=eq.${job.id}`, { status: 'published', published_at: nowIso(), external_url: link });
+  await addHistory(workspaceId, job.post_id, 'posted_manually', { actorName, detail: { network: job.platform, url: link } });
+  return { done: true };
 }
 
 async function notifyFailedJobs() {
@@ -332,7 +413,7 @@ async function notifyFailedJobs() {
 async function processPublishQueue({ encryptionKey, limit = 10, deadline = Date.now() + 240000 } = {}) {
   const token = crypto.randomUUID();
   const jobs = await databaseRequest('rpc/claim_publish_jobs', { method: 'POST', body: JSON.stringify({ p_limit: limit, p_token: token }) }) || [];
-  const results = { claimed: jobs.length, published: 0, retrying: 0, failed: 0, pending: 0, canceled: 0, released: 0 };
+  const results = { claimed: jobs.length, published: 0, retrying: 0, failed: 0, pending: 0, canceled: 0, released: 0, manual: 0 };
   for (const job of jobs) {
     if (Date.now() > deadline) {
       // Out of time: hand the job back untouched for the next run.
@@ -412,7 +493,7 @@ function publicPost(row) {
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
     approvedAt: row.approved_at, decisionNote: row.decision_note, createdAt: row.created_at,
     campaign: row.campaign || '', evergreen: Boolean(row.evergreen), clientStatus: row.client_status || null,
-    text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {},
+    text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {}, mediaAlt: row.content?.mediaAlt || {},
     options: row.options || {},
     jobs: (row.publish_jobs || []).map((job) => ({
       id: job.id, platform: job.platform, provider: job.provider, status: job.status, attempts: job.attempts,
@@ -643,23 +724,28 @@ async function overviewData(workspaceId, timeZone) {
   const now = Date.now();
   const windowStart = now - 60 * 86400000;
   const [reports, jobs, connections, lastRun] = await Promise.all([
-    databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=data`),
-    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,platform,published_at,metrics`),
+    databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=client_id,data`),
+    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics`),
     listConnections(workspaceId),
     lastWorkerRun('publish')
   ]);
   const rows = new Map();
   for (const report of reports || []) {
-    for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements });
+    for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { clientId: report.client_id, platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements, audience: row.metrics.reach || row.metrics.views || null });
   }
   for (const job of jobs || []) {
     const id = `job:${job.id}`;
-    if (!rows.has(id) && job.metrics) rows.set(id, { platform: job.platform, at: Date.parse(job.published_at), engagements: finishMetrics(job.metrics).engagements });
+    if (!rows.has(id) && job.metrics) {
+      const metrics = finishMetrics(job.metrics);
+      rows.set(id, { clientId: job.client_id, platform: job.platform, at: Date.parse(job.published_at), engagements: metrics.engagements, audience: metrics.reach || metrics.views || null });
+    }
   }
   const dayKey = (time) => { const parts = zonedParts(new Date(time), timeZone); return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`; };
   const days = Array.from({ length: 30 }, (_, index) => dayKey(now - (29 - index) * 86400000));
   const daily = Object.fromEntries(days.map((day) => [day, 0]));
   const byPlatform = {};
+  // Per client, for goals: engagement rate counts only posts that report an audience.
+  const byClient = {};
   let total = 0, previous = 0, measured = 0;
   for (const row of rows.values()) {
     if (typeof row.engagements !== 'number') continue;
@@ -667,12 +753,16 @@ async function overviewData(workspaceId, timeZone) {
       total += row.engagements;
       measured += 1;
       byPlatform[row.platform] = (byPlatform[row.platform] || 0) + row.engagements;
+      const entry = byClient[row.clientId] ||= { engagements: 0, audience: 0, posts: 0 };
+      entry.posts += 1;
+      if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; }
       const key = dayKey(row.at);
       if (key in daily) daily[key] += row.engagements;
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
     engagement: { total, previous, measured, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
+    clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
       active: connections.filter((item) => item.status === 'active').length,
       reauth: connections.filter((item) => item.status === 'needs_reauth').map((item) => ({ platform: item.platform, clientId: item.client_id })),
@@ -824,15 +914,28 @@ function assertEditable(post, { userId, admin }) {
 
 // Swaps an edited post in for the original. The new post is created first; the original is
 // removed only if none of its networks started publishing in the meantime.
-async function replacePost(workspaceId, original, replacementId) {
+async function replacePost(workspaceId, original, replacementId, editorName = null) {
   const ids = await familyIds(workspaceId, original);
   const started = await databaseRequest(`publish_jobs?post_id=in.(${ids.join(',')})&status=in.(publishing,published)&select=id`) || [];
   if (started.length) {
     await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
     throw httpError(409, 'The original started publishing while you were editing, so your changes weren’t saved.');
   }
-  // The conversation stays with the post; the client's decision doesn't, since the content changed.
+  // The conversation and history stay with the post; the client's decision doesn't, since the content changed.
   await databaseRequest(`post_notes?post_id=in.(${ids.join(',')})`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
+  // Drop the new post's own "created" entry first; the original's history carries over instead.
+  await databaseRequest(`post_history?post_id=eq.${replacementId}&action=eq.created`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+  await databaseRequest(`post_history?post_id=eq.${original.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
+  await addHistory(workspaceId, replacementId, 'edited', {
+    actorName: editorName,
+    detail: {
+      previous: {
+        title: original.title, text: original.content?.text || '', media: original.content?.media || [], platformContent: original.content?.platformContent || {},
+        mediaAlt: original.content?.mediaAlt || {}, networks: original.publish_jobs.filter((job) => job.status !== 'canceled').map((job) => job.platform),
+        scheduledFor: original.scheduled_for, campaign: original.campaign || '', options: original.options || {}
+      }
+    }
+  });
   if (original.source === 'autopilot') {
     await databaseRequest(`autopilot_items?post_id=eq.${original.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
     await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ source: 'autopilot' }) });
@@ -844,5 +947,5 @@ module.exports = {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks
+  refreshRecentMetrics, overviewData, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
 };

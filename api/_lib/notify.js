@@ -1,4 +1,5 @@
-const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts } = require('./core');
+const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, ayrshareConfigured, getProfile } = require('./core');
+const { sendPush } = require('./push');
 
 const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing'];
 const DEFAULT_PREFERENCES = { email_frequency: 'daily', email_categories: CATEGORIES, weekly_day: 1, last_digest_at: null };
@@ -27,8 +28,8 @@ function withDefaults(row) {
   return { ...DEFAULT_PREFERENCES, ...(row || {}) };
 }
 
-function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk' }) {
-  const url = appUrl();
+function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', eyebrow = 'SIGNALDESK · PART OF BEACON', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
+  const url = showCta ? appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#1a1f3a;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
     ${section.items.map((item) => `<div style="border:1px solid #e8e0dc;border-radius:10px;padding:12px 14px;margin:0 0 8px">
@@ -37,12 +38,12 @@ function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk' })
       ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8a8e9a;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
   const html = `<div style="background:#fdf6f0;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e8e0dc;border-radius:16px;padding:28px">
-    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#5b8db8">SIGNALDESK · PART OF BEACON</div>
+    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#5b8db8">${escapeHtml(eyebrow)}</div>
     <h1 style="font:800 20px Arial,sans-serif;color:#1a1f3a;margin:10px 0 6px">${escapeHtml(heading)}</h1>
     <p style="font:13px/1.5 Arial,sans-serif;color:#606779;margin:0">${escapeHtml(intro)}</p>
     ${sectionHtml}
     ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#5b8db8;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
-    <p style="font:11px Arial,sans-serif;color:#8a8e9a;margin-top:24px">Change how often you get these under the bell icon → Preferences in SignalDesk.</p>
+    ${footer ? `<p style="font:11px Arial,sans-serif;color:#8a8e9a;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
   </div></div>`;
   const text = [heading, '', intro, ...sections.flatMap((section) => ['', section.title.toUpperCase(), ...section.items.map((item) => `- ${item.title}${item.body ? `: ${item.body}` : ''}${item.meta ? ` (${item.meta})` : ''}`)]), '', url].join('\n');
   return { html, text };
@@ -67,6 +68,7 @@ async function notify({ workspaceId, audience = 'admins', userIds = [], excludeU
     const recipients = members.filter((member) => member.user_id !== excludeUserId
       && (audience === 'admins' ? member.role === 'admin' : audience === 'all' ? true : userIds.includes(member.user_id)));
     if (!recipients.length) return 0;
+    await sendPush(recipients.map((member) => member.user_id), { title, body, view });
     await databaseRequest('notifications', {
       method: 'POST',
       headers: { prefer: 'return=minimal' },
@@ -170,4 +172,58 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
   return { sent, configured: true };
 }
 
-module.exports = { CATEGORIES, emailConfigured, notify, processEmailDigests, renderEmail };
+const pad = (value) => String(value).padStart(2, '0');
+
+function reportEmails(value) {
+  return [...new Set(String(value || '').split(/[,;\s]+/).map((item) => item.trim().toLowerCase()).filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item)))].slice(0, 5);
+}
+
+// Emails each client its report for the previous month, on the day of the month set in its brand kit.
+async function processClientReports({ encryptionKey, now = new Date(), limit = 2 } = {}) {
+  if (!emailConfigured()) return { sent: 0, configured: false };
+  const { buildTopPostsReport } = require('./reports');
+  const { lastWorkerRun, recordWorkerRun } = require('./publishing');
+  const rows = await databaseRequest('workspace_state?select=workspace_id,state') || [];
+  let sent = 0;
+  for (const row of rows) {
+    const timeZone = WORKSPACE_TIMEZONES[row.state?.settings?.timezone] || 'America/New_York';
+    const parts = zonedParts(now, timeZone);
+    for (const client of row.state?.clients || []) {
+      if (sent >= limit) return { sent, configured: true };
+      const config = client.reports;
+      const emails = reportEmails(config?.emails);
+      if (!config?.enabled || !emails.length) continue;
+      const day = Math.min(28, Math.max(1, parseInt(config.day, 10) || 1));
+      if (parts.day < day || (parts.day === day && parts.hour < 8)) continue;
+      const runName = `client-report:${row.workspace_id}:${client.id}:${parts.year}-${pad(parts.month)}`;
+      if (await lastWorkerRun(runName)) continue;
+      const previous = parts.month === 1 ? { year: parts.year - 1, month: 12 } : { year: parts.year, month: parts.month - 1 };
+      const start = zonedToUtc(previous.year, previous.month, 1, 0, 0, timeZone);
+      const end = zonedToUtc(parts.year, parts.month, 1, 0, 0, timeZone) - 1;
+      try {
+        const profile = ayrshareConfigured() ? await getProfile(row.workspace_id, client.id, encryptionKey) : null;
+        const report = await buildTopPostsReport({ profile, workspaceId: row.workspace_id, encryptionKey, clientId: client.id, clientName: client.name, start, end });
+        const monthLabel = new Date(Date.UTC(previous.year, previous.month - 1, 15)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        const totals = report.totals;
+        const top = [...report.rows].sort((a, b) => (b.metrics.engagements || 0) - (a.metrics.engagements || 0)).slice(0, 5);
+        const content = renderEmail({
+          eyebrow: (row.state?.settings?.name || 'Your social media team').toUpperCase(),
+          heading: `${client.name} social report: ${monthLabel}`,
+          intro: `${report.postCount} post${report.postCount === 1 ? '' : 's'} published · ${formatNumber(totals.views)} views · ${formatNumber(totals.engagements)} engagements${totals.engagementRate !== null ? ` · ${totals.engagementRate}% engagement rate` : ''}.`,
+          sections: top.length ? [{ title: 'Top posts', items: top.map((item) => ({ title: `${item.platform} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [],
+          showCta: false,
+          footer: 'Metrics come from each network and may change slightly as they update.'
+        });
+        for (const email of emails) await sendEmail(email, `${client.name} social report: ${monthLabel}`, content);
+        sent += 1;
+      } catch (error) {
+        console.error('Client report email failed:', client.id, error.message);
+      }
+      // Recorded either way so a broken report doesn't email again every run.
+      await recordWorkerRun(runName, { emails: emails.length });
+    }
+  }
+  return { sent, configured: true };
+}
+
+module.exports = { CATEGORIES, emailConfigured, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

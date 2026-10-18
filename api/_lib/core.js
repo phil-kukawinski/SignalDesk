@@ -280,11 +280,17 @@ function validatePostOptions(options, platforms) {
   }
   if (options.utm === true) clean.utm = true;
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
-    const repeat = Number(options.autoRepost.repeat), days = Number(options.autoRepost.days);
-    if (!Number.isInteger(repeat) || repeat < 1 || repeat > 10 || !Number.isInteger(days) || days < 2) {
-      throw httpError(400, 'Reshares repeat 1 to 10 times, at least 2 days apart.');
+    const repeat = Number(options.autoRepost.repeat);
+    if (options.autoRepost.every === 'month') {
+      if (!Number.isInteger(repeat) || repeat < 1 || repeat > 12) throw httpError(400, 'Monthly repeats can run 1 to 12 more times.');
+      clean.autoRepost = { repeat, every: 'month' };
+    } else {
+      const days = Number(options.autoRepost.days);
+      if (!Number.isInteger(repeat) || repeat < 1 || repeat > 26 || !Number.isInteger(days) || days < 2 || days > 365) {
+        throw httpError(400, 'Repeats run 1 to 26 more times, 2 to 365 days apart.');
+      }
+      clean.autoRepost = { repeat, days };
     }
-    clean.autoRepost = { repeat, days };
   }
   return clean;
 }

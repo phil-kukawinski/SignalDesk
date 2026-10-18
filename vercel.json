@@ -1,10 +1,25 @@
 {
   "functions": {
-    "api/social.js": { "maxDuration": 300 },
-    "api/cron.js": { "maxDuration": 300 },
-    "api/oauth.js": { "maxDuration": 60 }
+    "api/social.js": {
+      "maxDuration": 300
+    },
+    "api/cron.js": {
+      "maxDuration": 300
+    },
+    "api/oauth.js": {
+      "maxDuration": 60
+    }
   },
   "crons": [
-    { "path": "/api/cron?only=health", "schedule": "0 14 * * *" }
+    {
+      "path": "/api/cron?only=health",
+      "schedule": "0 14 * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/b/:slug",
+      "destination": "/bio.html"
+    }
   ]
 }

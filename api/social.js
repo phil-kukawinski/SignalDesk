@@ -11,8 +11,10 @@ const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured } = require('./_lib/plat
 const {
   PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
 } = require('./_lib/publishing');
+const { draftCaptions, describeImage } = require('./_lib/captions');
+const { pushConfigured } = require('./_lib/push');
 const { reportTotals } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
@@ -31,14 +33,17 @@ const WORKSPACE_ACTIONS = new Set([
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
-  'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot'
+  'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
+  'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
-  'post-notes', 'add-note', 'next-slot'
+  'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe'
 ]);
+const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
+const AI_DAILY_LIMIT = 200;
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
 const TREND_CACHE_HOURS = 6;
@@ -355,6 +360,91 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
   }
 
+  if (action === 'post-history') {
+    await getPost(workspaceId, body.postId);
+    return send(res, 200, { history: await listHistory(workspaceId, body.postId) });
+  }
+
+  if (action === 'manual-done') {
+    return send(res, 200, await markManualDone(workspaceId, body.jobId, { url: body.url, userId: user.id, admin: membership.role === 'admin', actorName: membership.email }));
+  }
+
+  if (action === 'draft-captions' || action === 'alt-text') {
+    // A generous daily cap per workspace keeps an accidental loop from running up the AI bill.
+    const today = new Date().toISOString().slice(0, 10);
+    const counter = `ai-usage:${workspaceId}:${today}`;
+    const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
+    if (used >= AI_DAILY_LIMIT) return send(res, 429, { error: 'This workspace has reached today’s limit for AI writing help. Try again tomorrow.' });
+    await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
+    if (action === 'alt-text') {
+      const url = typeof body.url === 'string' ? body.url.trim() : '';
+      if (!/^https:\/\/\S+$/.test(url) || url.length > 2000) return send(res, 400, { error: 'Alt text needs an uploaded image.' });
+      const context = typeof body.context === 'string' ? body.context.slice(0, 1500) : '';
+      return send(res, 200, { altText: await describeImage({ url, context }) });
+    }
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const idea = typeof body.idea === 'string' ? body.idea.trim() : '';
+    if (!idea || idea.length > 3000) return send(res, 400, { error: 'Describe the post in up to 3,000 characters.' });
+    const platforms = Array.isArray(body.platforms) ? [...new Set(body.platforms)].filter((platform) => PLATFORM_KEYS.has(platform)).slice(0, 8) : [];
+    if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
+    const brandClient = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
+    return send(res, 200, { variants: await draftCaptions({ idea, brandClient, platforms }) });
+  }
+
+  if (action === 'save-bio') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
+    if (!/^[a-z0-9-]{3,40}$/.test(slug)) return send(res, 400, { error: 'Use 3–40 lowercase letters, numbers, or dashes for the page address.' });
+    const taken = await databaseRequest(`bio_pages?slug=eq.${slug}&select=workspace_id,client_id`);
+    if (taken?.length && (taken[0].workspace_id !== workspaceId || taken[0].client_id !== body.clientId)) return send(res, 409, { error: 'That address is taken. Try another.' });
+    await databaseRequest(`bio_pages?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(body.clientId)}&slug=neq.${slug}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    await databaseRequest('bio_pages?on_conflict=slug', {
+      method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ slug, workspace_id: workspaceId, client_id: body.clientId, enabled: body.enabled !== false, updated_at: new Date().toISOString() })
+    });
+    return send(res, 200, { slug, enabled: body.enabled !== false });
+  }
+
+  if (action === 'push-config') {
+    return send(res, 200, { publicKey: pushConfigured() ? process.env.VAPID_PUBLIC_KEY : null });
+  }
+
+  if (action === 'push-subscribe') {
+    const subscription = body.subscription || {};
+    if (typeof subscription.endpoint !== 'string' || !PUSH_HOSTS.test(subscription.endpoint) || subscription.endpoint.length > 1000
+      || typeof subscription.keys?.p256dh !== 'string' || typeof subscription.keys?.auth !== 'string') return send(res, 400, { error: 'That browser subscription isn’t valid.' });
+    await databaseRequest('push_subscriptions?on_conflict=endpoint', {
+      method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ endpoint: subscription.endpoint, user_id: user.id, workspace_id: workspaceId, p256dh: subscription.keys.p256dh.slice(0, 200), auth: subscription.keys.auth.slice(0, 100) })
+    });
+    return send(res, 200, { subscribed: true });
+  }
+
+  if (action === 'push-unsubscribe') {
+    if (typeof body.endpoint !== 'string') return send(res, 400, { error: 'Missing subscription.' });
+    await databaseRequest(`push_subscriptions?user_id=eq.${user.id}&endpoint=eq.${encodeURIComponent(body.endpoint)}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    return send(res, 200, { unsubscribed: true });
+  }
+
+  if (action === 'export') {
+    const scope = `workspace_id=eq.${workspaceId}`;
+    const [state, posts, notes, history, connections, links, feeds, bios] = await Promise.all([
+      getWorkspaceState(workspaceId),
+      databaseRequest(`scheduled_posts?${scope}&select=*,publish_jobs(id,platform,provider,status,run_at,published_at,external_url,last_error)&order=scheduled_for.asc&limit=5000`),
+      databaseRequest(`post_notes?${scope}&select=post_id,author_name,author_kind,body,decision,created_at&limit=10000`),
+      databaseRequest(`post_history?${scope}&select=post_id,action,actor_name,detail,created_at&limit=20000`),
+      databaseRequest(`social_connections?${scope}&select=client_id,platform,display_name,username,profile_url,status,created_at`),
+      databaseRequest(`review_links?${scope}&select=client_id,label,created_at,expires_at,revoked_at,last_used_at`),
+      databaseRequest(`autopilot_feeds?${scope}&select=*`),
+      databaseRequest(`bio_pages?${scope}&select=slug,client_id,enabled`)
+    ]);
+    // Sign-in tokens and link secrets are never exported.
+    return send(res, 200, {
+      exportedAt: new Date().toISOString(), format: 'signaldesk-export-1',
+      workspace: state, posts: posts || [], notes: notes || [], history: history || [], connections: connections || [], reviewLinks: links || [], autopilotFeeds: feeds || [], bioPages: bios || []
+    });
+  }
+
   if (action === 'post-notes') {
     await getPost(workspaceId, body.postId);
     return send(res, 200, { notes: await listNotes(workspaceId, body.postId) });
@@ -440,6 +530,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'approve') {
     const { post, late } = await approvePost(workspaceId, body.postId, user.id);
+    await addHistory(workspaceId, post.id, 'approved', { actorName: membership.email, detail: { late } });
     if (post.created_by && post.created_by !== user.id) {
       await notify({
         workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
@@ -454,6 +545,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'reject') {
     const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
     const post = await rejectPost(workspaceId, body.postId, note);
+    await addHistory(workspaceId, post.id, 'changes_requested', { actorName: membership.email, detail: { note } });
     if (post.created_by && post.created_by !== user.id) {
       await notify({
         workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
@@ -464,11 +556,16 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'cancel-post') {
-    return send(res, 200, await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' }));
+    const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' });
+    await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.email, detail: { keptPublished: result.keptPublished } });
+    return send(res, 200, result);
   }
 
   if (action === 'reschedule-post') {
-    return send(res, 200, await reschedulePost(workspaceId, body.postId, Date.parse(body.scheduleDate)));
+    const before = await getPost(workspaceId, body.postId);
+    const result = await reschedulePost(workspaceId, body.postId, Date.parse(body.scheduleDate));
+    await addHistory(workspaceId, body.postId, 'rescheduled', { actorName: membership.email, detail: { from: before.scheduled_for, to: result.scheduledFor } });
+    return send(res, 200, result);
   }
 
   if (action === 'retry-job') {
@@ -517,9 +614,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 // Checks a post from the Publishing Studio; used for new posts and edits.
 function validatePublishInput(body) {
   const text = typeof body.text === 'string' ? body.text.trim() : '';
-  const platforms = body.platforms;
-  requirePlatforms(platforms);
+  const manual = Array.isArray(body.manual) ? [...new Set(body.manual)] : [];
+  if (manual.some((platform) => !MANUAL_PLATFORMS[platform]) || manual.length > 6) throw httpError(400, 'Choose valid networks for reminders.');
+  const platforms = Array.isArray(body.platforms) && !body.platforms.length && manual.length ? [] : body.platforms;
+  if (platforms.length || !manual.length) requirePlatforms(platforms);
   if (new Set(platforms).size !== platforms.length) throw httpError(400, 'Choose each network once.');
+  if (manual.length && !text) throw httpError(400, 'Write the shared post copy for your reminders.');
   const mediaUrls = body.mediaUrls || [];
   const isMediaList = (urls) => Array.isArray(urls) && urls.length <= 10 && urls.every((url) => typeof url === 'string' && url.startsWith('https://') && url.length <= 2000);
   if (!isMediaList(mediaUrls)) throw httpError(400, 'Media must use publicly accessible HTTPS URLs.');
@@ -547,18 +647,27 @@ function validatePublishInput(body) {
     if (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now()) throw httpError(400, 'Choose a valid future schedule time.');
   }
   const title = (text || Object.values(platformContent).find((item) => item.text)?.text || '').split('\n')[0].slice(0, 120) || 'Untitled post';
+  const allMedia = new Set([...mediaUrls, ...Object.values(platformContent).flatMap((item) => item.media || [])]);
+  const mediaAlt = {};
+  if (body.mediaAlt && typeof body.mediaAlt === 'object') {
+    for (const [url, alt] of Object.entries(body.mediaAlt).slice(0, 20)) {
+      if (allMedia.has(url) && typeof alt === 'string' && alt.trim()) mediaAlt[url] = alt.trim().slice(0, 1000);
+    }
+  }
   const campaign = typeof body.campaign === 'string' ? body.campaign.trim().replace(/\s+/g, ' ') : '';
   if (campaign.length > 60) throw httpError(400, 'Campaign names can be up to 60 characters.');
-  return { text, platforms, mediaUrls, platformContent, options, scheduledFor, title, campaign: campaign || null, evergreen: body.evergreen === true };
+  return { text, platforms, manual, mediaUrls, mediaAlt, platformContent, options, scheduledFor, title, campaign: campaign || null, evergreen: body.evergreen === true };
 }
 
 async function publish(body, { user, membership, clientId, encryptionKey }, res) {
   const input = validatePublishInput(body);
+  const state = await getWorkspaceState(membership.workspace_id);
+  const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
   if (body.queue === true) {
-    const state = await getWorkspaceState(membership.workspace_id);
     const client = (state.clients || []).find((item) => item.id === clientId);
-    input.scheduledFor = await nextQueueSlot(membership.workspace_id, client, WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York');
+    input.scheduledFor = await nextQueueSlot(membership.workspace_id, client, timeZone);
   }
+  const actorName = membership.email || user.email || 'Teammate';
   // Posts from members with the User role are always held until an admin approves them.
   const held = membership.role !== 'admin' || body.requiresApproval === true;
   let original = null;
@@ -566,13 +675,13 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
     original = await getPost(membership.workspace_id, body.postId);
     assertEditable(original, { userId: user.id, admin: membership.role === 'admin' });
   }
-  const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey });
-  if (original) await replacePost(membership.workspace_id, original, post.id);
+  const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey, timeZone, actorName });
+  if (original) await replacePost(membership.workspace_id, original, post.id, actorName);
   if (held) {
     await notify({
       workspaceId: membership.workspace_id, audience: 'admins', excludeUserId: user.id, type: 'approval_requested', category: 'approvals',
       title: `${original ? 'Edited post' : 'New post'} awaiting approval for ${await clientName(membership.workspace_id, clientId)}`,
-      body: `${membership.email || user.email || 'A teammate'} ${original ? 'updated' : 'submitted'} “${input.title}” for ${input.platforms.map((platform) => PLATFORM_LABELS[platform] || platform).join(', ')}.`,
+      body: `${actorName} ${original ? 'updated' : 'submitted'} “${input.title}” for ${[...input.platforms.map((platform) => PLATFORM_LABELS[platform] || platform), ...input.manual.map((platform) => `${MANUAL_PLATFORMS[platform]} (reminder)`)].join(', ')}.`,
       view: 'approvals', data: { postId: post.id, clientId }
     });
   }

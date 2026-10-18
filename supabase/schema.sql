@@ -366,6 +366,46 @@ create table if not exists public.post_notes (
 );
 create index if not exists post_notes_post_idx on public.post_notes (post_id, created_at);
 
+-- Manual reminders: networks you post to yourself get a reminder job instead of an API call.
+alter table public.publish_jobs drop constraint if exists publish_jobs_provider_check;
+alter table public.publish_jobs add constraint publish_jobs_provider_check check (provider in ('direct', 'ayrshare', 'manual'));
+alter table public.publish_jobs drop constraint if exists publish_jobs_status_check;
+alter table public.publish_jobs add constraint publish_jobs_status_check
+  check (status in ('held', 'queued', 'publishing', 'manual_due', 'published', 'failed', 'unknown', 'canceled'));
+
+-- What happened to each post and who did it, including the content before each edit.
+create table if not exists public.post_history (
+  id bigint generated always as identity primary key,
+  post_id uuid not null references public.scheduled_posts (id) on delete cascade,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  actor_name text,
+  action text not null,
+  detail jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists post_history_post_idx on public.post_history (post_id, created_at);
+
+-- Browser push subscriptions, one row per device.
+create table if not exists public.push_subscriptions (
+  endpoint text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  workspace_id uuid references public.workspaces (id) on delete cascade,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
+
+-- Public link-in-bio pages; the page content lives with the client in workspace state.
+create table if not exists public.bio_pages (
+  slug text primary key check (slug ~ '^[a-z0-9-]{3,40}$'),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  enabled boolean not null default true,
+  updated_at timestamptz not null default now(),
+  unique (workspace_id, client_id)
+);
+
 -- When each background job last ran, so a stopped scheduler can be noticed.
 create table if not exists public.worker_runs (
   name text primary key,
@@ -392,7 +432,7 @@ begin
   select count(*) filter (where j.status <> 'canceled'),
          count(*) filter (where j.status = 'held'),
          count(*) filter (where j.status = 'queued'),
-         count(*) filter (where j.status = 'publishing'),
+         count(*) filter (where j.status in ('publishing', 'manual_due')),
          count(*) filter (where j.status = 'published'),
          count(*) filter (where j.status in ('failed', 'unknown'))
     into total, held, queued, running, done, bad
@@ -552,17 +592,22 @@ alter table public.publish_attempts enable row level security;
 alter table public.worker_runs enable row level security;
 alter table public.review_links enable row level security;
 alter table public.post_notes enable row level security;
+alter table public.post_history enable row level security;
+alter table public.push_subscriptions enable row level security;
+alter table public.bio_pages enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
-  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes from anon, authenticated;
+  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
+  public.bio_pages from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
-  public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes to service_role;
+  public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
+  public.bio_pages to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

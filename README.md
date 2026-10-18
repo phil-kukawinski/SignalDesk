@@ -68,8 +68,9 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
 7. **Connect accounts.** In **Social Accounts**, choose a client and select **Connect** on a network. Sign in on the network's own page, then choose which Page, Instagram account, LinkedIn profile or Page, or Pinterest account (and board) belongs to that client. Tokens stay on the server, encrypted; the browser never sees them.
 8. **Optional: Ayrshare** for other networks, the Social Inbox, and account-level analytics. Set `AYRSHARE_API_KEY` and use **Connect via Ayrshare**. For X, also create an X Developer App and set the two `X_TWITTER_*` variables.
 9. **Notification emails.** Create a [Resend](https://resend.com) account, verify your sending domain, and set `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL` (for example `SignalDesk <alerts@yourdomain.com>`). Without them, notifications still appear in the app.
-10. **AI features.** For Trend signals and AI proofreading, set `ANTHROPIC_API_KEY`. Both use Claude Opus 5.5. A trend scan is billed per token plus per web search (up to 8 searches). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans a day.
-11. **Dependencies and time limits.** `package.json` pins `@anthropic-ai/sdk`; Vercel installs it on deploy (run `npm install` for `vercel dev`). `vercel.json` allows the API up to 300 seconds, which needs Vercel's Fluid Compute (on by default for new projects); lower it to 60 if your plan rejects it.
+10. **AI features.** For Trend signals, AI proofreading, caption drafts, and image descriptions, set `ANTHROPIC_API_KEY`. All use Claude Opus 5.5. Caption drafts and image descriptions are capped at 200 requests per workspace per day. A trend scan is billed per token plus per web search (up to 8 searches). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans a day.
+11. **Push notifications (optional).** Generate keys with `npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and optionally `VAPID_SUBJECT` (for example `mailto:you@example.com`). Each person then turns push on per device under the bell → Preferences. On iPhone and iPad, push works only after adding SignalDesk to the Home Screen.
+12. **Dependencies and time limits.** `package.json` pins `@anthropic-ai/sdk` and `web-push`; Vercel installs it on deploy (run `npm install` for `vercel dev`). `vercel.json` allows the API up to 300 seconds, which needs Vercel's Fluid Compute (on by default for new projects); lower it to 60 if your plan rejects it.
 
 API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `202607`. Override them with `META_GRAPH_VERSION` and `LINKEDIN_API_VERSION` when the networks retire those versions. LinkedIn supports each version for about a year.
 
@@ -100,6 +101,19 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Holiday overlay** on the calendar: US holidays and common marketing days, which you can toggle off
 - **Comments on your posts** in the Social Inbox: read and reply to comments on posts SignalDesk published to Facebook, Instagram, and LinkedIn
 - **Client reports** (Analytics → Client report): a branded summary for last month, this month, or the last 30 or 90 days, optionally for one campaign. It opens in a new tab, ready to save as a PDF
+- **Client goals and alerts:** set posts per week, an engagement-rate goal, a gap warning (nothing scheduled within N days), and a daily limit in each brand kit. The Command Center shows goal progress, and Needs your attention flags gaps and busy days. The calendar marks busy days too
+- **AI caption drafts** (✦ Draft with AI): describe the post and get a version for each network in the client's voice
+- **Image descriptions:** add alt text to each image, or get an AI suggestion. It's sent to Facebook, Instagram, LinkedIn, and Pinterest
+- **Manual reminders:** for formats SignalDesk can't publish (Instagram Stories, TikTok, YouTube Shorts, X, Threads), it sends a reminder at the scheduled time with the copy and media. You post it, then select **Mark as posted**
+- **Post now**, **Duplicate** (from post details), and **Repeat** weekly, every 2 weeks, monthly, or every N days, always at the same local time
+- **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled
+- **Image prep:** crop new images to a network's shape (square, 4:5, 1.91:1, 16:9, 2:3, 9:16) and shrink them to at most 2,048 px before upload
+- **Search everything** (Ctrl+K / ⌘K): posts, clients, templates, snippets, library files, and pages
+- **Post history:** every step (created, edited, approved, moved, published, failed, client decisions) with who did it. Earlier versions can be restored into the editor
+- **Link-in-bio pages** (Clients → Link in bio): a public page at `/b/<address>` with the client's links and recent posts
+- **Calendar sharing:** each review link also gives a calendar feed for Google Calendar, Outlook, or Apple Calendar, and the calendar has a **Print** view for PDFs
+- **Monthly report emails** to each client on a chosen day (set in the brand kit; needs Resend)
+- **Installable app** with push notifications, a **dark theme** (Settings → Theme), and **Export** for a full backup plus a posts spreadsheet
 - Content Library: when signed in, upload images and videos, tag them, filter by client and type, and add them to a post. Demo mode shows sample collections
 - Social Inbox: comments on your published posts, plus Ayrshare DMs when Ayrshare is configured
 - Analytics dashboard with provider-backed account metrics and CSV export
@@ -129,6 +143,12 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Client review pages show post images from their public links, so anyone who has a review link can see that client's upcoming posts until it expires or is turned off. Share links only with the client.
 - Comment authors on LinkedIn show as "LinkedIn member" without extra LinkedIn profile permissions. LinkedIn replies are posted as replies to the comment, and that request format hasn't been checked against the live API yet.
 - Queues and evergreen reposting use the workspace time zone. If a client has no queue, evergreen posts come back at the same time of day after the rest period.
+- AI drafts and image descriptions can be wrong. Check facts, prices, and dates before posting. Instagram and Facebook alt text use fields Meta added recently, and none of the alt text fields has been checked against the live APIs yet.
+- Manual reminders arrive as in-app, email (if set to immediate), and push notifications. SignalDesk can't check whether you posted them.
+- The calendar feed link uses the review link's secret in its address (calendar apps need that), so treat it like the review link. Turning off the review link stops the feed.
+- Monthly report emails go straight to the client's addresses from your sending domain. Check one by sending it to yourself first.
+- The service worker keeps a copy of the app files for spotty connections. Scheduling and loading data still need a connection.
+- Dark mode re-colors the main screens. A few rarely used panels may still look light.
 - The holiday overlay is a fixed list of US dates and common marketing days, not a live calendar feed.
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
@@ -147,7 +167,12 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - `js/*.js` — the interface, one file per area (`base.js` helpers and navigation, `calendar.js`, `composer.js`, `publishing.js`, `overview.js`, `brand.js`, and so on). They load in order from `index.html` and share one global scope, so a file can use anything defined in a file listed before it; `app.js` loads last and starts the app
 - `api/social.js` — authenticated publishing, account, team, and Autopilot API
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
-- `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page
+- `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page and calendar feed
+- `api/bio.js`, `bio.html`, `js/bio-page.js`, `css/bio.css` — public link-in-bio pages
+- `api/_lib/captions.js` — AI caption drafts and image descriptions
+- `api/_lib/push.js` — browser push notifications
+- `sw.js`, `manifest.webmanifest`, `icons/` — the installable app
+- `css/dark.css` — the dark theme
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors

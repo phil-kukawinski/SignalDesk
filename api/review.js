@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { send, getConfig, databaseRequest, getWorkspaceState } = require('./_lib/core');
-const { approvePost, listNotes, addNote, contentFor } = require('./_lib/publishing');
+const { approvePost, listNotes, addNote, contentFor, addHistory } = require('./_lib/publishing');
 const { notify } = require('./_lib/notify');
 
 // The client review page. A client opens a private link (no SignalDesk account) to see a
@@ -34,9 +34,43 @@ async function reviewablePost(link, postId) {
   return rows?.[0] || null;
 }
 
+function icsText(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/[,;]/g, (char) => `\\${char}`).replace(/\r?\n/g, '\\n');
+}
+
+function icsDate(value) {
+  return new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+// A calendar feed of the client's upcoming posts for calendar apps. Calendar apps can't send
+// a request body, so this one request takes the link's secret in the address.
+async function calendarFeed(req, res) {
+  const token = new URL(req.url, 'http://localhost').searchParams.get('t');
+  const link = await findLink(token);
+  if (!link) return send(res, 404, { error: 'This calendar link has expired or was turned off.' });
+  const client = ((await getWorkspaceState(link.workspace_id)).clients || []).find((item) => item.id === link.client_id);
+  const query = new URLSearchParams({ select: 'id,title,status,scheduled_for,content,publish_jobs(platform,status)', workspace_id: `eq.${link.workspace_id}`, client_id: `eq.${link.client_id}`, status: 'in.(pending_approval,scheduled,publishing,published,partial)', order: 'scheduled_for.asc', limit: '300' });
+  query.append('scheduled_for', `gte.${new Date(Date.now() - 30 * 86400000).toISOString()}`);
+  query.append('scheduled_for', `lte.${new Date(Date.now() + LOOKAHEAD_DAYS * 86400000).toISOString()}`);
+  const rows = await databaseRequest(`scheduled_posts?${query}`) || [];
+  const events = rows.map((row) => {
+    const networks = [...new Set((row.publish_jobs || []).filter((job) => job.status !== 'canceled').map((job) => PLATFORM_LABELS[job.platform] || job.platform))].join(', ');
+    return ['BEGIN:VEVENT', `UID:${row.id}@signaldesk`, `DTSTAMP:${icsDate(Date.now())}`, `DTSTART:${icsDate(row.scheduled_for)}`, 'DURATION:PT15M',
+      `SUMMARY:${icsText(`${row.title || 'Post'} (${networks})`)}`, `DESCRIPTION:${icsText(`${row.status === 'pending_approval' ? 'Waiting for approval. ' : ''}${(row.content?.text || '').slice(0, 900)}`)}`, 'END:VEVENT'].join('\r\n');
+  });
+  res.statusCode = 200;
+  res.setHeader('content-type', 'text/calendar; charset=utf-8');
+  res.setHeader('content-disposition', 'inline; filename="posts.ics"');
+  res.end(['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SignalDesk//Posts//EN', `X-WR-CALNAME:${icsText(`${client?.name || 'Client'} posts`)}`, 'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR'].join('\r\n'));
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   res.setHeader('referrer-policy', 'no-referrer');
+  if (req.method === 'GET' && new URL(req.url || '/', 'http://localhost').searchParams.get('format') === 'ics') {
+    if (getConfig().missing.length) return send(res, 503, { error: 'Calendar feeds aren’t available right now.' });
+    try { return await calendarFeed(req, res); } catch (error) { console.error('Calendar feed failed:', error.message); return send(res, 500, { error: 'Something went wrong.' }); }
+  }
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { return send(res, 400, { error: 'Invalid request.' }); } }
@@ -81,6 +115,7 @@ module.exports = async function handler(req, res) {
       if (body.decision === 'changes_requested' && !comment) return send(res, 400, { error: 'Say what should change.' });
       await addNote({ workspaceId: link.workspace_id, postId: post.id, authorName: name, kind: 'client', body: comment, decision: body.decision });
       await databaseRequest(`scheduled_posts?id=eq.${post.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ client_status: body.decision }) });
+      await addHistory(link.workspace_id, post.id, body.decision === 'approved' ? 'client_approved' : 'client_requested_changes', { actorName: `${name} (client)`, detail: { comment } });
       // A post the team sent for approval is released when the client approves it.
       let released = false;
       if (body.decision === 'approved' && post.status === 'pending_approval') {
