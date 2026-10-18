@@ -144,7 +144,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 ## Project structure
 - `index.html` — page structure
 - `css/styles.css` — responsive visual design
-- `js/app.js` — demo data, navigation, and interactions
+- `js/*.js` — the interface, one file per area (`base.js` helpers and navigation, `calendar.js`, `composer.js`, `publishing.js`, `overview.js`, `brand.js`, and so on). They load in order from `index.html` and share one global scope, so a file can use anything defined in a file listed before it; `app.js` loads last and starts the app
 - `api/social.js` — authenticated publishing, account, team, and Autopilot API
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
 - `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page
