@@ -190,7 +190,7 @@
 <form class="invite-form" id="invite-form"><input id="invite-email" class="field" type="email" placeholder="teammate@example.com" required aria-label="Email address"><select id="invite-role" class="field" aria-label="Role"><option value="user">User</option><option value="admin">Admin</option></select><button class="primary-button" type="submit">Invite</button></form>
 <p class="option-hint">Invited people join this workspace when they create a SignalDesk account with that email and confirm it.</p></div>
         </section>
-        <footer class="app-footer"><span>SignalDesk · Prototype workspace</span><span>Sample data · No live publishing enabled</span></footer>
+        <footer class="app-footer"><span>SignalDesk · Prototype workspace</span><span class="legal-links"><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a></span><span>Sample data · No live publishing enabled</span></footer>
       </div>
     </main>
   </div>
@@ -314,6 +314,7 @@
       <input id="auth-email" type="email" autocomplete="email" required>
       <label for="auth-password">Password</label>
       <input id="auth-password" type="password" autocomplete="current-password" minlength="8" required>
+      <p class="auth-legal">By creating an account, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       <p id="auth-message" class="auth-message" role="status"></p>
       <div class="auth-actions">
         <button class="primary-button" id="auth-sign-in" type="button">Sign in</button>

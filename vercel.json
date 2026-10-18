@@ -8,6 +8,9 @@
     },
     "api/oauth.js": {
       "maxDuration": 60
+    },
+    "api/legal.js": {
+      "maxDuration": 30
     }
   },
   "crons": [
@@ -20,6 +23,18 @@
     {
       "source": "/b/:slug",
       "destination": "/bio.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/api/legal?page=privacy"
+    },
+    {
+      "source": "/terms",
+      "destination": "/api/legal?page=terms"
+    },
+    {
+      "source": "/data-deletion",
+      "destination": "/api/legal?page=data-deletion"
     }
   ]
 }

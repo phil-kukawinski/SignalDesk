@@ -406,6 +406,17 @@ create table if not exists public.bio_pages (
   unique (workspace_id, client_id)
 );
 
+-- Requests from Meta to delete someone's data after they remove SignalDesk from their Facebook
+-- settings. Only the confirmation code and outcome are kept, so the person can check the status.
+create table if not exists public.data_deletion_requests (
+  code text primary key check (code ~ '^[a-f0-9]{24}$'),
+  platform text not null check (platform in ('meta')),
+  status text not null default 'received' check (status in ('received', 'completed')),
+  connections_removed integer not null default 0,
+  requested_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
 -- When each background job last ran, so a stopped scheduler can be noticed.
 create table if not exists public.worker_runs (
   name text primary key,
@@ -595,19 +606,20 @@ alter table public.post_notes enable row level security;
 alter table public.post_history enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.bio_pages enable row level security;
+alter table public.data_deletion_requests enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages from anon, authenticated;
+  public.bio_pages, public.data_deletion_requests from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages to service_role;
+  public.bio_pages, public.data_deletion_requests to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

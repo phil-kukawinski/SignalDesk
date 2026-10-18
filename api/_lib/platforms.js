@@ -128,6 +128,8 @@ const meta = {
   async exchange(code) {
     const short = await graph('oauth/access_token', { params: { client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, redirect_uri: redirectUri(), code } });
     const long = await graph('oauth/access_token', { params: { grant_type: 'fb_exchange_token', client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, fb_exchange_token: short.access_token } });
+    // The app-scoped user ID lets Meta's data deletion callback find this person's connections.
+    const me = await graph('me', { token: long.access_token, params: { fields: 'id' } });
     const pages = await graph('me/accounts', {
       token: long.access_token,
       params: { fields: 'id,name,access_token,link,picture{url},instagram_business_account{id,username,name,profile_picture_url}', limit: '100' }
@@ -138,13 +140,13 @@ const meta = {
       if (!page.access_token) continue;
       tokens[page.id] = page.access_token;
       candidates.push({
-        key: `facebook:${page.id}`, platform: 'facebook', externalId: page.id, displayName: page.name,
+        key: `facebook:${page.id}`, platform: 'facebook', externalId: page.id, displayName: page.name, metaUserId: me.id,
         profileUrl: page.link || `https://www.facebook.com/${page.id}`, imageUrl: page.picture?.data?.url || '', tokenRef: page.id
       });
       const ig = page.instagram_business_account;
       if (ig?.id) {
         candidates.push({
-          key: `instagram:${ig.id}`, platform: 'instagram', externalId: ig.id, displayName: ig.name || ig.username, username: ig.username || '',
+          key: `instagram:${ig.id}`, platform: 'instagram', externalId: ig.id, displayName: ig.name || ig.username, username: ig.username || '', metaUserId: me.id,
           profileUrl: ig.username ? `https://www.instagram.com/${ig.username}/` : '', imageUrl: ig.profile_picture_url || '', tokenRef: page.id,
           note: `Linked to the ${page.name} Page`
         });
@@ -157,7 +159,9 @@ const meta = {
   connectionFor(candidate, secret) {
     const token = secret.tokens?.[candidate.tokenRef];
     if (!token) throw new PublishError('auth', 'That account is no longer available. Sign in again.');
-    return { token, refreshToken: null, expiresAt: null, refreshExpiresAt: null, meta: candidate.platform === 'instagram' ? { pageId: candidate.tokenRef } : {} };
+    const meta = candidate.metaUserId ? { metaUserId: candidate.metaUserId } : {};
+    if (candidate.platform === 'instagram') meta.pageId = candidate.tokenRef;
+    return { token, refreshToken: null, expiresAt: null, refreshExpiresAt: null, meta };
   },
 
   async publish(ctx) {
