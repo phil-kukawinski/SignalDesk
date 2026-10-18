@@ -3,5 +3,8 @@
     "api/social.js": { "maxDuration": 300 },
     "api/cron.js": { "maxDuration": 300 },
     "api/oauth.js": { "maxDuration": 60 }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron?only=health", "schedule": "0 14 * * *" }
+  ]
 }

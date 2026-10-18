@@ -328,6 +328,13 @@ create table if not exists public.publish_attempts (
 );
 create index if not exists publish_attempts_job_idx on public.publish_attempts (job_id);
 
+-- When each background job last ran, so a stopped scheduler can be noticed.
+create table if not exists public.worker_runs (
+  name text primary key,
+  last_run_at timestamptz not null,
+  last_result jsonb not null default '{}'::jsonb
+);
+
 alter table public.scheduled_comments add column if not exists job_id uuid references public.publish_jobs (id) on delete cascade;
 alter table public.scheduled_comments alter column provider_post_id drop not null;
 alter table public.autopilot_items add column if not exists post_id uuid references public.scheduled_posts (id) on delete set null;
@@ -504,17 +511,18 @@ alter table public.oauth_sessions enable row level security;
 alter table public.scheduled_posts enable row level security;
 alter table public.publish_jobs enable row level security;
 alter table public.publish_attempts enable row level security;
+alter table public.worker_runs enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
-  public.scheduled_posts, public.publish_jobs, public.publish_attempts from anon, authenticated;
+  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
-  public.publish_jobs, public.publish_attempts to service_role;
+  public.publish_jobs, public.publish_attempts, public.worker_runs to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

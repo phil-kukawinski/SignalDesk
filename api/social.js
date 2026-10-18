@@ -9,8 +9,8 @@ const {
 } = require('./_lib/core');
 const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured } = require('./_lib/platforms');
 const {
-  PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, approvePost, rejectPost,
-  cancelPost, reschedulePost, retryJob
+  PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
+  cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost
 } = require('./_lib/publishing');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
@@ -19,7 +19,7 @@ const { proofreadTexts } = require('./_lib/proofread');
 const { checkLink } = require('./_lib/core');
 
 const CLIENT_ACTIONS = new Set([
-  'connect', 'accounts', 'publish', 'analytics', 'comments', 'post-comment', 'messages', 'reply',
+  'connect', 'accounts', 'publish', 'update-post', 'analytics', 'comments', 'post-comment', 'messages', 'reply',
   'oauth-start', 'disconnect'
 ]);
 // Actions that go through Ayrshare and need its per-client profile.
@@ -28,12 +28,12 @@ const WORKSPACE_ACTIONS = new Set([
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
-  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish'
+  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
-  'accounts', 'publish', 'posts', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread'
+  'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread'
 ]);
 const OAUTH_SESSION_MINUTES = 15;
 const TREND_CACHE_HOURS = 6;
@@ -348,6 +348,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
   }
 
+  if (action === 'overview') {
+    const [data] = await Promise.all([
+      overviewData(workspaceId, await workspaceTimeZone(workspaceId)),
+      checkWorkerHealth().catch((error) => console.error('Health check failed:', error.message))
+    ]);
+    return send(res, 200, data);
+  }
+
   if (action === 'approve') {
     const { post, late } = await approvePost(workspaceId, body.postId, user.id);
     if (post.created_by && post.created_by !== user.id) {
@@ -424,14 +432,15 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   return send(res, 400, { error: 'Unknown workspace action.' });
 }
 
-async function publish(body, { user, membership, clientId, encryptionKey }, res) {
+// Checks a post from the Publishing Studio; used for new posts and edits.
+function validatePublishInput(body) {
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   const platforms = body.platforms;
   requirePlatforms(platforms);
-  if (new Set(platforms).size !== platforms.length) return send(res, 400, { error: 'Choose each network once.' });
+  if (new Set(platforms).size !== platforms.length) throw httpError(400, 'Choose each network once.');
   const mediaUrls = body.mediaUrls || [];
   const isMediaList = (urls) => Array.isArray(urls) && urls.length <= 10 && urls.every((url) => typeof url === 'string' && url.startsWith('https://') && url.length <= 2000);
-  if (!isMediaList(mediaUrls)) return send(res, 400, { error: 'Media must use publicly accessible HTTPS URLs.' });
+  if (!isMediaList(mediaUrls)) throw httpError(400, 'Media must use publicly accessible HTTPS URLs.');
   const overrides = body.platformContent && typeof body.platformContent === 'object' ? body.platformContent : {};
   const options = validatePostOptions(body.options, platforms);
   const platformContent = {};
@@ -439,11 +448,11 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
     const override = overrides[platform] || {};
     const postText = typeof override.text === 'string' ? override.text.trim() : text;
     const postMedia = override.mediaUrls === undefined ? mediaUrls : override.mediaUrls;
-    if (!postText) return send(res, 400, { error: `Write post copy for ${platform} before publishing.` });
-    if (postText.length > 10000) return send(res, 400, { error: `Post copy for ${platform} must be 10,000 characters or fewer.` });
-    if (!isMediaList(postMedia)) return send(res, 400, { error: 'Media must use publicly accessible HTTPS URLs.' });
+    if (!postText) throw httpError(400, `Write post copy for ${platform} before publishing.`);
+    if (postText.length > 10000) throw httpError(400, `Post copy for ${platform} must be 10,000 characters or fewer.`);
+    if (!isMediaList(postMedia)) throw httpError(400, 'Media must use publicly accessible HTTPS URLs.');
     if (MEDIA_REQUIRED_PLATFORMS.has(platform) && !postMedia.length) {
-      return send(res, 400, { error: `${platform} requires media. Attach an image or video for it before publishing.` });
+      throw httpError(400, `${platform} requires media. Attach an image or video for it before publishing.`);
     }
     const custom = {};
     if (postText !== text) custom.text = postText;
@@ -453,24 +462,32 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
   let scheduledFor = Date.now();
   if (body.scheduleDate) {
     scheduledFor = Date.parse(body.scheduleDate);
-    if (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now()) return send(res, 400, { error: 'Choose a valid future schedule time.' });
+    if (!Number.isFinite(scheduledFor) || scheduledFor <= Date.now()) throw httpError(400, 'Choose a valid future schedule time.');
   }
+  const title = (text || Object.values(platformContent).find((item) => item.text)?.text || '').split('\n')[0].slice(0, 120) || 'Untitled post';
+  return { text, platforms, mediaUrls, platformContent, options, scheduledFor, title };
+}
+
+async function publish(body, { user, membership, clientId, encryptionKey }, res) {
+  const input = validatePublishInput(body);
   // Posts from members with the User role are always held until an admin approves them.
   const held = membership.role !== 'admin' || body.requiresApproval === true;
-  const title = (text || Object.values(platformContent).find((item) => item.text)?.text || '').split('\n')[0].slice(0, 120) || 'Untitled post';
-  const post = await createScheduledPost({
-    workspaceId: membership.workspace_id, clientId, userId: user.id, title, platforms, text, mediaUrls, platformContent, options,
-    scheduledFor, held, encryptionKey
-  });
+  let original = null;
+  if (body.postId !== undefined) {
+    original = await getPost(membership.workspace_id, body.postId);
+    assertEditable(original, { userId: user.id, admin: membership.role === 'admin' });
+  }
+  const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey });
+  if (original) await replacePost(membership.workspace_id, original, post.id);
   if (held) {
     await notify({
       workspaceId: membership.workspace_id, audience: 'admins', excludeUserId: user.id, type: 'approval_requested', category: 'approvals',
-      title: `New post awaiting approval for ${await clientName(membership.workspace_id, clientId)}`,
-      body: `${membership.email || user.email || 'A teammate'} submitted “${title}” for ${platforms.map((platform) => PLATFORM_LABELS[platform] || platform).join(', ')}.`,
+      title: `${original ? 'Edited post' : 'New post'} awaiting approval for ${await clientName(membership.workspace_id, clientId)}`,
+      body: `${membership.email || user.email || 'A teammate'} ${original ? 'updated' : 'submitted'} “${input.title}” for ${input.platforms.map((platform) => PLATFORM_LABELS[platform] || platform).join(', ')}.`,
       view: 'approvals', data: { postId: post.id, clientId }
     });
   }
-  return send(res, 200, { status: held ? 'pending_approval' : 'scheduled', post, requiresApproval: held, queuedComments: post.queuedComments });
+  return send(res, 200, { status: held ? 'pending_approval' : 'scheduled', post, requiresApproval: held, queuedComments: post.queuedComments, replaced: original?.id || null });
 }
 
 module.exports = async function handler(req, res) {
@@ -511,7 +528,11 @@ module.exports = async function handler(req, res) {
       return send(res, 200, { accounts: publicAccounts({ connections, ayrshare }), refId: profile?.refId || null, role: membership.role, integrations: integrations(), warning });
     }
 
-    if (action === 'publish') return await publish(body, { user, membership, clientId, encryptionKey }, res);
+    if (action === 'publish') return await publish({ ...body, postId: undefined }, { user, membership, clientId, encryptionKey }, res);
+    if (action === 'update-post') {
+      if (typeof body.postId !== 'string') return send(res, 400, { error: 'Choose a post to edit.' });
+      return await publish(body, { user, membership, clientId, encryptionKey }, res);
+    }
 
     if (action === 'oauth-start') {
       if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose Meta, LinkedIn, or Pinterest.' });

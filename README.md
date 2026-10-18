@@ -49,7 +49,7 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
    - `APP_URL`, your deployed address such as `https://signaldesk.vercel.app`. Sign-in redirects go to `APP_URL/api/oauth`.
    - `APP_ORIGINS`, the exact local and deployed origins, separated by commas.
    - `CRON_SECRET`, from `openssl rand -hex 32`.
-3. **The scheduler.** This works on any Vercel plan. In Supabase, enable the `pg_cron` and `pg_net` extensions, fill in your URL and `CRON_SECRET` in the commented block at the end of `schema.sql`, and run it. It creates two jobs: `/api/cron?only=publish` every minute, and the full worker every 10 minutes (Autopilot, comments, token upkeep, reports, digests). On Vercel Pro you can use Vercel Cron for the same two schedules instead. **Until a scheduler runs, scheduled posts wait**; the post details warn when a post is past due.
+3. **The scheduler.** This works on any Vercel plan. In Supabase, enable the `pg_cron` and `pg_net` extensions, fill in your URL and `CRON_SECRET` in the commented block at the end of `schema.sql`, and run it. It creates two jobs: `/api/cron?only=publish` every minute, and the full worker every 10 minutes (Autopilot, comments, token upkeep, reports, digests). On Vercel Pro you can use Vercel Cron for the same two schedules instead. **Until a scheduler runs, scheduled posts wait.** As a backstop, `vercel.json` adds a daily Vercel Cron call to `/api/cron?only=health` (allowed on every plan). If the every-minute run has stopped and posts are past due, it notifies admins, at most every 12 hours. The Command Center and post details also show a warning.
 4. **Meta (Facebook + Instagram).**
    - Create a Business-type app at developers.facebook.com and add Facebook Login for Business plus the Instagram API with Facebook Login.
    - Add `APP_URL/api/oauth` as a valid OAuth redirect URI.
@@ -76,11 +76,12 @@ API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `2
 Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
 ## Included in this prototype
-- Command Center with sample performance metrics and upcoming content
-- Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters
+- Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). Upcoming content filters by client and network. Demo mode keeps the sample dashboard
+- Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters. Admins can drag a scheduled post to a new day or time (15-minute steps)
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
 - Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
 - Post details from the calendar or Command Center: status and links for each network, retry, move, cancel, approve, or request changes
+- **Edit in Studio** for scheduled posts: opens the post in the Publishing Studio, sets your own draft aside, and puts it back when you save or cancel. Admins can edit any post until 2 minutes before it goes out. Users can edit their own posts while they await approval, and the edit goes back for approval
 - Publishing checklist with optional checks: proofreading (instant quick checks plus AI suggestions you can apply), platform fit (character limits, required media, hashtag counts, unclickable caption links), and link validation
 - Post options: Instagram collaborators and photo tags, LinkedIn/YouTube/TikTok privacy, a first comment, scheduled follow-up comments, Pinterest board, title, and link, and automatic reposts (each scheduled as its own post)
 - Autopilot: connect RSS/Atom feeds per client; new articles fill posting-time slots on the calendar and are either auto-scheduled or sent to the approval queue, with keyword filters and article images
@@ -96,7 +97,9 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Settings page
 
 ## Important prototype limitations
-- Overview metrics and much of the content library remain sample data. When signed in, the calendar, upcoming posts, and approvals show only real scheduled posts; sample posts appear in demo mode.
+- Much of the content library is still sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
+- Command Center engagement counts posts SignalDesk published. The worker refreshes metrics for the last 30 days of posts every 12 hours or so (10 posts per run), so new numbers can take a few hours to appear.
+- Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
 - The direct integrations haven't been run against the live Meta, LinkedIn, or Pinterest APIs yet. They were tested against simulated responses, so expect small fixes on first connection.
 - Direct publishing supports text, images, and video on Facebook and Instagram (Reels and carousels of up to 10 items), and text and images on LinkedIn and Pinterest. LinkedIn and Pinterest video aren't supported yet. Instagram Stories aren't supported.
 - Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
@@ -112,13 +115,16 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
 - The Social Inbox and account-level analytics still use Ayrshare and stay inactive without it. DMs are limited to Facebook, Instagram, X, and WhatsApp. Instagram, Pinterest, TikTok, and YouTube publishing require media.
 - X requires your own developer app and API credits. Provider app reviews, account eligibility, rate limits, message windows, and network policy apply.
-- Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Clearing a draft drops its media reference but does not delete the public object, because a scheduled post may still use it; orphan cleanup is not implemented yet.
+- Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Suggested next build phase
 1. Create the Meta, LinkedIn, and Pinterest developer apps, then configure Supabase, the scheduler, and Vercel using the setup steps above.
 2. Connect your own accounts first and schedule test posts to each network, including an image, a carousel, and an Instagram video.
-3. Add LinkedIn and Pinterest video, Instagram Stories, and drag-to-reschedule on the calendar.
-4. Replace remaining sample dashboard data, and add audit logs and production monitoring.
+3. Add LinkedIn and Pinterest video and Instagram Stories if you need them.
+4. Replace the remaining sample content library and analytics data, and add audit logs.
+
+## Making changes
+`main` deploys to the live site. Make changes on a branch instead: push it, and Vercel builds a preview deployment with its own address. Check the preview, then merge the branch into `main` to publish. Preview deployments use the same environment variables unless you set preview-specific ones in Vercel, so a preview signed in to the real Supabase project works with real data.
 
 ## Project structure
 - `index.html` — page structure
@@ -129,6 +135,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors
+- `api/_lib/media.js` — daily cleanup of unused uploads
 - `api/_lib/core.js` — shared provider, database, post-option, and RSS helpers
 - `api/_lib/notify.js` — in-app notifications, immediate emails, and digests
 - `api/_lib/reports.js` — Top Posts metrics and weekly reports

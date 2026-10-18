@@ -385,7 +385,7 @@ function publicPost(row) {
   return {
     id: row.id, clientId: row.client_id, title: row.title, status: row.status, source: row.source,
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
-    approvedAt: row.approved_at, decisionNote: row.decision_note,
+    approvedAt: row.approved_at, decisionNote: row.decision_note, createdAt: row.created_at,
     text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {},
     options: row.options || {},
     jobs: (row.publish_jobs || []).map((job) => ({
@@ -541,8 +541,156 @@ async function directPostRows({ workspaceId, clientId, start, end, encryptionKey
   return { rows, errors };
 }
 
+// --- Worker health ---
+
+const WORKER_STALE_MS = 15 * 60000;
+const HEALTH_ALERT_EVERY_MS = 12 * 3600000;
+
+async function recordWorkerRun(name, result = {}) {
+  await databaseRequest('worker_runs?on_conflict=name', {
+    method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ name, last_run_at: nowIso(), last_result: result })
+  }).catch((error) => console.error('Could not record worker run:', error.message));
+}
+
+async function lastWorkerRun(name) {
+  const rows = await databaseRequest(`worker_runs?name=eq.${name}&select=last_run_at`);
+  return rows?.[0]?.last_run_at || null;
+}
+
+// Alerts admins when posts are past due because the every-minute publishing run has stopped.
+async function checkWorkerHealth({ now = Date.now() } = {}) {
+  const lastRun = await lastWorkerRun('publish');
+  if (lastRun && now - Date.parse(lastRun) < WORKER_STALE_MS) return { healthy: true, lastRun };
+  const overdue = await databaseRequest(`publish_jobs?status=eq.queued&run_at=lt.${new Date(now - WORKER_STALE_MS).toISOString()}&select=workspace_id&limit=500`) || [];
+  if (!overdue.length) return { healthy: true, lastRun, idle: true };
+  const lastAlert = await lastWorkerRun('publish-health-alert');
+  if (lastAlert && now - Date.parse(lastAlert) < HEALTH_ALERT_EVERY_MS) return { healthy: false, lastRun, alerted: false };
+  const { notify } = require('./notify');
+  const counts = new Map();
+  overdue.forEach((row) => counts.set(row.workspace_id, (counts.get(row.workspace_id) || 0) + 1));
+  for (const [workspaceId, count] of counts) {
+    await notify({
+      workspaceId, audience: 'admins', type: 'worker_stalled', category: 'publishing',
+      title: `${count} scheduled post${count === 1 ? ' is' : 's are'} past due`,
+      body: lastRun
+        ? `The publishing worker last ran ${new Date(lastRun).toUTCString()}. Check the scheduler in Supabase (cron jobs) so posts go out.`
+        : 'The publishing worker has never run. Set up the scheduler (README, Publishing setup step 3) so posts go out.',
+      view: 'overview'
+    });
+  }
+  await recordWorkerRun('publish-health-alert', { overdue: overdue.length });
+  return { healthy: false, lastRun, alerted: true, overdue: overdue.length };
+}
+
+// Keeps metrics for recent direct posts fresh so the Command Center isn't a week behind.
+async function refreshRecentMetrics({ encryptionKey, limit = 10 } = {}) {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const staleBefore = Date.now() - 12 * 3600000;
+  const jobs = await databaseRequest(`publish_jobs?provider=eq.direct&status=eq.published&published_at=gte.${since}&select=id,platform,external_id,published_at,connection_id,metrics_at&order=metrics_at.asc.nullsfirst&limit=${limit * 3}`) || [];
+  let refreshed = 0;
+  const connections = new Map();
+  for (const job of jobs.filter((item) => !item.metrics_at || Date.parse(item.metrics_at) < staleBefore).slice(0, limit)) {
+    const adapter = adapterFor(job.platform);
+    if (!adapter?.metrics || !job.external_id) continue;
+    try {
+      if (!connections.has(job.connection_id)) connections.set(job.connection_id, await loadConnection(job.connection_id, encryptionKey));
+      const connection = connections.get(job.connection_id);
+      if (connection?.status !== 'active') continue;
+      const metrics = await adapter.metrics({ connection: await ensureFreshToken(connection, encryptionKey), job });
+      await databaseRequest(`publish_jobs?id=eq.${job.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ metrics, metrics_at: nowIso() }) });
+      refreshed += 1;
+    } catch (error) {
+      // Try again later rather than retrying the same post every run.
+      await databaseRequest(`publish_jobs?id=eq.${job.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ metrics_at: nowIso() }) }).catch(() => {});
+      console.error('Metrics refresh failed:', job.platform, error.message);
+    }
+  }
+  return { refreshed };
+}
+
+// --- Command Center summary ---
+
+async function overviewData(workspaceId, timeZone) {
+  const { finishMetrics } = require('./reports');
+  const { zonedParts } = require('./core');
+  const now = Date.now();
+  const windowStart = now - 60 * 86400000;
+  const [reports, jobs, connections, lastRun] = await Promise.all([
+    databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=data`),
+    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,platform,published_at,metrics`),
+    listConnections(workspaceId),
+    lastWorkerRun('publish')
+  ]);
+  const rows = new Map();
+  for (const report of reports || []) {
+    for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements });
+  }
+  for (const job of jobs || []) {
+    const id = `job:${job.id}`;
+    if (!rows.has(id) && job.metrics) rows.set(id, { platform: job.platform, at: Date.parse(job.published_at), engagements: finishMetrics(job.metrics).engagements });
+  }
+  const dayKey = (time) => { const parts = zonedParts(new Date(time), timeZone); return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`; };
+  const days = Array.from({ length: 30 }, (_, index) => dayKey(now - (29 - index) * 86400000));
+  const daily = Object.fromEntries(days.map((day) => [day, 0]));
+  const byPlatform = {};
+  let total = 0, previous = 0, measured = 0;
+  for (const row of rows.values()) {
+    if (typeof row.engagements !== 'number') continue;
+    if (row.at >= now - 30 * 86400000) {
+      total += row.engagements;
+      measured += 1;
+      byPlatform[row.platform] = (byPlatform[row.platform] || 0) + row.engagements;
+      const key = dayKey(row.at);
+      if (key in daily) daily[key] += row.engagements;
+    } else if (row.at >= windowStart) previous += row.engagements;
+  }
+  return {
+    engagement: { total, previous, measured, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
+    connections: {
+      active: connections.filter((item) => item.status === 'active').length,
+      reauth: connections.filter((item) => item.status === 'needs_reauth').map((item) => ({ platform: item.platform, clientId: item.client_id })),
+      platforms: [...new Set(connections.filter((item) => item.status === 'active').map((item) => item.platform))],
+      clients: new Set(connections.map((item) => item.client_id)).size
+    },
+    worker: { lastRun, stale: !lastRun || now - Date.parse(lastRun) > WORKER_STALE_MS }
+  };
+}
+
+// --- Editing a scheduled post ---
+
+const EDIT_LEAD_MS = 2 * 60000;
+
+function assertEditable(post, { userId, admin }) {
+  if (!admin && !(post.created_by === userId && post.status === 'pending_approval')) throw httpError(403, 'Only admins can edit scheduled posts.');
+  if (post.parent_id) throw httpError(409, 'This is a repost. Edit the original post and its reposts follow.');
+  if (!['pending_approval', 'scheduled'].includes(post.status) || post.publish_jobs.some((job) => ['publishing', 'published'].includes(job.status))) {
+    throw httpError(409, 'Posts that have started publishing can’t be edited.');
+  }
+  if (post.status === 'scheduled' && Date.parse(post.scheduled_for) < Date.now() + EDIT_LEAD_MS) {
+    throw httpError(409, 'This post is about to publish, so it can’t be edited now.');
+  }
+}
+
+// Swaps an edited post in for the original. The new post is created first; the original is
+// removed only if none of its networks started publishing in the meantime.
+async function replacePost(workspaceId, original, replacementId) {
+  const ids = await familyIds(workspaceId, original);
+  const started = await databaseRequest(`publish_jobs?post_id=in.(${ids.join(',')})&status=in.(publishing,published)&select=id`) || [];
+  if (started.length) {
+    await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    throw httpError(409, 'The original started publishing while you were editing, so your changes weren’t saved.');
+  }
+  if (original.source === 'autopilot') {
+    await databaseRequest(`autopilot_items?post_id=eq.${original.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ post_id: replacementId }) });
+    await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ source: 'autopilot' }) });
+  }
+  await databaseRequest(`scheduled_posts?id=in.(${ids.join(',')})`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+}
+
 module.exports = {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
-  reschedulePost, retryJob, publicPost, directPostRows, contentFor
+  reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
+  refreshRecentMetrics, overviewData, assertEditable, replacePost
 };

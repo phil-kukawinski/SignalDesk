@@ -337,3 +337,17 @@ label.settings-toggle input{width:18px;height:18px;accent-color:#5b8db8;flex:non
 .auth-form .connect-choice{display:flex;gap:10px;align-items:flex-start;margin:6px 0;font-size:12px;font-weight:500;color:#1a1f3a}
 .auth-form .connect-choice input{width:auto;flex:none;margin:2px 0 0;padding:0}
 .auth-form .connect-group legend{margin-bottom:2px}
+/* Command Center attention list, editing banner, and calendar dragging */
+.approval-item[role=button]{cursor:pointer;border-radius:10px}
+.approval-item[role=button]:hover{background:#fdf6f0}
+.attention-dot{width:9px;height:9px;flex:none;margin-top:5px;border-radius:50%;background:#d6e4f0}
+.attention-danger .attention-dot{background:#c97a72}
+.attention-warning .attention-dot{background:#d9a441}
+.attention-pending .attention-dot{background:#5b8db8}
+.attention-empty{margin:6px 0 12px;color:#8a8e9a;font-size:12px;line-height:1.6}
+.performance-range{color:#8a8e9a;font-size:11px;font-weight:600}
+.trend.down{color:#9b5e58}
+.editing-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid #c9d9e8;border-radius:12px;background:#eef4fa;color:#1a1f3a;font-size:12px;font-weight:600}
+.editing-banner[hidden]{display:none}
+.timeline-event[data-draggable]{cursor:grab;touch-action:none}
+.timeline-event.dragging{cursor:grabbing;z-index:6;opacity:.92;box-shadow:0 8px 20px #1a1f3a33}
