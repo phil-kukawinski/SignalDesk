@@ -22,7 +22,7 @@ $('#print-calendar')?.addEventListener('click',()=>{const{start,end}=calView==='
 const THEME_KEY='signaldesk-theme';
 const darkQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
 function storedTheme(){try{return localStorage.getItem(THEME_KEY)||'system';}catch{return 'system';}}
-function applyTheme(){const choice=storedTheme(),dark=choice==='dark'||(choice==='system'&&darkQuery?.matches);document.documentElement.dataset.theme=dark?'dark':'light';const select=$('#theme-select');if(select)select.value=choice;$('meta[name="theme-color"]')?.setAttribute('content',dark?'#151a2e':'#5b8db8');}
+function applyTheme(){const choice=storedTheme(),dark=choice==='dark'||(choice==='system'&&darkQuery?.matches);document.documentElement.dataset.theme=dark?'dark':'light';const select=$('#theme-select');if(select)select.value=choice;$('meta[name="theme-color"]')?.setAttribute('content',dark?'#000000':'#5b8db8');}
 $('#theme-select')?.addEventListener('change',event=>{try{localStorage.setItem(THEME_KEY,event.target.value);}catch{}applyTheme();});
 darkQuery?.addEventListener?.('change',applyTheme);
 applyTheme();
