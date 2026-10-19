@@ -1,6 +1,6 @@
 // SignalDesk service worker: lets the app be installed, keeps a copy of the app shell for
 // spotty connections, and shows push notifications.
-const CACHE = 'signaldesk-shell-v1';
+const CACHE = 'signaldesk-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png'])).catch(() => {}));
