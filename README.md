@@ -1,11 +1,13 @@
-# SignalDesk — Social Publishing Workspace Prototype
+# SignalDesk — Social Publishing Workspace
 
-A responsive, browser-based prototype for a multi-client social media management platform. It is an original starter project inspired by common social media management workflows, not a copy of Social News Desk.
+A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
+
+Live site: https://signaldesk-social.vercel.app
 
 ## Run it
-1. Unzip the folder.
-2. Open `index.html` in a modern browser, or open the folder in VS Code and use the Live Server extension.
-3. No build step or package installation is required.
+- **Live:** pushing to `main` deploys to Vercel.
+- **Locally with the API:** run `npm install`, then `vercel dev`, and open the address it prints.
+- **Interface only:** open `index.html` in a browser or use VS Code's Live Server extension. There is no build step. Without the API, the app runs in demo mode with sample data.
 
 ## Workspace persistence
 
@@ -78,7 +80,7 @@ API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `2
 
 Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
-## Included in this prototype
+## Features
 - Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). Upcoming content filters by client and network. Demo mode keeps the sample dashboard
 - Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters. Admins can drag a scheduled post to a new day or time (15-minute steps)
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
@@ -123,7 +125,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Approval queue for held posts, with approve and request-changes actions; sample approvals appear only in demo mode
 - Settings page
 
-## Important prototype limitations
+## Known limitations
 - In demo mode the content library shows sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
 - Command Center engagement counts posts SignalDesk published. The worker refreshes metrics for the last 30 days of posts every 12 hours or so (10 posts per run), so new numbers can take a few hours to appear.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
@@ -137,7 +139,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Best-time bands need about 10 published posts with metrics in weekly Top Posts reports (last 12 weeks); until then the calendar shows clearly labeled starter windows that are general guidance, not your data. Times are shown in the viewer's local time zone.
 - Link checks run from the server and only reach public websites. Some sites block automated checks; those links are marked “couldn't confirm” rather than broken.
 - Trend signals are AI research from public web results at scan time, not platform data feeds. Links are limited to pages the search actually returned, but summaries can still be wrong; confirm trends and audio licensing before using them.
-- Digests and weekly reports run from `/api/cron`, so they need the scheduler from step 7. Notifications refresh every minute while the app is open.
+- Digests and weekly reports run from `/api/cron`, so they need the scheduler from step 3. Notifications refresh every minute while the app is open.
 - First comments and follow-ups wait until their post is live, then retry every 30 minutes (up to 12 times) if posting fails. Pinterest doesn't support comments.
 - The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
 - The Social Inbox and account-level analytics still use Ayrshare and stay inactive without it. DMs are limited to Facebook, Instagram, X, and WhatsApp. Instagram, Pinterest, TikTok, and YouTube publishing require media.
@@ -154,11 +156,12 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - The holiday overlay is a fixed list of US dates and common marketing days, not a live calendar feed.
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
-## Suggested next build phase
-1. Create the Meta, LinkedIn, and Pinterest developer apps, then configure Supabase, the scheduler, and Vercel using the setup steps above.
-2. Connect your own accounts first and schedule test posts to each network, including an image, a carousel, and an Instagram video.
-3. Add LinkedIn and Pinterest video and Instagram Stories if you need them.
-4. Replace the remaining sample content library and analytics data, and add audit logs.
+## Status and next steps
+Supabase, Vercel, the scheduler, the legal pages, AI features, and push notifications are set up on the live site. Next:
+1. Once Meta, LinkedIn, and Pinterest approve the developer apps, connect your own accounts and schedule test posts to each network, including an image, a carousel, and an Instagram video.
+2. LinkedIn needs the **Sign In with LinkedIn using OpenID Connect** product before it can connect. Company Pages need the Community Management API; set `LINKEDIN_ORGANIZATIONS=true` after it's approved.
+3. Pinterest needs `PINTEREST_APP_SECRET` alongside `PINTEREST_APP_ID`. Notification emails need `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL`.
+4. Later: LinkedIn and Pinterest video, Instagram Stories, and audit logs.
 
 ## Making changes
 `main` deploys to the live site. Make changes on a branch instead: push it, and Vercel builds a preview deployment with its own address. Check the preview, then merge the branch into `main` to publish. Preview deployments use the same environment variables unless you set preview-specific ones in Vercel, so a preview signed in to the real Supabase project works with real data.
@@ -171,6 +174,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
 - `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page and calendar feed
 - `api/bio.js`, `bio.html`, `js/bio-page.js`, `css/bio.css` — public link-in-bio pages
+- `robots.txt` — keeps the API and private review links out of search engines
 - `api/legal.js`, `api/_lib/legal.js` — the privacy policy, terms, and data deletion pages, plus Meta's data deletion and deauthorize callbacks
 - `api/_lib/captions.js` — AI caption drafts and image descriptions
 - `api/_lib/push.js` — browser push notifications
@@ -186,6 +190,3 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - `api/_lib/trends.js` — Claude-powered trend research
 - `api/_lib/proofread.js` — Claude-powered proofreading
 - `supabase/schema.sql` — tables, migration, row-level security, the `ensure_workspace` function, and the publishing queue's claim and status functions
-
-## Import into Replit
-Push this folder to a GitHub repository, then import the repository into Replit. Keep Git as the source of truth and avoid editing the same files independently in VS Code and Replit without committing/syncing.

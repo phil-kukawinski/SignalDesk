@@ -746,7 +746,7 @@ async function overviewData(workspaceId, timeZone) {
   const byPlatform = {};
   // Per client, for goals: engagement rate counts only posts that report an audience.
   const byClient = {};
-  let total = 0, previous = 0, measured = 0;
+  let total = 0, previous = 0, measured = 0, reach = 0, rated = 0;
   for (const row of rows.values()) {
     if (typeof row.engagements !== 'number') continue;
     if (row.at >= now - 30 * 86400000) {
@@ -755,13 +755,13 @@ async function overviewData(workspaceId, timeZone) {
       byPlatform[row.platform] = (byPlatform[row.platform] || 0) + row.engagements;
       const entry = byClient[row.clientId] ||= { engagements: 0, audience: 0, posts: 0 };
       entry.posts += 1;
-      if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; }
+      if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; reach += row.audience; rated += row.engagements; }
       const key = dayKey(row.at);
       if (key in daily) daily[key] += row.engagements;
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
-    engagement: { total, previous, measured, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
+    engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
       active: connections.filter((item) => item.status === 'active').length,
