@@ -356,7 +356,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'posts') {
     const from = Date.parse(body.from), to = Date.parse(body.to);
-    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 100 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 101 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
     return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
   }
 

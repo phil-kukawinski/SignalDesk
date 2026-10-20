@@ -5,9 +5,9 @@ $('#auth-sign-in')?.addEventListener('click',async()=>{const{error}=await supaba
 $('#auth-sign-up')?.addEventListener('click',async()=>{const{data,error}=await supabaseClient.auth.signUp({email:$('#auth-email').value,password:$('#auth-password').value});if(error){$('#auth-message').textContent=error.message;return;}if(!data.session){$('#auth-message').textContent='Check your email to confirm your account, then sign in.';return;}$('#auth-dialog').close();await loadWorkspaceState();});
 $('#auth-sign-out')?.addEventListener('click',async()=>{const{error}=await supabaseClient.auth.signOut();if(error){$('#auth-message').textContent=error.message;return;}location.reload();});
 $('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog'))$('#auth-dialog').close();});
-$('#accounts-client-select')?.addEventListener('change',refreshSocialAccounts);
+$('#accounts-client-select')?.addEventListener('change',()=>refreshSocialAccounts());
 $('#client-select')?.addEventListener('change',()=>{updatePreview();loadComposerAccounts();});
-$('#refresh-social-accounts')?.addEventListener('click',refreshSocialAccounts);
+$('#refresh-social-accounts')?.addEventListener('click',()=>refreshSocialAccounts());
 $('#connect-social-accounts')?.addEventListener('click',startSocialAccountLink);
 $('#client-grid')?.addEventListener('click',event=>{const target=event.target.closest('[data-social-client]');if(!target)return;const client=clients.find(item=>item.id===target.dataset.socialClient);if(!client)return;renderClientSelects();$('#accounts-client-select').value=client.name;showView('social-accounts');});
 document.addEventListener('click',event=>{const button=event.target.closest('[data-post-comments]');if(!button)return;ensureLiveInbox();addPanelClientSelector('live-inbox-panel','live-inbox-client-select');const client=clients.find(item=>item.name===button.dataset.postClient);if(client)$('#live-inbox-client-select').value=client.name;$('#comment-post-id').value=button.dataset.postComments;const platform=savedPosts.find(post=>post.providerPostId===button.dataset.postComments)?.channel?.split(',')[0];if(platform&&$('#comment-platform').querySelector(`option[value="${platform}"]`))$('#comment-platform').value=platform;showView('inbox');});

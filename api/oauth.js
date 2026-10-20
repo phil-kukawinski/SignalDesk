@@ -43,8 +43,16 @@ module.exports = async function handler(req, res) {
     await databaseRequest(`oauth_sessions?id=eq.${session.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'failed', error: message }) }).catch(() => {});
     return page(res, 400, { ok: false, message, sessionId: session.id });
   };
-  const denied = url.searchParams.get('error_description') || url.searchParams.get('error');
-  if (denied) return fail(`The sign-in was canceled or declined (${denied.slice(0, 200)}).`);
+  const errorCode = url.searchParams.get('error');
+  if (errorCode) {
+    const detail = (url.searchParams.get('error_description') || errorCode).replace(/\+/g, ' ').slice(0, 240);
+    // Only a person backing out is a cancel; anything else is the network refusing the app's setup.
+    if (/^(access_denied|user_cancelled_login|user_cancelled_authorize|user_denied)$/.test(errorCode)) return fail(`The sign-in was canceled or declined (${detail}).`);
+    const hint = /scope/.test(errorCode) && session.provider === 'linkedin'
+      ? ' In your LinkedIn developer app, add the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products. Company Page permissions need the Community Management API, so leave LINKEDIN_ORGANIZATIONS and LINKEDIN_SCOPES unset until LinkedIn approves it.'
+      : ' Check the app’s settings and permissions on the network’s developer site.';
+    return fail(`The network refused the sign-in: ${detail}.${hint}`);
+  }
   if (!code) return fail('No sign-in code came back. Try again.');
   try {
     const { candidates, secret } = await PROVIDERS[session.provider].exchange(code);
