@@ -11,6 +11,9 @@
     },
     "api/legal.js": {
       "maxDuration": 30
+    },
+    "api/go.js": {
+      "maxDuration": 10
     }
   },
   "crons": [
@@ -39,6 +42,10 @@
     {
       "source": "/favicon.ico",
       "destination": "/icons/icon-192.png"
+    },
+    {
+      "source": "/l/:code",
+      "destination": "/api/go?code=:code"
     }
   ]
 }

@@ -406,6 +406,32 @@ create table if not exists public.bio_pages (
   unique (workspace_id, client_id)
 );
 
+-- Short links (/l/<code>) that count clicks per post and network. One link per job and
+-- destination, created when the post publishes. Clicks are also counted per day.
+create table if not exists public.short_links (
+  code text primary key check (code ~ '^[A-Za-z0-9]{6,12}$'),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  post_id uuid references public.scheduled_posts (id) on delete set null,
+  job_id uuid references public.publish_jobs (id) on delete set null,
+  platform text not null,
+  url text not null check (url ~ '^https?://'),
+  clicks integer not null default 0,
+  last_clicked_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (job_id, url)
+);
+create index if not exists short_links_workspace_idx on public.short_links (workspace_id, created_at desc);
+
+create table if not exists public.link_click_days (
+  code text not null references public.short_links (code) on delete cascade,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  day date not null,
+  clicks integer not null default 0,
+  primary key (code, day)
+);
+create index if not exists link_click_days_workspace_idx on public.link_click_days (workspace_id, day);
+
 -- Requests from Meta to delete someone's data after they remove SignalDesk from their Facebook
 -- settings. Only the confirmation code and outcome are kept, so the person can check the status.
 create table if not exists public.data_deletion_requests (
@@ -508,6 +534,28 @@ revoke all on function public.claim_publish_jobs(int, uuid) from public, anon, a
 grant execute on function public.claim_publish_jobs(int, uuid) to service_role;
 
 -- Role lookup used by row-level security.
+-- Counts a click and returns where the link goes, in one round trip.
+create or replace function public.record_link_click(p_code text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target record;
+begin
+  update public.short_links set clicks = clicks + 1, last_clicked_at = now()
+    where code = p_code returning url, workspace_id into target;
+  if not found then return null; end if;
+  insert into public.link_click_days (code, workspace_id, day, clicks)
+    values (p_code, target.workspace_id, (now() at time zone 'utc')::date, 1)
+    on conflict (code, day) do update set clicks = public.link_click_days.clicks + 1;
+  return target.url;
+end;
+$$;
+revoke all on function public.record_link_click(text) from public, anon, authenticated;
+grant execute on function public.record_link_click(text) to service_role;
+
 create or replace function public.workspace_role(target uuid)
 returns text
 language sql stable security definer set search_path = public
@@ -607,19 +655,21 @@ alter table public.post_history enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.bio_pages enable row level security;
 alter table public.data_deletion_requests enable row level security;
+alter table public.short_links enable row level security;
+alter table public.link_click_days enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages, public.data_deletion_requests from anon, authenticated;
+  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages, public.data_deletion_requests to service_role;
+  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

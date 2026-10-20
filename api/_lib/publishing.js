@@ -197,6 +197,96 @@ function withTracking(post, platform, content, options) {
   return { content: { ...content, text: tagLinks(content.text, { source: platform, campaign }) }, options: { ...options, ...(pinterest ? { pinterest } : {}) } };
 }
 
+// --- Click-tracking short links ---
+// With the "count clicks" option on, links in a post are swapped for APP_URL/l/<code> when it
+// publishes: one code per network and destination, so clicks show up per network. Instagram
+// captions can't hold clickable links, so they're left alone there.
+const SHORT_LINK_SKIP = new Set(['instagram']);
+const LINK_PATTERN = /https?:\/\/[^\s<>"')\]]+/g;
+
+function shortLinkBase() {
+  const base = (process.env.APP_URL || '').replace(/\/+$/, '');
+  return /^https:\/\//.test(base) ? base : '';
+}
+
+function newLinkCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  return Array.from(crypto.randomBytes(7), (byte) => alphabet[byte % alphabet.length]).join('');
+}
+
+async function shortLinkFor(job, url) {
+  const existing = await databaseRequest(`short_links?job_id=eq.${job.id}&url=eq.${encodeURIComponent(url)}&select=code`);
+  if (existing?.[0]) return existing[0].code;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const code = newLinkCode();
+    try {
+      await databaseRequest('short_links', {
+        method: 'POST', headers: { prefer: 'return=minimal' },
+        body: JSON.stringify({ code, workspace_id: job.workspace_id, client_id: job.client_id, post_id: job.post_id, job_id: job.id, platform: job.platform, url })
+      });
+      return code;
+    } catch (error) {
+      if (error.status !== 409) throw error;
+      // A retry may have just created this job's link; otherwise the code collided.
+      const again = await databaseRequest(`short_links?job_id=eq.${job.id}&url=eq.${encodeURIComponent(url)}&select=code`);
+      if (again?.[0]) return again[0].code;
+    }
+  }
+  throw new Error('Could not create a short link.');
+}
+
+async function shortenText(job, text) {
+  const base = shortLinkBase();
+  if (!base) return text;
+  const matches = [...new Set(String(text).match(LINK_PATTERN) || [])];
+  let result = String(text);
+  for (const match of matches) {
+    const trailing = /[.,!?;:]+$/.exec(match)?.[0] || '';
+    const url = trailing ? match.slice(0, -trailing.length) : match;
+    if (url.startsWith(`${base}/l/`)) continue;
+    const code = await shortLinkFor(job, url);
+    result = result.split(match).join(`${base}/l/${code}${trailing}`);
+  }
+  return result;
+}
+
+async function withShortLinks(job, content, options) {
+  if (!options.shortLinks || SHORT_LINK_SKIP.has(job.platform) || !shortLinkBase()) return { content, options };
+  try {
+    const text = await shortenText(job, content.text);
+    let pinterest = options.pinterest;
+    if (pinterest?.link && /^https?:\/\//.test(pinterest.link)) pinterest = { ...pinterest, link: `${shortLinkBase()}/l/${await shortLinkFor(job, pinterest.link)}` };
+    return { content: { ...content, text }, options: { ...options, ...(pinterest ? { pinterest } : {}) } };
+  } catch (error) {
+    // Counting clicks is never worth a missed post: publish with the original links instead.
+    console.error('Short links unavailable, publishing original links:', error.message);
+    return { content, options };
+  }
+}
+
+// Clicks on short links over the last 30 days, for the dashboard and Analytics.
+async function linkClickSummary(workspaceId) {
+  const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+  const days = await databaseRequest(`link_click_days?workspace_id=eq.${workspaceId}&day=gte.${since}&select=code,day,clicks&limit=5000`) || [];
+  const byCode = {};
+  let total = 0;
+  for (const row of days) { byCode[row.code] = (byCode[row.code] || 0) + row.clicks; total += row.clicks; }
+  const codes = Object.keys(byCode);
+  const links = [];
+  for (let index = 0; index < codes.length; index += 150) {
+    links.push(...(await databaseRequest(`short_links?workspace_id=eq.${workspaceId}&code=in.(${codes.slice(index, index + 150).join(',')})&select=code,url,platform,client_id,post_id`) || []));
+  }
+  const byPlatform = {};
+  for (const link of links) byPlatform[link.platform] = (byPlatform[link.platform] || 0) + byCode[link.code];
+  const top = links.sort((a, b) => byCode[b.code] - byCode[a.code]).slice(0, 10);
+  const postIds = [...new Set(top.map((link) => link.post_id).filter(Boolean))];
+  const titles = postIds.length ? Object.fromEntries((await databaseRequest(`scheduled_posts?id=in.(${postIds.join(',')})&select=id,title`) || []).map((post) => [post.id, post.title])) : {};
+  return {
+    total, byPlatform,
+    top: top.map((link) => ({ code: link.code, url: link.url, platform: link.platform, clientId: link.client_id, postId: link.post_id, postTitle: titles[link.post_id] || '', clicks: byCode[link.code] }))
+  };
+}
+
 function commentableFor(provider, platform) {
   if (provider === 'manual') return false;
   return provider === 'direct' ? COMMENTABLE.has(platform) : COMMENT_PLATFORMS.has(platform);
@@ -313,12 +403,14 @@ async function runJob(job, encryptionKey) {
       await patchJob({ status: 'canceled', ...unlock });
       return 'canceled';
     }
-    const { content, options: postOptions } = withTracking(post, job.platform, contentFor(post, job.platform), post.options || {});
+    const tracked = withTracking(post, job.platform, contentFor(post, job.platform), post.options || {});
+    const { content, options: postOptions } = await withShortLinks(job, tracked.content, tracked.options);
     const markSent = () => patchJob({ sent_at: nowIso() });
     const saveStage = async (patch) => { stage = { ...stage, ...patch }; await patchJob({ stage }); };
     let outcome;
     if (job.provider === 'manual') {
-      await patchJob({ status: 'manual_due', ...unlock });
+      // Keep the copy with its tracked links so "Copy text" pastes those.
+      await patchJob({ status: 'manual_due', stage: { ...stage, text: content.text }, ...unlock });
       await notifyManualDue(job, post, content);
       await record('reminded');
       return 'manual';
@@ -485,9 +577,9 @@ async function postJobComment(job, text, encryptionKey) {
 
 // --- Post management ---
 
-const JOB_FIELDS = 'id,platform,provider,status,attempts,run_at,external_url,last_error,error_kind,published_at';
+const JOB_FIELDS = 'id,platform,provider,status,attempts,run_at,external_url,last_error,error_kind,published_at,stage';
 
-function publicPost(row) {
+function publicPost(row, clicks = null) {
   return {
     id: row.id, clientId: row.client_id, title: row.title, status: row.status, source: row.source,
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
@@ -497,7 +589,9 @@ function publicPost(row) {
     options: row.options || {},
     jobs: (row.publish_jobs || []).map((job) => ({
       id: job.id, platform: job.platform, provider: job.provider, status: job.status, attempts: job.attempts,
-      runAt: job.run_at, url: job.external_url, error: job.last_error, errorKind: job.error_kind, publishedAt: job.published_at
+      runAt: job.run_at, url: job.external_url, error: job.last_error, errorKind: job.error_kind, publishedAt: job.published_at,
+      copyText: job.provider === 'manual' && typeof job.stage?.text === 'string' ? job.stage.text : undefined,
+      clicks: clicks?.[job.id]
     }))
   };
 }
@@ -510,7 +604,19 @@ async function listPosts(workspaceId, { from, to }) {
   const pending = new URLSearchParams({ select, workspace_id: `eq.${workspaceId}`, status: 'eq.pending_approval', order: 'scheduled_for.asc', limit: '200' });
   const [inRange, waiting] = await Promise.all([databaseRequest(`scheduled_posts?${range}`), databaseRequest(`scheduled_posts?${pending}`)]);
   const seen = new Set();
-  return [...(inRange || []), ...(waiting || [])].filter((row) => !seen.has(row.id) && seen.add(row.id)).map(publicPost);
+  const rows = [...(inRange || []), ...(waiting || [])].filter((row) => !seen.has(row.id) && seen.add(row.id));
+  return attachClicks(rows);
+}
+
+// Click counts from short links, per job.
+async function attachClicks(rows) {
+  const jobIds = rows.flatMap((row) => (row.publish_jobs || []).filter((job) => job.status === 'published' || job.provider === 'manual').map((job) => job.id));
+  const clicks = {};
+  for (let index = 0; index < jobIds.length; index += 150) {
+    const links = await databaseRequest(`short_links?job_id=in.(${jobIds.slice(index, index + 150).join(',')})&select=job_id,clicks`).catch(() => []) || [];
+    for (const link of links) clicks[link.job_id] = (clicks[link.job_id] || 0) + link.clicks;
+  }
+  return rows.map((row) => publicPost(row, clicks));
 }
 
 async function getPost(workspaceId, postId) {
@@ -727,8 +833,9 @@ async function overviewData(workspaceId, timeZone) {
     databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=client_id,data`),
     databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics`),
     listConnections(workspaceId),
-    lastWorkerRun('publish')
+    lastWorkerRun('publish'),
   ]);
+  const clicks = await linkClickSummary(workspaceId).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
   const rows = new Map();
   for (const report of reports || []) {
     for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { clientId: report.client_id, platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements, audience: row.metrics.reach || row.metrics.views || null });
@@ -761,6 +868,7 @@ async function overviewData(workspaceId, timeZone) {
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
+    clicks,
     engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
@@ -947,5 +1055,5 @@ module.exports = {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
 };

@@ -32,6 +32,7 @@ function serviceProviders() {
   if (process.env.RESEND_API_KEY) list.push(['Resend', 'sending notification, digest, and report emails']);
   if (process.env.ANTHROPIC_API_KEY) list.push(['Anthropic', 'AI features you choose to use, such as caption drafts, image descriptions, proofreading, and trend summaries. Only the text, images, and brand notes needed for that request are sent']);
   if (process.env.VAPID_PUBLIC_KEY) list.push(['Your browser’s push service (for example Apple, Google, or Mozilla)', 'delivering push notifications to devices where you turned them on']);
+  if (process.env.UNSPLASH_ACCESS_KEY) list.push(['Unsplash', 'stock photo search in the Publishing Studio. Your search words are sent to Unsplash, and photos load from Unsplash’s servers, which shares your IP address with them']);
   if (process.env.AYRSHARE_API_KEY) list.push(['Ayrshare', 'publishing to networks that SignalDesk doesn’t connect to directly, when you link them through Ayrshare']);
   return list;
 }
@@ -102,6 +103,7 @@ function privacyPage() {
 <li>For Facebook and Instagram, your app-specific Facebook user ID, so we can delete your connections if you remove SignalDesk from your Facebook settings.</li>
 </ul>
 <h3>Information from the networks about your posts</h3>
+<p>If you turn on click counting, links in your posts are replaced with short SignalDesk links. When someone opens one, we add one to that link’s click count for the day and send them on. We don’t store who clicked, their IP address, or any cookie.</p>
 <p>For posts published through SignalDesk, we store the post’s ID and link, and we read performance numbers such as reach, impressions, likes, comments, shares, saves, and clicks. If you use the comment inbox, we read the comments on those posts, including the commenter’s name or username as the network provides it, and send the replies you write.</p>
 <h3>Client reviewers</h3>
 <p>If you share a review link, the person reviewing can enter their name, approve posts, and leave comments. We store what they enter.</p>

@@ -21,6 +21,8 @@ const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
 const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
+const { systemStatus } = require('./_lib/health');
+const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
 const { checkLink } = require('./_lib/core');
 
 const CLIENT_ACTIONS = new Set([
@@ -35,13 +37,15 @@ const WORKSPACE_ACTIONS = new Set([
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
-  'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export'
+  'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
+  'system-status', 'stock-search', 'stock-use'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
-  'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe'
+  'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
+  'stock-search', 'stock-use'
 ]);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 const AI_DAILY_LIMIT = 200;
@@ -63,7 +67,7 @@ function allowedOrigin(req) {
 function integrations() {
   return {
     meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), pinterest: providerConfigured('pinterest'),
-    ayrshare: ayrshareConfigured()
+    ayrshare: ayrshareConfigured(), stock: stockConfigured()
   };
 }
 
@@ -187,7 +191,7 @@ async function trendFocus(workspaceId, body) {
   return { key: 'all', label: 'Trends relevant to all of the clients below', clients };
 }
 
-async function handleWorkspaceAction(action, body, { user, membership, encryptionKey }, res) {
+async function handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin = '' }, res) {
   const workspaceId = membership.workspace_id;
   const scope = `workspace_id=eq.${workspaceId}`;
 
@@ -417,6 +421,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     });
     return send(res, 200, { slug, enabled: body.enabled !== false });
   }
+
+  if (action === 'system-status') {
+    const state = await getWorkspaceState(workspaceId);
+    return send(res, 200, await systemStatus({ workspaceId, origin, clients: state.clients || [] }));
+  }
+
+  if (action === 'stock-search') return send(res, 200, await searchPhotos({ query: body.query, page: body.page, orientation: body.orientation }));
+  if (action === 'stock-use') return send(res, 200, { photo: await usePhoto(body.id) });
 
   if (action === 'push-config') {
     return send(res, 200, { publicKey: pushConfigured() ? process.env.VAPID_PUBLIC_KEY : null });
@@ -720,7 +732,7 @@ module.exports = async function handler(req, res) {
     const membership = await getMembership(user.id);
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
     if (membership.role !== 'admin' && !USER_ACTIONS.has(action)) return send(res, 403, { error: 'Only workspace admins can do that.' });
-    if (WORKSPACE_ACTIONS.has(action)) return await handleWorkspaceAction(action, body, { user, membership, encryptionKey }, res);
+    if (WORKSPACE_ACTIONS.has(action)) return await handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin: typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '' }, res);
 
     const workspaceId = membership.workspace_id;
     const clientId = body.clientId;

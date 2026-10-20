@@ -279,6 +279,7 @@ function validatePostOptions(options, platforms) {
     if (Object.keys(pin).length) clean.pinterest = pin;
   }
   if (options.utm === true) clean.utm = true;
+  if (options.shortLinks === true) clean.shortLinks = true;
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
     const repeat = Number(options.autoRepost.repeat);
     if (options.autoRepost.every === 'month') {
