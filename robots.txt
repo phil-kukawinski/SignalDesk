@@ -1,0 +1,8 @@
+# Private review links, the API, and the app itself shouldn't be indexed.
+User-agent: *
+Disallow: /api/
+Disallow: /review.html
+Allow: /privacy
+Allow: /terms
+Allow: /data-deletion
+Allow: /b/

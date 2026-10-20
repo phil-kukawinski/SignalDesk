@@ -35,6 +35,10 @@
     {
       "source": "/data-deletion",
       "destination": "/api/legal?page=data-deletion"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/icons/icon-192.png"
     }
   ]
 }
