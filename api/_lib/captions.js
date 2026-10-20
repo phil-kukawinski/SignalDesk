@@ -1,4 +1,5 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
+const { assertPublicUrl, httpError } = require('./core');
 
 // AI help in the Publishing Studio: caption drafts in a client's voice, and image descriptions.
 const CAPTION_MODEL = 'claude-opus-5-5';
@@ -63,7 +64,31 @@ async function draftCaptions({ idea, brandClient, platforms }) {
   return (parse(response, 'draft').variants || []).filter((item) => wanted.has(item.platform) && typeof item.text === 'string' && item.text.trim()).map((item) => ({ platform: item.platform, text: item.text.trim().slice(0, 5000) }));
 }
 
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// Downloads the image here and sends its bytes, since some hosts block the AI's own downloader.
+// Each redirect is checked again so a public link can't lead to a private address.
+async function fetchImage(raw) {
+  let url = raw;
+  for (let hop = 0; hop < 4; hop += 1) {
+    await assertPublicUrl(url, 'Images');
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(15000), headers: { accept: 'image/*', 'user-agent': 'SignalDesk/1.0 (alt text)' } }).catch(() => null);
+    if (!response) throw httpError(400, 'Couldn’t download that image. Check that the link opens in a browser.');
+    if (response.status >= 300 && response.status < 400 && response.headers.get('location')) { url = new URL(response.headers.get('location'), url).href; continue; }
+    if (!response.ok) throw httpError(400, `Couldn’t download that image (HTTP ${response.status}).`);
+    const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!IMAGE_TYPES.has(type)) throw httpError(400, 'Alt text works with JPEG, PNG, GIF, or WebP images.');
+    if (Number(response.headers.get('content-length') || 0) > MAX_IMAGE_BYTES) throw httpError(400, 'That image is over 5 MB. Shrink it first with Prep image.');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > MAX_IMAGE_BYTES) throw httpError(400, 'That image is over 5 MB. Shrink it first with Prep image.');
+    return { type, data: bytes.toString('base64') };
+  }
+  throw httpError(400, 'That image link redirects too many times.');
+}
+
 async function describeImage({ url, context }) {
+  const image = await fetchImage(url);
   const response = await client().beta.messages.create({
     model: CAPTION_MODEL,
     max_tokens: 1000,
@@ -71,7 +96,7 @@ async function describeImage({ url, context }) {
     fallbacks: 'default',
     output_config: { effort: 'low', format: { type: 'json_schema', schema: ALT_SCHEMA } },
     system: 'You write alt text for images in social media posts. Describe what matters in the image plainly and briefly (under 250 characters when possible). Include any important text shown in the image. Don’t start with "Image of" or "Picture of", and don’t add hashtags or marketing language.',
-    messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'url', url } }, { type: 'text', text: context ? `The post this image goes with:\n${context}` : 'Describe this image.' }] }]
+    messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: image.type, data: image.data } }, { type: 'text', text: context ? `The post this image goes with:\n${context}` : 'Describe this image.' }] }]
   });
   return String(parse(response, 'description').altText || '').trim().slice(0, 1000);
 }

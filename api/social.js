@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { APIError } = require('@anthropic-ai/sdk');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
@@ -108,7 +109,19 @@ async function clientName(workspaceId, clientId) {
   return ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === clientId)?.name || 'a client';
 }
 
+// Errors from the AI service carry an HTTP status too, but their raw text isn't meant for people.
+function aiErrorMessage(error) {
+  if (error.status === 429 || error.status === 529 || error.status >= 500) return [503, 'The AI service is busy right now. Try again in a minute.'];
+  if (error.status === 401 || error.status === 403) return [503, 'The AI key on the server isn’t working. Check ANTHROPIC_API_KEY in Vercel.'];
+  return [502, 'The AI couldn’t handle this request. Try different wording or another image.'];
+}
+
 function providerResponseError(error, res) {
+  if (error instanceof APIError) {
+    console.error('AI request failed:', error.status, error.message);
+    const [status, message] = aiErrorMessage(error);
+    return send(res, status, { error: message });
+  }
   if (error.status) return send(res, error.status, error.payload || { error: error.message });
   console.error('Social integration request failed:', error.message);
   return send(res, 500, { error: 'Social integration request failed.' });
