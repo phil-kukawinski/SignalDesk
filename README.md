@@ -162,6 +162,8 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Status and next steps
+App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
+
 Supabase, Vercel, the scheduler, the legal pages, AI features, and push notifications are set up on the live site. Next:
 1. Once Meta, LinkedIn, and Pinterest approve the developer apps, connect your own accounts and schedule test posts to each network, including an image, a carousel, and an Instagram video.
 2. LinkedIn needs the **Sign In with LinkedIn using OpenID Connect** product before it can connect. Company Pages need the Community Management API; set `LINKEDIN_ORGANIZATIONS=true` after it's approved.
