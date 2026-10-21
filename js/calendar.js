@@ -1,6 +1,6 @@
 // Content Calendar: day, week, and month views, best times, and filters.
 const HOUR_HEIGHT=52,EVENT_MINUTES=45,BEST_TIME_MIN_POSTS=10;
-let calView='week',calCursor=startOfDay(new Date()),timelineKey=null,bestTimes={key:null,loading:false,points:[],weeks:0,windows:{},enough:false,source:'starter'};
+let calView=window.matchMedia?.('(max-width: 620px)').matches?'day':'week',calCursor=startOfDay(new Date()),timelineKey=null,bestTimes={key:null,loading:false,points:[],weeks:0,windows:{},enough:false,source:'starter'};
 function startOfDay(date){const day=new Date(date);day.setHours(0,0,0,0);return day;}
 function addDays(date,count){const day=new Date(date);day.setDate(day.getDate()+count);return day;}
 function weekDays(date){const start=addDays(startOfDay(date),-date.getDay());return Array.from({length:7},(_,index)=>addDays(start,index));}

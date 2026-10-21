@@ -361,7 +361,7 @@ label.settings-toggle input{width:18px;height:18px;accent-color:#5b8db8;flex:non
 .brand-days{display:flex;flex-wrap:wrap;gap:4px 12px}
 .auth-form .brand-days .option-toggle,.auth-form label.option-toggle{display:flex;margin:6px 0}
 .auth-form .option-toggle input{width:auto}
-.client-card-actions{display:flex;gap:10px;margin-left:auto}
+.client-card-actions{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 14px}.client-card-actions .secondary-button{padding:6px 10px;font-size:11px;border-radius:999px}
 .brand-swatches{display:flex;align-items:center;gap:6px;margin:-4px 0 10px}
 .brand-swatches i{width:16px;height:16px;border-radius:50%;border:1px solid #0001}
 .brand-swatches small{color:#8a8e9a;font-size:11px;margin-left:4px}
@@ -516,3 +516,13 @@ html[data-theme="dark"] .pv-instagram{background:#000}html[data-theme="dark"] .p
 html[data-theme="dark"] .preview-media{background:#18191a}html[data-theme="dark"] .pv-instagram .preview-media{background:#000}
 .pv-chooser button.has-note::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#d9a441;margin-left:5px;vertical-align:middle}
 .social-preview .preview-media:empty{display:none}.pv-card-text b{color:#1c1e21}.pv-linkedin .pv-card-text b{color:rgba(0,0,0,.9)}html[data-theme="dark"] .pv-card-text b{color:#e4e6eb}
+/* Upcoming list: room for "WED, OCT 28" on one line, and the time beneath it. */
+.post-row{grid-template-columns:86px 31px minmax(0,1fr) auto}.post-time,.post-time b{white-space:nowrap}
+@media(max-width:620px){.post-row{grid-template-columns:76px 28px minmax(0,1fr)}.post-time b{font-size:10px}}
+/* Drawn icons in the sidebar and top bar */
+.nav-icon svg,.notifications-button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.notifications-button svg{width:19px;height:19px;color:#5d6475;display:block}
+button.avatar{border:0;cursor:pointer;padding:0;font:inherit;font-weight:700;font-size:10px}
+.auth-button{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:950px){.workspace-switcher{display:none}}
+@media(max-width:620px){.breadcrumbs{min-width:0;flex:1}.breadcrumbs b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}body.signed-in .auth-button,body:not(.signed-in) #top-avatar{display:none}.top-actions{gap:8px}.search-button span,.search-button kbd{display:none}.auth-button{max-width:92px;padding:8px 9px}.topbar{gap:8px}}
+html[data-theme="dark"] .notifications-button svg{color:#a3a3a3}
