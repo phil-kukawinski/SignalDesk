@@ -94,7 +94,7 @@ function featureChecks(tables) {
       : check('features', 'push', 'Push notifications', 'off', 'Not set up.', 'Run npx web-push generate-vapid-keys and set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.'),
     process.env.UNSPLASH_ACCESS_KEY ? check('features', 'stock', 'Stock photos (Unsplash)', 'ok', 'Search Unsplash from the Publishing Studio.')
       : check('features', 'stock', 'Stock photos (Unsplash)', 'off', 'Not set up.', 'Create a free app at unsplash.com/developers and set UNSPLASH_ACCESS_KEY in Vercel.'),
-    missingLinks ? check('features', 'links', 'Click-tracking short links', 'error', 'The short link tables are missing.', 'Run supabase/schema.sql again in the Supabase SQL editor.')
+    missingLinks ? check('features', 'links', 'Click-tracking short links', 'error', 'The short link tables are missing, so posts use their original links.', 'Copy the latest supabase/schema.sql into a new Supabase SQL Editor query and run it.')
       : shortLinkBase() ? check('features', 'links', 'Click-tracking short links', 'ok', `Links look like ${shortLinkBase()}/l/AbC123.`)
         : check('features', 'links', 'Click-tracking short links', 'error', 'Needs an https APP_URL.', 'Set APP_URL in Vercel.'),
     process.env.LEGAL_CONTACT_EMAIL ? check('features', 'legal', 'Privacy, terms, and data deletion pages', 'ok', `Contact: ${process.env.LEGAL_CONTACT_EMAIL}.`)
@@ -137,7 +137,7 @@ async function systemStatus({ workspaceId, origin, clients = [] }) {
   const tables = await missingTables();
   const config = getConfig();
   const checks = [
-    check('core', 'database', 'Database', tables.length ? 'error' : 'ok', tables.length ? `Missing tables: ${tables.join(', ')}.` : 'Connected, with every table in place.', tables.length ? 'Run supabase/schema.sql again in the Supabase SQL editor. It’s safe to re-run.' : ''),
+    check('core', 'database', 'Database', tables.length ? 'error' : 'ok', tables.length ? `Missing tables: ${tables.join(', ')}.` : 'Connected, with every table in place.', tables.length ? 'Copy the latest supabase/schema.sql from the project into a new query in the Supabase SQL Editor and run it. Re-running an older saved query tab runs the old version. It’s safe to re-run.' : ''),
     check('core', 'secrets', 'Server keys', config.missing.length ? 'error' : 'ok', config.missing.length ? `Missing: ${config.missing.join(', ')}.` : 'Supabase keys and the encryption key are set.', config.missing.length ? 'Add them in Vercel, then redeploy.' : ''),
     ...siteChecks(origin),
     ...await schedulerChecks(),
