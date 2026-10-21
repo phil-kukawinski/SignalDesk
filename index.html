@@ -184,11 +184,20 @@
         </section>
 
         <section class="page" id="view-settings">
-          <div class="page-heading"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Settings</h1><p class="subheading">Workspace preferences and account setup.</p></div></div><div class="settings-grid"><nav class="panel settings-nav" aria-label="Settings sections"><b>Workspace</b><a href="#" class="selected" data-settings-go="general">General</a><a href="#" data-settings-go="team">Team members</a><a href="#" data-settings-go="notifications">Notifications</a><a href="#" data-settings-go="brand">Brand kits</a><a href="#" data-settings-go="accounts">Connected accounts</a><a href="#" data-settings-go="health" class="admin-only">Setup &amp; health</a></nav><div class="panel settings-form" id="settings-general"><h2>Workspace settings</h2><p>Manage how your team uses SignalDesk.</p><label class="field-label">Workspace name</label><input class="field" value="PK Works Studio"><label class="field-label">Default timezone</label><select class="field"><option>Eastern Time (US & Canada)</option><option>Central Time (US & Canada)</option><option>Pacific Time (US & Canada)</option></select><label class="field-label">Default post approval</label><select class="field"><option>Require approval before publishing</option><option>Allow direct scheduling</option></select><label class="settings-toggle"><div><b>Personal mode</b><small>Hide team management when you run SignalDesk on your own. Approvals stay available.</small></div><input type="checkbox" id="personal-mode"></label><div class="settings-toggle"><div><b>Notifications</b><small>Each person chooses their own email timing — immediately, a daily digest, or a weekly wrap-up — from the bell icon.</small></div><button class="secondary-button" type="button" id="settings-notification-prefs">My preferences</button></div><div class="settings-toggle"><div><b>Theme</b><small>Follow your device, or always use light or dark. Saved in this browser.</small></div><select id="theme-select" class="field inline-select" aria-label="Theme"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="settings-toggle"><div><b>Export your data</b><small>Download a full backup (JSON) and a spreadsheet of posts. Sign-in tokens aren’t included.</small></div><button class="secondary-button" type="button" id="export-data">Export</button></div><button class="primary-button" id="save-settings">Save changes</button></div></div>
+          <div class="page-heading"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Settings</h1><p class="subheading">Workspace preferences and account setup.</p></div></div><div class="settings-grid"><nav class="panel settings-nav" aria-label="Settings sections"><b>Workspace</b><a href="#" class="selected" data-settings-go="general">General</a><a href="#" data-settings-go="team">Team members</a><a href="#" data-settings-go="notifications">Notifications</a><a href="#" data-settings-go="brand">Brand kits</a><a href="#" data-settings-go="accounts">Connected accounts</a><a href="#" data-settings-go="health" class="admin-only">Setup &amp; health</a><a href="#" data-settings-go="account">Your account</a><a href="#" data-settings-go="beta" hidden>Beta invites</a></nav><div class="panel settings-form" id="settings-general"><h2>Workspace settings</h2><p>Manage how your team uses SignalDesk.</p><label class="field-label">Workspace name</label><input class="field" value="PK Works Studio"><label class="field-label">Default timezone</label><select class="field"><option>Eastern Time (US & Canada)</option><option>Central Time (US & Canada)</option><option>Pacific Time (US & Canada)</option></select><label class="field-label">Default post approval</label><select class="field"><option>Require approval before publishing</option><option>Allow direct scheduling</option></select><label class="settings-toggle"><div><b>Personal mode</b><small>Hide team management when you run SignalDesk on your own. Approvals stay available.</small></div><input type="checkbox" id="personal-mode"></label><div class="settings-toggle"><div><b>Notifications</b><small>Each person chooses their own email timing — immediately, a daily digest, or a weekly wrap-up — from the bell icon.</small></div><button class="secondary-button" type="button" id="settings-notification-prefs">My preferences</button></div><div class="settings-toggle"><div><b>Theme</b><small>Follow your device, or always use light or dark. Saved in this browser.</small></div><select id="theme-select" class="field inline-select" aria-label="Theme"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="settings-toggle"><div><b>Export your data</b><small>Download a full backup (JSON) and a spreadsheet of posts. Sign-in tokens aren’t included.</small></div><button class="secondary-button" type="button" id="export-data">Export</button></div><button class="primary-button" id="save-settings">Save changes</button></div></div>
 <div class="panel team-panel" id="team-panel"><div class="panel-header"><div><h2>Team members</h2><p>Admins manage users, clients, accounts, and settings. Users can use the Command Center, Content Library, and Publishing Studio, and their posts need admin approval.</p></div></div>
 <div id="team-list" class="team-list"></div>
 <form class="invite-form" id="invite-form"><input id="invite-email" class="field" type="email" placeholder="teammate@example.com" required aria-label="Email address"><select id="invite-role" class="field" aria-label="Role"><option value="user">User</option><option value="admin">Admin</option></select><button class="primary-button" type="submit">Invite</button></form>
 <p class="option-hint">Invited people join this workspace when they create a SignalDesk account with that email and confirm it.</p></div>
+        <div class="panel beta-panel" id="beta-panel" hidden><div class="panel-header"><div><h2>Beta invites</h2><p>Only platform owners see this. New people need an invite code to create a workspace; teammates you invite to a workspace don’t.</p></div><label class="option-toggle beta-open"><input type="checkbox" id="beta-invite-only" checked> Invite-only sign-ups</label></div>
+          <form class="beta-form" id="beta-form"><input class="field" id="beta-email" type="email" maxlength="320" placeholder="Email to send it to (optional)" aria-label="Email to send the invite to"><input class="field" id="beta-label" maxlength="80" placeholder="Note, e.g. Harbor Coffee" aria-label="Note"><select class="field" id="beta-uses" aria-label="Uses"><option value="1">1 person</option><option value="5">5 people</option><option value="25">25 people</option></select><select class="field" id="beta-days" aria-label="Expires"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select><button class="primary-button" type="submit">Create invite</button></form>
+          <p class="autopilot-status" id="beta-status" role="status"></p>
+          <div class="table-scroll"><table class="top-posts-table beta-table"><thead><tr><th>Code</th><th>For</th><th>Used</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody id="beta-list"></tbody></table></div>
+          <details class="beta-errors"><summary>Server errors in the last 24 hours <span id="beta-error-count"></span></summary><ul id="beta-errors"></ul></details>
+        </div>
+        <div class="panel account-panel" id="account-panel" hidden><div class="panel-header"><div><h2>Your account</h2><p id="account-email"></p></div></div>
+          <div class="settings-toggle account-danger"><div><b>Delete my account</b><small id="account-delete-detail">Removes your sign-in and your data. This can’t be undone.</small></div><button class="secondary-button danger-button" type="button" id="account-delete">Delete account…</button></div>
+        </div>
         <div class="panel health-panel" id="health-panel" hidden><div class="panel-header"><div><h2>Setup &amp; health</h2><p id="health-summary">Checks what’s configured, whether the scheduler is running, and what failed recently.</p></div><button class="secondary-button" type="button" id="health-refresh">↻ Check again</button></div><div class="health-body" id="health-body"></div></div>
         </section>
         <footer class="app-footer"><span>SignalDesk</span><span class="legal-links"><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a></span><span>Sample data · No live publishing enabled</span></footer>
@@ -221,9 +230,11 @@
     <form class="auth-form" id="brand-form">
       <h2 id="brand-title">Brand kit</h2>
       <p>Guidelines the checklist and AI proofreading use for this client, plus its posting queue.</p>
+      <div class="brand-site"><label for="brand-website">Website</label><div class="brand-site-row"><input id="brand-website" class="field" type="url" maxlength="300" placeholder="https://theirsite.com" autocomplete="off"><button class="secondary-button" type="button" id="brand-fill-site">✦ Fill from website</button></div><p class="option-hint" id="brand-fill-status">SignalDesk reads their homepage and About page, then drafts the fields below for you to review. Nothing is saved until you select Save.</p></div>
       <label for="brand-desc">About the client</label><textarea id="brand-desc" class="field option-textarea" maxlength="400"></textarea>
       <label for="brand-voice">Brand voice</label><textarea id="brand-voice" class="field option-textarea" maxlength="1500" placeholder="e.g. Warm, practical, never salesy. Speak to teachers as peers."></textarea>
-      <div class="brand-grid"><div><label for="brand-hashtags">Always include</label><input id="brand-hashtags" class="field" placeholder="#brightschoolkits"></div><div><label class="field-label" for="brand-people">Instagram accounts you often tag</label><input id="brand-people" class="field" placeholder="partnername, photographer.handle" autocomplete="off"><p class="option-hint">Shown first when tagging or adding collaborators for this client.</p><label for="brand-banned">Words to avoid</label><input id="brand-banned" class="field" placeholder="cheap, guarantee"></div></div>
+      <div class="brand-grid"><div><label for="brand-hashtags">Always include</label><input id="brand-hashtags" class="field" placeholder="#brightschoolkits"></div><div><label for="brand-banned">Words to avoid</label><input id="brand-banned" class="field" placeholder="cheap, guarantee"></div></div>
+      <label for="brand-people">Instagram accounts you often tag</label><input id="brand-people" class="field" placeholder="partnername, photographer.handle" autocomplete="off"><p class="option-hint">Shown first when tagging or adding collaborators for this client.</p>
       <label for="brand-watch">Watch for mentions of</label><input id="brand-watch" class="field" placeholder="Brand name, product names, competitors"><p class="option-hint">Trend scans for this client also look for recent posts and coverage mentioning these.</p>
       <div class="brand-grid"><div><label>Brand colors</label><div class="brand-colors"><input type="color" id="brand-color-1" aria-label="Primary color"><input type="color" id="brand-color-2" aria-label="Secondary color"></div></div><div><label for="brand-logo">Logo</label><div class="brand-logo-row"><input id="brand-logo" class="field" placeholder="https://… or upload"><button type="button" class="secondary-button" id="brand-logo-upload">Upload</button><input type="file" id="brand-logo-file" accept="image/*" hidden></div></div></div>
       <label class="option-toggle"><input type="checkbox" id="brand-utm"> Add UTM tags to new posts by default</label>
@@ -259,6 +270,34 @@
       <div id="caption-results" class="caption-results"></div>
       <p class="option-hint">Drafts follow the brand kit but can still get things wrong. Check facts, prices, and dates before posting.</p>
     </div>
+  </dialog>
+  <dialog id="client-dialog" class="auth-dialog" aria-labelledby="client-dialog-title">
+    <form class="auth-form" id="client-form" novalidate>
+      <h2 id="client-dialog-title">Add a client</h2>
+      <p class="option-hint">Each client gets its own brand kit, connected accounts, calendar filter, and reports.</p>
+      <label class="field-label" for="client-name">Client name</label>
+      <input id="client-name" class="field" maxlength="60" required placeholder="e.g. Harbor Coffee Co." autocomplete="off">
+      <label class="field-label" for="client-website">Website <small>(optional)</small></label>
+      <input id="client-website" class="field" type="url" maxlength="300" placeholder="https://harborcoffee.com" autocomplete="off">
+      <label class="field-label" for="client-desc">What they do <small>(optional)</small></label>
+      <input id="client-desc" class="field" maxlength="160" placeholder="Small-batch coffee roaster in Portland" autocomplete="off">
+      <span class="field-label">Color</span>
+      <div class="client-colors" id="client-colors" role="radiogroup" aria-label="Client color"></div>
+      <label class="option-toggle"><input type="checkbox" id="client-fill" checked> Fill in the brand kit from their website next</label>
+      <p class="auth-message" id="client-message" role="status"></p>
+      <div class="auth-actions"><button class="primary-button" type="submit">Add client</button><button class="secondary-button" type="button" id="client-cancel">Cancel</button></div>
+    </form>
+  </dialog>
+  <dialog id="delete-dialog" class="auth-dialog" aria-labelledby="delete-title">
+    <form class="auth-form" id="delete-form" novalidate>
+      <h2 id="delete-title">Delete your account?</h2>
+      <p id="delete-detail">Loading what will be removed…</p>
+      <p class="option-hint">Posts already published on social networks stay there. Export your data first from Settings if you want a copy.</p>
+      <label class="field-label" for="delete-confirm">Type DELETE to confirm</label>
+      <input class="field" id="delete-confirm" autocomplete="off" spellcheck="false">
+      <p class="auth-message" id="delete-message" role="status"></p>
+      <div class="auth-actions"><button class="primary-button danger-fill" type="submit" id="delete-go" disabled>Delete everything</button><button class="secondary-button" type="button" id="delete-cancel">Cancel</button></div>
+    </form>
   </dialog>
   <dialog id="scheduled-dialog" class="auth-dialog scheduled-dialog" aria-labelledby="scheduled-title">
     <div class="auth-form">
@@ -329,22 +368,37 @@
       <div class="auth-actions"><button class="primary-button" type="submit">Connect</button><button class="secondary-button" type="button" id="connect-cancel">Cancel</button></div>
     </form>
   </dialog>
-  <dialog id="auth-dialog" class="auth-dialog">
-    <form class="auth-form" method="dialog">
-      <h2>Connect your account</h2>
-      <p id="auth-description">Configure Supabase to sync this workspace across devices. Without it, changes are saved in this browser.</p>
-      <label for="auth-email">Email</label>
-      <input id="auth-email" type="email" autocomplete="email" required>
-      <label for="auth-password">Password</label>
-      <input id="auth-password" type="password" autocomplete="current-password" minlength="8" required>
-      <p class="auth-legal">By creating an account, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+  <dialog id="auth-dialog" class="auth-dialog auth-panel" aria-labelledby="auth-title">
+    <form class="auth-form" id="auth-form" novalidate>
+      <button class="icon-button auth-x" id="auth-close" type="button" aria-label="Close">×</button>
+      <div class="auth-brand"><span class="auth-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="m12 14 5.5 4M23 18l5.5-5.5M23 22l5.5 5.5M17.5 22l-5.5 5.5"/><circle cx="9.5" cy="11.5" r="3.5"/><circle cx="31" cy="9.5" r="3.5"/><circle cx="31" cy="30.5" r="3.5"/><circle cx="9.5" cy="30" r="3.5"/><circle class="signal-hub" cx="20" cy="20" r="4.5"/></svg></span><b>SignalDesk</b></div>
+      <div class="auth-tabs" role="tablist" id="auth-tabs"><button type="button" role="tab" data-auth-mode="signin" class="active">Sign in</button><button type="button" role="tab" data-auth-mode="signup">Create account</button></div>
+      <h2 id="auth-title">Welcome back</h2>
+      <p id="auth-description">Sign in to plan, approve, and publish for your clients.</p>
+      <div class="auth-fields" id="auth-fields">
+        <label for="auth-email" data-auth-show="signin signup reset">Email</label>
+        <input id="auth-email" type="email" autocomplete="email" required data-auth-show="signin signup reset">
+        <label for="auth-password" data-auth-show="signin signup newpass"><span id="auth-password-label">Password</span></label>
+        <input id="auth-password" type="password" autocomplete="current-password" minlength="8" required data-auth-show="signin signup newpass">
+        <button class="text-button auth-forgot" type="button" id="auth-forgot" data-auth-show="signin">Forgot your password?</button>
+        <label for="auth-invite" data-auth-show="signup">Invite code</label>
+        <input id="auth-invite" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="e.g. 7KQ2MX4P" data-auth-show="signup">
+        <p class="option-hint" data-auth-show="signup">SignalDesk is invite-only during the beta. Joining a teammate’s workspace? Use the email they invited and leave this blank.</p>
+        <div id="auth-captcha" data-auth-show="signup" hidden></div>
+      </div>
+      <p class="auth-legal" data-auth-show="signup">By creating an account, you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       <p id="auth-message" class="auth-message" role="status"></p>
       <div class="auth-actions">
-        <button class="primary-button" id="auth-sign-in" type="button">Sign in</button>
-        <button class="secondary-button" id="auth-sign-up" type="button">Create account</button>
-        <button class="secondary-button" id="auth-sign-out" type="button" hidden>Sign out</button>
-        <button class="icon-button" id="auth-close" type="button" title="Close">×</button>
+        <button class="primary-button" id="auth-sign-in" type="submit" data-auth-show="signin">Sign in</button>
+        <button class="primary-button" id="auth-sign-up" type="submit" data-auth-show="signup">Create account</button>
+        <button class="primary-button" id="auth-reset" type="submit" data-auth-show="reset">Email me a reset link</button>
+        <button class="primary-button" id="auth-new-password" type="submit" data-auth-show="newpass">Save new password</button>
+        <button class="primary-button" id="auth-redeem" type="submit" data-auth-show="invite">Continue</button>
+        <button class="secondary-button" id="auth-back" type="button" data-auth-show="reset">Back to sign in</button>
+        <button class="secondary-button" id="auth-sign-out" type="button" data-auth-show="account invite" hidden>Sign out</button>
       </div>
+      <div class="auth-account" data-auth-show="account"><p id="auth-account-email"></p><button class="text-button" type="button" id="auth-account-settings">Account settings and deletion</button></div>
+      <div class="auth-invite-step" data-auth-show="invite"><label for="auth-invite-code">Invite code</label><input id="auth-invite-code" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="e.g. 7KQ2MX4P"></div>
     </form>
   </dialog>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
@@ -374,6 +428,9 @@
   <script src="js/people.js"></script>
   <script src="js/stock.js"></script>
   <script src="js/health.js"></script>
+  <script src="js/onboarding.js"></script>
+  <script src="js/beta.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

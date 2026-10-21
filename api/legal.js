@@ -99,6 +99,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).send(html);
   } catch (error) {
     console.error('Legal page failed:', error.message);
+    require('./_lib/platform').recordAppError('api/legal', error);
     return send(res, 500, { error: 'Something went wrong. Please try again.' });
   }
 };

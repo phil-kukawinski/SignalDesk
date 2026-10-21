@@ -566,7 +566,51 @@ revoke all on function public.workspace_role(uuid) from public;
 grant execute on function public.workspace_role(uuid) to authenticated;
 
 -- Called by the app after sign-in: joins a pending invite (verified email only) or creates a new workspace.
-create or replace function public.ensure_workspace()
+-- Invite-only beta: codes that let a new person create their own workspace. Teammates invited to an
+-- existing workspace don't need one. Only the server (service role) reads or writes these tables.
+create table if not exists public.beta_invites (
+  code text primary key check (code ~ '^[A-Z0-9]{6,20}$'),
+  label text,
+  max_uses integer not null default 1 check (max_uses between 1 and 1000),
+  uses integer not null default 0,
+  created_by_email text,
+  sent_to text,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.beta_redemptions (
+  code text not null references public.beta_invites (code) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  email text,
+  redeemed_at timestamptz not null default now(),
+  primary key (code, user_id)
+);
+-- Platform switches. invite_only defaults to on; set it to false to open sign-ups.
+create table if not exists public.app_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+insert into public.app_settings (key, value) values ('invite_only', 'true'::jsonb) on conflict (key) do nothing;
+-- Server errors and repeated failures, for the platform owner. Same message within an hour is counted, not duplicated.
+create table if not exists public.app_errors (
+  id bigint generated always as identity primary key,
+  source text not null,
+  message text not null,
+  workspace_id uuid,
+  count integer not null default 1,
+  first_seen timestamptz not null default now(),
+  last_seen timestamptz not null default now(),
+  alerted_at timestamptz
+);
+create index if not exists app_errors_recent_idx on public.app_errors (last_seen desc);
+
+-- Gets or creates the signed-in person's workspace. New people join a workspace they were invited
+-- to; otherwise, while sign-ups are invite-only, they need a valid invite code (passed in, or
+-- saved on their account at sign-up) to create their own.
+drop function if exists public.ensure_workspace();
+create or replace function public.ensure_workspace(p_invite text default null)
 returns table (workspace_id uuid, role text, workspace_name text)
 language plpgsql security definer set search_path = public
 as $$
@@ -575,12 +619,16 @@ declare
   uid uuid := auth.uid();
   user_email text;
   confirmed boolean;
+  meta_code text;
   ws uuid;
   member_role text;
   invite record;
+  code_used text;
+  invite_only boolean;
 begin
   if uid is null then raise exception 'Not signed in'; end if;
-  select lower(coalesce(u.email, '')), u.email_confirmed_at is not null into user_email, confirmed from auth.users u where u.id = uid;
+  select lower(coalesce(u.email, '')), u.email_confirmed_at is not null, u.raw_user_meta_data->>'invite_code'
+    into user_email, confirmed, meta_code from auth.users u where u.id = uid;
   select m.workspace_id, m.role into ws, member_role from public.workspace_members m where m.user_id = uid;
   if ws is null and confirmed then
     select i.* into invite from public.workspace_invites i where i.email = user_email order by i.created_at limit 1;
@@ -596,6 +644,20 @@ begin
     end if;
   end if;
   if ws is null then
+    select coalesce((select a.value::text = 'true' from public.app_settings a where a.key = 'invite_only'), true) into invite_only;
+    if invite_only then
+      code_used := upper(regexp_replace(coalesce(nullif(p_invite, ''), meta_code, ''), '[^A-Za-z0-9]', '', 'g'));
+      if code_used = '' then
+        raise exception 'SignalDesk is invite-only for now. Enter your invite code to create a workspace.' using errcode = 'P0001', hint = 'invite_required';
+      end if;
+      update public.beta_invites b set uses = b.uses + 1
+        where b.code = code_used and b.revoked_at is null and (b.expires_at is null or b.expires_at > now()) and b.uses < b.max_uses
+        returning b.code into code_used;
+      if code_used is null then
+        raise exception 'That invite code isn’t valid. It may be mistyped, used up, or expired.' using errcode = 'P0001', hint = 'invite_invalid';
+      end if;
+      insert into public.beta_redemptions (code, user_id, email) values (code_used, uid, user_email) on conflict do nothing;
+    end if;
     insert into public.workspaces (name, created_by) values ('My workspace', uid) returning id into ws;
     insert into public.workspace_members (workspace_id, user_id, email, role) values (ws, uid, user_email, 'admin');
     member_role := 'admin';
@@ -604,8 +666,8 @@ begin
   return query select ws, member_role, w.name from public.workspaces w where w.id = ws;
 end;
 $$;
-revoke all on function public.ensure_workspace() from public;
-grant execute on function public.ensure_workspace() to authenticated;
+revoke all on function public.ensure_workspace(text) from public;
+grant execute on function public.ensure_workspace(text) to authenticated;
 
 -- Members with the User role can save posts and drafts but cannot change clients, settings, or approvals.
 create or replace function public.guard_workspace_state()
@@ -613,6 +675,13 @@ returns trigger
 language plpgsql security definer set search_path = public
 as $$
 begin
+  -- Beta limits for everyone, admins included: up to 50 clients, and about 2 MB of workspace data.
+  if auth.uid() is not null and jsonb_typeof(new.state -> 'clients') = 'array' and jsonb_array_length(new.state -> 'clients') > 50 then
+    raise exception 'Workspaces can have up to 50 clients during the beta.';
+  end if;
+  if auth.uid() is not null and octet_length(new.state::text) > 2000000 then
+    raise exception 'This workspace has grown past the beta size limit. Remove old saved posts or library items.';
+  end if;
   if auth.uid() is null or public.workspace_role(new.workspace_id) = 'admin' then return new; end if;
   if (new.state -> 'clients') is distinct from (old.state -> 'clients')
     or (new.state -> 'settings') is distinct from (old.state -> 'settings') then
@@ -656,6 +725,10 @@ alter table public.push_subscriptions enable row level security;
 alter table public.bio_pages enable row level security;
 alter table public.data_deletion_requests enable row level security;
 alter table public.short_links enable row level security;
+alter table public.beta_invites enable row level security;
+alter table public.beta_redemptions enable row level security;
+alter table public.app_settings enable row level security;
+alter table public.app_errors enable row level security;
 alter table public.link_click_days enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
@@ -663,13 +736,15 @@ revoke all on public.workspaces, public.workspace_members, public.workspace_invi
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days from anon, authenticated;
+  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
-  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days to service_role;
+  public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;
@@ -729,6 +804,8 @@ grant select, insert, update on public.user_drafts to authenticated;
 insert into storage.buckets (id, name, public)
 values ('social-media', 'social-media', true)
 on conflict (id) do nothing;
+-- Uploads: images and video only, 50 MB each (the composer checks this too, but this can't be skipped).
+update storage.buckets set file_size_limit = 52428800, allowed_mime_types = array['image/*', 'video/*'] where id = 'social-media';
 
 drop policy if exists "Users can upload their social media" on storage.objects;
 create policy "Users can upload their social media"

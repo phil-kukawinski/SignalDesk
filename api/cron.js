@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { send, getConfig, getBearerToken, processDueComments, runAutopilot } = require('./_lib/core');
+const { recordAppError, alertPlatformAdmins } = require('./_lib/platform');
 const { processPublishQueue, maintainConnections, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth, recycleEvergreen } = require('./_lib/publishing');
 const { processEmailDigests, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
@@ -45,10 +46,14 @@ module.exports = async function handler(req, res) {
       await recordWorkerRun('media-cleanup', media);
     }
     const health = await checkWorkerHealth();
+    // Platform owners hear about server errors and widespread failures, at most every 6 hours.
+    const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
+    if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
     return send(res, 200, { publishing, comments, connections, metrics, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
+    await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);
     return send(res, 500, { error: 'Scheduled run failed.' });
   }
 };

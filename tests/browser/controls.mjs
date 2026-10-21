@@ -1,4 +1,5 @@
 export default async ({ send, evaluate, wait, log }) => {
+  await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(4000);
   const views = ['overview', 'inbox', 'approvals', 'settings'];
   for (const view of views) {

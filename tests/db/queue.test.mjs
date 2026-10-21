@@ -11,9 +11,9 @@ const db = new PGlite();
 await db.exec(`
 create role anon; create role authenticated; create role service_role;
 create schema auth; create schema storage;
-create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
+create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb default '{}');
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-create table storage.buckets (id text primary key, name text, public boolean);
+create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
 create table storage.objects (bucket_id text, name text);
 create function storage.foldername(name text) returns text[] language sql as $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'),1)-1] $$;
 `);
@@ -1070,6 +1070,114 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   assert.equal((await q(`select status, last_error from publish_jobs where post_id='${stockPost}'`))[0].status, 'published', JSON.stringify(await q(`select last_error from publish_jobs where post_id='${stockPost}'`)));
   assert.equal(message.url, used.href);
   delete process.env.UNSPLASH_ACCESS_KEY;
+}
+
+// --- Invite-only beta: platform tools, limits, errors, account deletion, brand kit from a website ---
+{
+  process.env.PLATFORM_ADMIN_EMAILS = 'Owner@x.com';
+  process.env.RESEND_API_KEY = 're_test'; process.env.NOTIFY_FROM_EMAIL = 'SignalDesk <hi@signaldesk.test>';
+  const mails = [];
+  networkHandler = (c) => { if (c.url === 'https://api.resend.com/emails') { mails.push(body(c)); return reply({ id: 'm' }); } throw new Error('unexpected ' + c.url); };
+  r = await call({ action: 'platform-status' }, 'user');
+  assert.equal(r.status, 403, 'members who are not platform owners are refused');
+  r = await call({ action: 'platform-status' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.inviteOnly, true);
+  r = await call({ action: 'create-invite', email: 'New.Person@Agency.test', label: 'Agency', maxUses: 3, days: 14 });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  const code = r.payload.code;
+  assert.match(code, /^[A-Z2-9]{8}$/); assert.equal(r.payload.link, `https://signaldesk.test/?invite=${code}`); assert.equal(r.payload.emailed, true);
+  assert.equal(mails[0].to[0], 'new.person@agency.test'); assert.match(mails[0].html, new RegExp(code)); assert.match(mails[0].html, /\?invite=/);
+  r = await call({ action: 'create-invite', email: 'not-an-email' });
+  assert.equal(r.status, 400);
+  r = await call({ action: 'platform-status' });
+  const listed = r.payload.invites.find((invite) => invite.code === code);
+  assert.deepEqual([listed.maxUses, listed.uses, listed.status, listed.label], [3, 0, 'active', 'Agency']);
+  r = await call({ action: 'revoke-invite', code });
+  assert.equal((await call({ action: 'platform-status' })).payload.invites.find((invite) => invite.code === code).status, 'revoked');
+  r = await call({ action: 'set-invite-only', inviteOnly: false });
+  assert.equal(r.payload.inviteOnly, false);
+  assert.equal((await q(`select value::text as v from app_settings where key='invite_only'`))[0].v, 'false');
+  await call({ action: 'set-invite-only', inviteOnly: true });
+  // Errors are recorded once per message per hour, with a count
+  const { recordAppError, alertPlatformAdmins } = require(`${ROOT}/api/_lib/platform.js`);
+  await recordAppError('api/test', new Error('Boom')); await recordAppError('api/test', new Error('Boom')); await recordAppError('api/test', new Error('Other'));
+  const errs = await q(`select message, count from app_errors where source='api/test' order by message`);
+  assert.deepEqual(errs, [{ message: 'Boom', count: 2 }, { message: 'Other', count: 1 }]);
+  mails.length = 0;
+  const alert = await alertPlatformAdmins({});
+  assert.equal(alert.sent, 1, JSON.stringify(alert)); assert.equal(mails[0].to[0], 'owner@x.com'); assert.match(mails[0].html, /Boom/);
+  assert.equal((await alertPlatformAdmins({ lastAlert: new Date().toISOString() })).reason, 'recently alerted');
+  assert.equal((await q(`select count(*)::int as n from app_errors where alerted_at is null and source='api/test'`))[0].n, 0, 'alerted errors are marked');
+  delete process.env.RESEND_API_KEY;
+  // Daily post limit per workspace
+  await db.exec(`insert into scheduled_posts (workspace_id, client_id, title, status, scheduled_for, content, created_by) select '11111111-1111-1111-1111-111111111111', 'pk-works', 'Bulk ' || g, 'scheduled', now() + interval '20 days', '{"text":"x"}', '${ADMIN}' from generate_series(1, 150) g`);
+  networkHandler = () => reply({});
+  r = await call({ action: 'publish', clientId: 'pk-works', text: 'One too many', platforms: [], manual: ['tiktok'], scheduleDate: new Date(Date.now() + 86400000).toISOString() });
+  assert.equal(r.status, 429); assert.match(r.payload.error, /150 posts/);
+  await db.exec(`delete from scheduled_posts where title like 'Bulk %'`);
+  // Team size limit
+  await db.exec(`insert into workspace_invites (workspace_id, email, role) select '11111111-1111-1111-1111-111111111111', 'bulk' || g || '@x.com', 'user' from generate_series(1, 23) g`);
+  r = await call({ action: 'invite', email: 'one.more@x.com', role: 'user' });
+  assert.equal(r.status, 409); assert.match(r.payload.error, /up to 25 people/);
+  await db.exec(`delete from workspace_invites where email like 'bulk%'`);
+  // Brand kit from a website
+  process.env.ANTHROPIC_API_KEY = 'sk-test';
+  let aiPrompt = '';
+  networkHandler = (c) => {
+    if (c.url === 'https://harbor.test/') return new Response(`<html><head><title>Harbor Coffee</title><meta name="description" content="Small-batch coffee"><meta name="theme-color" content="#7a4b2a"><style>:root{--brand-accent:#e7b75f}</style><link rel="icon" href="/fav.png"></head><body><img class="site-logo" src="/logo.png"><nav><a href="/about">About us</a><a href="https://instagram.com/harborcoffee">IG</a><a href="https://www.facebook.com/sharer/sharer.php">share</a></nav><h1>Roasted by the water</h1><p>We roast small batches every morning for neighbors and cafés.</p></body></html>`, { headers: { 'content-type': 'text/html' } });
+    if (c.url === 'https://harbor.test/about') return new Response('<html><body><h1>Our story</h1><p>Started in a garage in 2015 by two friends.</p></body></html>', { headers: { 'content-type': 'text/html' } });
+    if (c.url.startsWith('https://api.anthropic.com/v1/messages')) {
+      aiPrompt = body(c).messages[0].content;
+      return reply({ id: 'm', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: JSON.stringify({ description: 'Small-batch roaster.', voice: 'Warm and neighborly.', audience: 'Coffee lovers nearby', requiredHashtags: ['#HarborCoffee', 'bad tag!'], avoidWords: ['cheapest'], watchTerms: ['Harbor Coffee'], primaryColor: '#7A4B2A', secondaryColor: '#123456', logoUrl: 'https://harbor.test/logo.png', contentPillars: ['Roast days', 'Café partners'] }) }] });
+    }
+    throw new Error('unexpected ' + c.url);
+  };
+  r = await call({ action: 'brand-from-site', clientId: 'pk-works', url: 'harbor.test' }, 'user');
+  assert.equal(r.status, 403, 'brand kits are for admins');
+  r = await call({ action: 'brand-from-site', clientId: 'pk-works', url: 'harbor.test' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  const brand = r.payload.brand;
+  assert.equal(brand.description, 'Small-batch roaster.');
+  assert.match(brand.voice, /^Warm and neighborly\.\n\nAudience: Coffee lovers nearby\n\nRecurring topics: Roast days; Café partners\.$/);
+  assert.equal(brand.requiredHashtags, '#HarborCoffee #badtag');
+  assert.deepEqual(brand.colors, ['#7a4b2a'], 'colors must come from the site; invented ones are dropped');
+  assert.equal(brand.logo, 'https://harbor.test/logo.png');
+  assert.deepEqual(brand.social, { instagram: 'https://instagram.com/harborcoffee' });
+  assert.match(aiPrompt, /Started in a garage/, 'the About page is read too');
+  assert.match(aiPrompt, /#7a4b2a, #e7b75f/);
+  r = await call({ action: 'brand-from-site', clientId: 'pk-works', url: 'http://127.0.0.1/' });
+  assert.equal(r.status, 400);
+  // Account deletion: blocked for the only admin while others remain
+  networkHandler = (c) => {
+    if (c.url.startsWith('https://sb.test/storage/v1/object/list/')) { const prefix = body(c).prefix; return reply(prefix === `${USER}/` ? [{ id: 'f1', name: 'photo.jpg' }] : prefix === `${ADMIN}/` ? [{ id: 'f2', name: 'kit.png' }] : prefix === 'system/instagram/' ? [{ id: 'f3', name: 'other-0.jpg' }] : []); }
+    if (c.url === 'https://sb.test/storage/v1/object/social-media' && c.method === 'DELETE') { deletedFiles.push(...body(c).prefixes); return reply([]); }
+    if (c.url.startsWith('https://sb.test/auth/v1/admin/users/') && c.method === 'DELETE') { deletedUsers.push(c.url.split('/').pop()); return reply({}); }
+    throw new Error('unexpected ' + c.method + ' ' + c.url);
+  };
+  const deletedFiles = [], deletedUsers = [];
+  r = await call({ action: 'account-plan' });
+  assert.match(r.payload.blocked, /only admin/);
+  r = await call({ action: 'delete-account', confirm: 'DELETE' });
+  assert.equal(r.status, 409);
+  r = await call({ action: 'delete-account' }, 'user');
+  assert.equal(r.status, 400, 'needs the typed confirmation');
+  // A member leaves: their membership, files, and sign-in go; the workspace stays
+  r = await call({ action: 'delete-account', confirm: 'DELETE' }, 'user');
+  assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.workspaceDeleted, false);
+  assert.deepEqual(deletedFiles, [`${USER}/photo.jpg`]); assert.deepEqual(deletedUsers, [USER]);
+  assert.equal((await q(`select count(*)::int as n from workspace_members where user_id='${USER}'`))[0].n, 0);
+  assert.equal((await q(`select count(*)::int as n from workspaces where id='11111111-1111-1111-1111-111111111111'`))[0].n, 1);
+  // The last member deletes: the whole workspace and everything in it goes
+  const before = (await q(`select (select count(*) from scheduled_posts where workspace_id='11111111-1111-1111-1111-111111111111')::int as posts, (select count(*) from social_connections where workspace_id='11111111-1111-1111-1111-111111111111')::int as connections`))[0];
+  assert.ok(before.posts > 0 && before.connections > 0, JSON.stringify(before));
+  r = await call({ action: 'account-plan' });
+  assert.deepEqual([r.payload.soleMember, r.payload.blocked], [true, null]);
+  r = await call({ action: 'delete-account', confirm: 'DELETE' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.workspaceDeleted, true);
+  const after = (await q(`select (select count(*) from workspaces)::int as ws, (select count(*) from scheduled_posts)::int as posts, (select count(*) from publish_jobs)::int as jobs, (select count(*) from social_connections)::int as connections, (select count(*) from workspace_state)::int as state, (select count(*) from short_links)::int as links`))[0];
+  assert.deepEqual(after, { ws: 0, posts: 0, jobs: 0, connections: 0, state: 0, links: 0 });
+  assert.ok(deletedFiles.includes(`${ADMIN}/kit.png`)); assert.ok(!deletedFiles.includes('system/instagram/other-0.jpg'), 'other workspaces’ converted images are kept');
+  assert.deepEqual(deletedUsers, [USER, ADMIN]);
 }
 
 console.log('queue tests passed');

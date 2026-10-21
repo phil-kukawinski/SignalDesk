@@ -1,10 +1,5 @@
 // Sign-in and miscellaneous event handlers.
-$('#auth-button')?.addEventListener('click',openAuthDialog);
-$('#auth-close')?.addEventListener('click',()=>$('#auth-dialog').close());
-$('#auth-sign-in')?.addEventListener('click',async()=>{const{error}=await supabaseClient.auth.signInWithPassword({email:$('#auth-email').value,password:$('#auth-password').value});if(error){$('#auth-message').textContent=error.message;return;}$('#auth-dialog').close();await loadWorkspaceState();});
-$('#auth-sign-up')?.addEventListener('click',async()=>{const{data,error}=await supabaseClient.auth.signUp({email:$('#auth-email').value,password:$('#auth-password').value});if(error){$('#auth-message').textContent=error.message;return;}if(!data.session){$('#auth-message').textContent='Check your email to confirm your account, then sign in.';return;}$('#auth-dialog').close();await loadWorkspaceState();});
-$('#auth-sign-out')?.addEventListener('click',async()=>{const{error}=await supabaseClient.auth.signOut();if(error){$('#auth-message').textContent=error.message;return;}location.reload();});
-$('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog'))$('#auth-dialog').close();});
+$('#auth-button')?.addEventListener('click',()=>openAuthDialog());
 $('#accounts-client-select')?.addEventListener('change',()=>refreshSocialAccounts());
 $('#client-select')?.addEventListener('change',()=>{updatePreview();loadComposerAccounts();});
 $('#refresh-social-accounts')?.addEventListener('click',()=>refreshSocialAccounts());
@@ -21,4 +16,3 @@ $('#save-draft')?.addEventListener('click',()=>scheduleWorkspaceSave());
 $('#submit-review')?.addEventListener('click',()=>scheduleWorkspaceSave());
 $('#schedule-post')?.addEventListener('click',()=>scheduleWorkspaceSave());
 $('#approval-table')?.addEventListener('click',event=>{if(event.target.closest('[data-approve],[data-edit]'))scheduleWorkspaceSave();});
-$('#auth-dialog')?.addEventListener('cancel',()=>$('#auth-message').textContent='');

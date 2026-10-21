@@ -151,7 +151,8 @@ ${providers}
 <li><b>Disconnect</b> any social account in SignalDesk under Clients &amp; Accounts, or remove SignalDesk’s access in that network’s settings.</li>
 <li><b>Export</b> your workspace and posts from Settings.</li>
 <li><b>Change or stop</b> notification emails and push notifications from the notification settings.</li>
-<li><b>Access, correct, or delete</b> your information. See <a href="/data-deletion">Data deletion</a> or email ${s.contact}.</li>
+<li><b>Delete your account</b> yourself under Settings → Your account, or see <a href="/data-deletion">Data deletion</a>.</li>
+<li><b>Access or correct</b> your information in the app, or email ${s.contact}.</li>
 </ul>
 <p>Depending on where you live (for example in the EU, UK, or California), you may have additional rights, such as to object to or restrict processing, or to complain to your local data protection authority. We will respond to requests within 30 days and won’t treat you differently for making one.</p>
 
@@ -257,8 +258,9 @@ ${status}
 </ul>
 <p>SignalDesk can’t use the access immediately after you revoke it. To also delete the stored connection details, disconnect the account in SignalDesk or email us.</p>
 
-<h2>Delete everything</h2>
-<p>To delete your SignalDesk account and all its data, including your workspace, posts, uploaded files, connections, and notification settings, email ${s.contact} from the address you signed up with, with the subject <b>“Delete my data.”</b> We’ll confirm, then finish within 30 days. If you’d like a copy first, export it from <b>Settings</b>.</p>
+<h2>Delete your account</h2>
+<p>Sign in, open <b>Settings → Your account</b>, and choose <b>Delete account</b>. It happens right away. If you’re the only member of your workspace, the whole workspace goes with it: clients, brand kits, scheduled posts, connected accounts and their access tokens, notes, links, and uploaded files. If others share the workspace, only your sign-in, drafts, and uploads are removed. If you’d like a copy first, use <b>Settings → Export</b>.</p>
+<p>Can’t sign in? Email ${s.contact} from the address you signed up with, with the subject <b>“Delete my data,”</b> and we’ll do it within 30 days.</p>
 <p>Posts already published on a social network stay there until you delete them on that network.</p>`
   });
 }

@@ -5,9 +5,9 @@ const db = new PGlite();
 const stub = `
 create role anon; create role authenticated; create role service_role;
 create schema auth; create schema storage;
-create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz);
+create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb default '{}');
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-create table storage.buckets (id text primary key, name text, public boolean);
+create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
 create table storage.objects (bucket_id text, name text);
 alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql as $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'),1)-1] $$;
@@ -37,10 +37,39 @@ let [r] = await asUser(A, `select * from ensure_workspace()`); assert.equal(r.wo
 // Invites: confirmed user joins as User; unconfirmed invitee does not join
 await db.exec(`insert into workspace_invites (workspace_id, email, role) values ('${ws.id}','teammate@x.com','user'),('${ws.id}','unconfirmed@x.com','user')`);
 [r] = await asUser(B, `select * from ensure_workspace()`); assert.equal(r.workspace_id, ws.id); assert.equal(r.role, 'user');
-[r] = await asUser(C, `select * from ensure_workspace()`); assert.notEqual(r.workspace_id, ws.id); assert.equal(r.role, 'admin');
+// An unconfirmed invitee doesn't join, and (invite-only) can't make a workspace without a code
+await assert.rejects(asUser(C, `select * from ensure_workspace()`), /invite-only/);
 assert.equal((await q(`select count(*)::int as n from workspace_invites where email='teammate@x.com'`))[0].n, 0);
-// Brand-new user gets their own workspace + state row
-[r] = await asUser(D, `select * from ensure_workspace()`); assert.equal(r.role, 'admin');
+// Invite-only beta: a brand-new person needs a valid code
+await db.exec(`insert into auth.users values ('eeeeeeee-0000-0000-0000-000000000005','meta@x.com',now(),'{"invite_code":"meta-code-1"}'),('ffffffff-0000-0000-0000-000000000006','late@x.com',now(),'{}')`);
+await assert.rejects(asUser(D, `select * from ensure_workspace()`), /invite-only/);
+await assert.rejects(asUser(D, `select * from ensure_workspace('NOPE1234')`), /isn’t valid/);
+await db.exec(`insert into beta_invites (code, max_uses) values ('WELCOME1', 1), ('METACODE1', 5), ('OLDCODE1', 5), ('GONECODE1', 5);
+  update beta_invites set expires_at = now() - interval '1 day' where code = 'OLDCODE1';
+  update beta_invites set revoked_at = now() where code = 'GONECODE1';`);
+// Brand-new user with a code (typed with spaces and lower case) gets their own workspace + state row
+[r] = await asUser(D, `select * from ensure_workspace(' welcome 1 ')`); assert.equal(r.role, 'admin');
+assert.deepEqual((await q(`select uses from beta_invites where code='WELCOME1'`))[0], { uses: 1 });
+assert.equal((await q(`select count(*)::int as n from beta_redemptions where code='WELCOME1'`))[0].n, 1);
+const [again] = await asUser(D, `select * from ensure_workspace()`); assert.equal(again.workspace_id, r.workspace_id, 'returning users keep their workspace without a code');
+// The code saved on the account at sign-up works too
+const [viaMeta] = await asUser('eeeeeeee-0000-0000-0000-000000000005', `select * from ensure_workspace()`); assert.equal(viaMeta.role, 'admin');
+// Used-up, expired, and revoked codes are refused
+await assert.rejects(asUser('ffffffff-0000-0000-0000-000000000006', `select * from ensure_workspace('WELCOME1')`), /isn’t valid/);
+await assert.rejects(asUser('ffffffff-0000-0000-0000-000000000006', `select * from ensure_workspace('OLDCODE1')`), /isn’t valid/);
+await assert.rejects(asUser('ffffffff-0000-0000-0000-000000000006', `select * from ensure_workspace('GONECODE1')`), /isn’t valid/);
+// Opening sign-ups lets anyone create a workspace
+await db.exec(`update app_settings set value = 'false'::jsonb where key = 'invite_only'`);
+const [open] = await asUser('ffffffff-0000-0000-0000-000000000006', `select * from ensure_workspace()`); assert.equal(open.role, 'admin');
+await db.exec(`update app_settings set value = 'true'::jsonb where key = 'invite_only'`);
+// Upload bucket limits
+assert.deepEqual((await q(`select file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id='social-media'`))[0], { size: 52428800, types: ['image/*', 'video/*'] });
+// Client limit applies to admins too
+const manyClients = JSON.stringify(Array.from({ length: 51 }, (_, i) => ({ id: 'c' + i, name: 'C' + i })));
+await assert.rejects(asUser(A, `update workspace_state set state = jsonb_set(state, '{clients}', '${manyClients}'::jsonb) where workspace_id='${ws.id}'`), /up to 50 clients/);
+// Re-running the schema keeps the switch as it was
+await db.exec(schema);
+assert.equal((await q(`select value::text as v from app_settings where key='invite_only'`))[0].v, 'true');
 assert.equal((await q(`select count(*)::int as n from workspace_state where workspace_id='${r.workspace_id}'`))[0].n, 1);
 // Guard trigger: a User can add posts but not change clients/settings or approve
 await asUser(B, `update workspace_state set state = state || '{"savedPosts":[{"id":"p1"}],"approvals":[{"id":"a1","status":"In Review"}]}' where workspace_id='${ws.id}'`);

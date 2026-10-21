@@ -4,6 +4,7 @@ const out = process.env.SHOTS || new URL('.', import.meta.url).pathname;
 const width = Number(process.env.WIDTH || 1440);
 const VIEWS = (process.env.VIEWS || 'overview,calendar,composer,library,inbox,analytics,clients,social-accounts,approvals,settings').split(',');
 export default async ({ send, evaluate, wait, log }) => {
+  await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 700 });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3500);
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close()`);

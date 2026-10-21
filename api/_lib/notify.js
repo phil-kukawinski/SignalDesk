@@ -28,8 +28,8 @@ function withDefaults(row) {
   return { ...DEFAULT_PREFERENCES, ...(row || {}) };
 }
 
-function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', eyebrow = 'SIGNALDESK · PART OF BEACON', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
-  const url = showCta ? appUrl() : '';
+function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK · PART OF BEACON', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
+  const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#1a1f3a;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
     ${section.items.map((item) => `<div style="border:1px solid #e8e0dc;border-radius:10px;padding:12px 14px;margin:0 0 8px">
@@ -226,4 +226,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { CATEGORIES, emailConfigured, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { CATEGORIES, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

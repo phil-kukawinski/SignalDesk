@@ -15,6 +15,8 @@ global.fetch = async (url, opts = {}) => {
   if (url.includes('/rest/v1/social_profiles?')) return json([{ client_id: 'pk-works', ayrshare_ref_id: 'ref', profile_key_ciphertext: enc('profile-key') }]);
   if (url.includes('/rest/v1/scheduled_comments') && method === 'POST') return { ok: true, status: 201, headers: new Map([['content-length', '0']]), json: async () => null };
   if (url.includes('/rest/v1/workspace_members?') && url.includes('email=eq.')) return json([]);
+  if ((url.includes('/rest/v1/workspace_members?workspace_id=') || url.includes('/rest/v1/workspace_invites?workspace_id=')) && method === 'GET') return json([]);
+  if (url.includes('/rest/v1/app_errors')) return json([]);
   if (url.includes('/rest/v1/workspace_invites') && method === 'POST') return { ok: true, status: 201, headers: new Map([['content-length', '0']]), json: async () => null };
   if (url === 'https://api.ayrshare.com/api/post' && method === 'POST') return json({ status: 'scheduled', id: 'post-' + calls.filter((c) => c.url.endsWith('/api/post')).length });
   throw new Error('unexpected fetch ' + method + ' ' + url);

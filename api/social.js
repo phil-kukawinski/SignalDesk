@@ -22,6 +22,9 @@ const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/rep
 const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
 const { systemStatus } = require('./_lib/health');
+const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
+const { deletionPlan, deleteAccount } = require('./_lib/account');
+const { brandFromSite } = require('./_lib/brandsite');
 const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
 const { checkLink, fetchLinkPreview } = require('./_lib/core');
 
@@ -38,7 +41,8 @@ const WORKSPACE_ACTIONS = new Set([
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
-  'system-status', 'stock-search', 'stock-use', 'link-preview'
+  'system-status', 'stock-search', 'stock-use', 'link-preview',
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
@@ -47,8 +51,12 @@ const USER_ACTIONS = new Set([
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
   'stock-search', 'stock-use', 'ig-lookup', 'link-preview'
 ]);
+const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 const AI_DAILY_LIMIT = 200;
+// Beta limits per workspace, so one account can't run up costs or flood the networks.
+const DAILY_POST_LIMIT = 150;
+const TEAM_LIMIT = 25;
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
 const TREND_CACHE_HOURS = 6;
@@ -120,7 +128,7 @@ function aiErrorMessage(error) {
   return [502, 'The AI couldn’t handle this request. Try different wording or another image.'];
 }
 
-function providerResponseError(error, res) {
+function providerResponseError(error, res, action = '') {
   if (error instanceof APIError) {
     console.error('AI request failed:', error.status, error.message);
     const [status, message] = aiErrorMessage(error);
@@ -128,7 +136,8 @@ function providerResponseError(error, res) {
   }
   if (error.status) return send(res, error.status, error.payload || { error: error.message });
   console.error('Social integration request failed:', error.message);
-  return send(res, 500, { error: 'Social integration request failed.' });
+  recordAppError(`api/social${action ? `:${action}` : ''}`, error);
+  return send(res, 500, { error: 'Something went wrong on our side. It’s been logged; try again in a moment.' });
 }
 
 function normalizeEmail(value) {
@@ -205,6 +214,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'invite') {
     const email = normalizeEmail(body.email);
+    const [members, pending] = await Promise.all([databaseRequest(`workspace_members?${scope}&select=user_id`), databaseRequest(`workspace_invites?${scope}&select=email`)]);
+    if ((members?.length || 0) + (pending?.length || 0) >= TEAM_LIMIT) return send(res, 409, { error: `Workspaces can have up to ${TEAM_LIMIT} people during the beta. Remove someone or cancel an invite first.` });
     if (!ROLES.has(body.role)) return send(res, 400, { error: 'Choose Admin or User.' });
     const existing = await databaseRequest(`workspace_members?${new URLSearchParams({ select: 'workspace_id', email: `eq.${email}`, limit: '1' })}`);
     if (existing?.length) {
@@ -386,13 +397,17 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, await markManualDone(workspaceId, body.jobId, { url: body.url, userId: user.id, admin: membership.role === 'admin', actorName: membership.email }));
   }
 
-  if (action === 'draft-captions' || action === 'alt-text') {
+  if (action === 'draft-captions' || action === 'alt-text' || action === 'brand-from-site') {
     // A generous daily cap per workspace keeps an accidental loop from running up the AI bill.
     const today = new Date().toISOString().slice(0, 10);
     const counter = `ai-usage:${workspaceId}:${today}`;
     const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
     if (used >= AI_DAILY_LIMIT) return send(res, 429, { error: 'This workspace has reached today’s limit for AI writing help. Try again tomorrow.' });
     await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
+    if (action === 'brand-from-site') {
+      const client = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
+      return send(res, 200, { brand: await brandFromSite({ url: body.url, clientName: client?.name || '' }) });
+    }
     if (action === 'alt-text') {
       const url = typeof body.url === 'string' ? body.url.trim() : '';
       if (!/^https:\/\/\S+$/.test(url) || url.length > 2000) return send(res, 400, { error: 'Alt text needs an uploaded image.' });
@@ -420,6 +435,15 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       body: JSON.stringify({ slug, workspace_id: workspaceId, client_id: body.clientId, enabled: body.enabled !== false, updated_at: new Date().toISOString() })
     });
     return send(res, 200, { slug, enabled: body.enabled !== false });
+  }
+
+  if (['platform-status', 'create-invite', 'revoke-invite', 'set-invite-only'].includes(action)) {
+    if (!isPlatformAdmin(user.email)) return send(res, 403, { error: 'Only SignalDesk platform owners can manage invites.' });
+    if (action === 'create-invite') return send(res, 200, await createInvite({ label: body.label, maxUses: body.maxUses, days: body.days, email: body.email, createdBy: user.email }));
+    if (action === 'revoke-invite') return send(res, 200, await revokeInvite(body.code));
+    if (action === 'set-invite-only') return send(res, 200, { inviteOnly: await setInviteOnly(body.inviteOnly !== false) });
+    const [only, invites, errors] = await Promise.all([inviteOnly(), listInvites(), recentErrors(24)]);
+    return send(res, 200, { inviteOnly: only, invites, errors });
   }
 
   if (action === 'system-status') {
@@ -692,6 +716,11 @@ function validatePublishInput(body) {
 
 async function publish(body, { user, membership, clientId, encryptionKey }, res) {
   const input = validatePublishInput(body);
+  if (!body.postId) {
+    const since = new Date(Date.now() - 86400000).toISOString();
+    const recent = await databaseRequest(`scheduled_posts?workspace_id=eq.${membership.workspace_id}&created_at=gte.${since}&select=id&limit=${DAILY_POST_LIMIT}`) || [];
+    if (recent.length >= DAILY_POST_LIMIT) return send(res, 429, { error: `This workspace has created ${DAILY_POST_LIMIT} posts in the last 24 hours, the beta limit. Try again later.` });
+  }
   const state = await getWorkspaceState(membership.workspace_id);
   const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
   if (body.queue === true) {
@@ -728,13 +757,19 @@ module.exports = async function handler(req, res) {
   if (!body || typeof body !== 'object') return send(res, 400, { error: 'Invalid request.' });
 
   const action = body.action;
-  if (!CLIENT_ACTIONS.has(action) && !WORKSPACE_ACTIONS.has(action)) return send(res, 400, { error: 'Unknown social integration action.' });
+  if (!CLIENT_ACTIONS.has(action) && !WORKSPACE_ACTIONS.has(action) && !ACCOUNT_ACTIONS.has(action)) return send(res, 400, { error: 'Unknown social integration action.' });
   const { encryptionKey, missing } = getConfig();
   if (missing.length) return send(res, 503, { error: 'Social integrations are not configured.', missing });
 
   try {
     const user = await getUser(req);
     if (!user?.id) return send(res, 401, { error: 'Sign in to connect social accounts.' });
+    // Account actions work even before someone has a workspace (for example, without an invite code).
+    if (action === 'account-plan') return send(res, 200, await deletionPlan(user.id));
+    if (action === 'delete-account') {
+      if (body.confirm !== 'DELETE') return send(res, 400, { error: 'Type DELETE to confirm.' });
+      return send(res, 200, await deleteAccount(user));
+    }
     const membership = await getMembership(user.id);
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
     if (membership.role !== 'admin' && !USER_ACTIONS.has(action)) return send(res, 403, { error: 'Only workspace admins can do that.' });
@@ -860,6 +895,6 @@ module.exports = async function handler(req, res) {
 
     return send(res, 400, { error: 'Unknown social integration action.' });
   } catch (error) {
-    return providerResponseError(error, res);
+    return providerResponseError(error, res, body?.action);
   }
 };

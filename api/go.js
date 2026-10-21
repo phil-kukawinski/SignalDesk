@@ -28,6 +28,7 @@ module.exports = async function handler(req, res) {
     return res.status(302).end();
   } catch (error) {
     console.error('Short link failed:', error.message);
+    require('./_lib/platform').recordAppError('api/go', error);
     return notFound(res);
   }
 };

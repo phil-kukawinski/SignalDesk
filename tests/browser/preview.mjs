@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 const out = process.env.SHOTS || new URL('.', import.meta.url).pathname;
 export default async ({ send, evaluate, wait, log }) => {
+  await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1100, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3500);
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close()`);

@@ -69,7 +69,8 @@ module.exports = async function handler(req, res) {
   res.setHeader('referrer-policy', 'no-referrer');
   if (req.method === 'GET' && new URL(req.url || '/', 'http://localhost').searchParams.get('format') === 'ics') {
     if (getConfig().missing.length) return send(res, 503, { error: 'Calendar feeds aren’t available right now.' });
-    try { return await calendarFeed(req, res); } catch (error) { console.error('Calendar feed failed:', error.message); return send(res, 500, { error: 'Something went wrong.' }); }
+    try { return await calendarFeed(req, res); } catch (error) { console.error('Calendar feed failed:', error.message);
+    require('./_lib/platform').recordAppError('api/review', error); return send(res, 500, { error: 'Something went wrong.' }); }
   }
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   let body = req.body;
@@ -141,6 +142,7 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     if (error.status && error.status < 500) return send(res, error.status, { error: error.message });
     console.error('Review request failed:', error.message);
+    require('./_lib/platform').recordAppError('api/review', error);
     return send(res, 500, { error: 'Something went wrong. Try again.' });
   }
 };

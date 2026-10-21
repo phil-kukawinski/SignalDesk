@@ -33,6 +33,7 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     console.error('Bio page failed:', error.message);
+    require('./_lib/platform').recordAppError('api/bio', error);
     return send(res, 500, { error: 'Something went wrong.' });
   }
 };
