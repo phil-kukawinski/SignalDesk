@@ -73,9 +73,19 @@ function networkChecks() {
   return checks;
 }
 
+function imageCheck() {
+  try {
+    const sharp = require('sharp');
+    return check('features', 'images', 'Instagram image conversion', 'ok', `Images Instagram would reject are converted to JPEG and fitted to 4:5–1.91:1 (sharp ${sharp.versions.sharp}).`);
+  } catch (error) {
+    return check('features', 'images', 'Instagram image conversion', 'error', `The image library didn’t load: ${error.message.slice(0, 160)}`, 'Redeploy. If it persists, Instagram posts need JPEG images between 4:5 and 1.91:1.');
+  }
+}
+
 function featureChecks(tables) {
   const missingLinks = tables.includes('short_links') || tables.includes('link_click_days');
   return [
+    imageCheck(),
     process.env.ANTHROPIC_API_KEY ? check('features', 'ai', 'AI writing help', 'ok', 'Caption drafts, image descriptions, proofreading, and trends.')
       : check('features', 'ai', 'AI writing help', 'off', 'Not set up.', 'Set ANTHROPIC_API_KEY in Vercel.'),
     emailConfigured() ? check('features', 'email', 'Notification emails', 'ok', `Sent from ${process.env.NOTIFY_FROM_EMAIL}.`)

@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { assertPublicUrl } = require('./core');
+const { assertPublicUrl, fetchLinkPreview } = require('./core');
 
 // Direct connections to the official Facebook/Instagram (Meta), LinkedIn, and Pinterest APIs.
 // Each adapter signs in, lists the accounts a person can publish to, publishes, and
@@ -46,7 +46,8 @@ function mediaKind(url) {
 }
 
 function firstLink(text) {
-  return (String(text || '').match(/https?:\/\/[^\s<>"')\]]+/) || [])[0] || '';
+  const match = (String(text || '').match(/https?:\/\/[^\s<>"')\]]+/) || [])[0] || '';
+  return match.replace(/[.,!?;:]+$/, '');
 }
 
 function firstLine(text, max) {
@@ -233,6 +234,8 @@ async function publishFacebook({ connection, job, content, stage, saveStage, mar
   await markSent();
   const params = { message: content.text };
   if (photoIds.length) params.attached_media = photoIds.map((id) => ({ media_fbid: id }));
+  // Posts made through the API only get a link preview card when the link is sent separately.
+  else if (firstLink(content.text)) params.link = firstLink(content.text);
   const result = await graph(`${page}/feed`, { method: 'POST', token: connection.token, params, sending: true });
   return { externalId: result.id, url: `https://www.facebook.com/${result.id}` };
 }
@@ -247,6 +250,25 @@ async function publishInstagram({ connection, job, content, options, stage, save
   const instagram = options.instagramOptions || {};
   let containers = stage.containers;
   if (!containers) {
+    // Convert images Instagram would reject (not JPEG, or outside 4:5 to 1.91:1) before sending.
+    let prepared = stage.prepared;
+    if (!prepared) {
+      const { instagramImageUrl } = require('./images');
+      prepared = [];
+      for (const [index, url] of media.entries()) {
+        if (mediaKind(url) === 'video') { prepared.push(url); continue; }
+        try {
+          prepared.push((await instagramImageUrl(url, { download: downloadMedia, key: `${job.id}-${index}` })).url);
+        } catch (error) {
+          if (error instanceof PublishError) throw error;
+          throw new PublishError('invalid', `Couldn’t prepare image ${index + 1} for Instagram: ${error.message}`);
+        }
+      }
+      await saveStage({ prepared });
+      stage = { ...stage, prepared };
+    }
+    // Image descriptions are keyed by the original URL.
+    const altFor = (index) => altParam(content, media[index], 'alt_text');
     const create = (params) => graph(`${account}/media`, { method: 'POST', token: connection.token, params }).then((result) => result.id);
     const tags = (withPosition) => (instagram.userTags || []).map((tag) => (withPosition ? { username: tag.username, x: tag.x ?? 0.5, y: tag.y ?? 0.9 } : { username: tag.username }));
     const collaborators = instagram.collaborators?.length ? { collaborators: instagram.collaborators } : {};
@@ -254,7 +276,7 @@ async function publishInstagram({ connection, job, content, options, stage, save
       const video = mediaKind(media[0]) === 'video';
       const params = video
         ? { media_type: 'REELS', video_url: media[0], caption: content.text, share_to_feed: true, ...collaborators }
-        : { image_url: media[0], caption: content.text, ...collaborators, ...altParam(content, media[0], 'alt_text') };
+        : { image_url: prepared[0], caption: content.text, ...collaborators, ...altFor(0) };
       if (instagram.userTags?.length) params.user_tags = tags(!video);
       const id = await create(params);
       containers = { parent: id, children: [] };
@@ -262,7 +284,7 @@ async function publishInstagram({ connection, job, content, options, stage, save
       const children = [];
       for (const [index, url] of media.entries()) {
         const video = mediaKind(url) === 'video';
-        const params = video ? { media_type: 'VIDEO', video_url: url, is_carousel_item: true } : { image_url: url, is_carousel_item: true, ...altParam(content, url, 'alt_text') };
+        const params = video ? { media_type: 'VIDEO', video_url: url, is_carousel_item: true } : { image_url: prepared[index], is_carousel_item: true, ...altFor(index) };
         if (index === 0 && !video && instagram.userTags?.length) params.user_tags = tags(true);
         children.push(await create(params));
       }
@@ -459,8 +481,29 @@ const linkedin = {
     if (imageUrns.length === 1) body.content = { media: withAlt(imageUrns[0], 0) };
     else if (imageUrns.length > 1) body.content = { multiImage: { images: imageUrns.map(withAlt) } };
     else if (firstLink(content.text)) {
+      // LinkedIn's API doesn't read the page, so SignalDesk fills in the card's title,
+      // description, and image from the page's Open Graph tags.
       const link = firstLink(content.text);
-      body.content = { article: { source: link, title: firstLine(content.text, 200) || new URL(link).hostname } };
+      let article = stage.article;
+      if (!article) {
+        const preview = await fetchLinkPreview(link);
+        article = { source: link, title: preview?.title || firstLine(content.text, 200) || new URL(link).hostname };
+        if (preview?.description) article.description = preview.description;
+        if (preview?.image) {
+          try {
+            const file = await downloadMedia(preview.image);
+            if (/^image\/(jpeg|png|gif)$/.test(file.type)) {
+              const { payload } = await linkedIn('images?action=initializeUpload', { method: 'POST', token: connection.token, body: { initializeUploadRequest: { owner: author } } });
+              const upload = await request(payload.value.uploadUrl, { method: 'PUT', headers: { authorization: `Bearer ${connection.token}`, 'content-type': file.type }, body: file.bytes });
+              if (upload.response.ok) article.thumbnail = payload.value.image;
+            }
+          } catch (error) {
+            console.error('LinkedIn link image skipped:', error.message);
+          }
+        }
+        await saveStage({ article });
+      }
+      body.content = { article };
     }
     await markSent();
     const { headers } = await linkedIn('posts', { method: 'POST', token: connection.token, body, sending: true });

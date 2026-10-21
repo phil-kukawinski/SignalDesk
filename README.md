@@ -133,6 +133,8 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Command Center engagement counts posts SignalDesk published. The worker refreshes metrics for the last 30 days of posts every 12 hours or so (10 posts per run), so new numbers can take a few hours to appear.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
 - The direct integrations haven't been run against the live Meta, LinkedIn, or Pinterest APIs yet. They were tested against simulated responses, so expect small fixes on first connection.
+- Instagram only accepts JPEG images between 4:5 and 1.91:1. When a post publishes, SignalDesk converts other images (PNG, WebP, very tall or wide shapes) with `sharp`: transparent areas become white and the image is padded, not cropped, using its dominant color. The converted copy is stored under `system/instagram/` in the media bucket. The composer preview notes when this will happen.
+- Links get preview cards: Facebook receives the post's first link as the post link, and LinkedIn gets a card built from the page's Open Graph title, description, and image (SignalDesk reads the page, since LinkedIn's API doesn't). If the page can't be read, LinkedIn shows a plain card.
 - Direct publishing supports text, images, and video on Facebook and Instagram (Reels and carousels of up to 10 items), and text and images on LinkedIn and Pinterest. LinkedIn and Pinterest video aren't supported yet. Instagram Stories aren't supported.
 - Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
 - Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live.
@@ -165,6 +167,15 @@ Supabase, Vercel, the scheduler, the legal pages, AI features, and push notifica
 2. LinkedIn needs the **Sign In with LinkedIn using OpenID Connect** product before it can connect. Company Pages need the Community Management API; set `LINKEDIN_ORGANIZATIONS=true` after it's approved.
 3. Pinterest needs `PINTEREST_APP_SECRET` alongside `PINTEREST_APP_ID`. Notification emails need `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL`.
 4. Later: LinkedIn and Pinterest video, Instagram Stories, and audit logs.
+
+## Testing
+Run `npm install`, then `npm test`. It runs:
+- **Server tests** (`tests/unit/`) with simulated network responses.
+- **Database tests** (`tests/db/`) against a real Postgres (PGlite) loaded with `supabase/schema.sql`, behind a small PostgREST stand-in. They cover publishing, retries, short links, Instagram image conversion, link previews, health checks, and upgrading from the original schema.
+- **Interface tests** (`tests/ui/`) inside the real page in headless Google Chrome.
+- **A browser check** (`tests/browser/`) that the page loads and every view opens with no errors.
+
+The interface and browser checks need Google Chrome installed (set `CHROME` to its path if it isn't in the default macOS location). `tests/` isn't deployed (see `.vercelignore`). None of the tests contact the real networks.
 
 ## Making changes
 `main` deploys to the live site. Make changes on a branch instead: push it, and Vercel builds a preview deployment with its own address. Check the preview, then merge the branch into `main` to publish. Preview deployments use the same environment variables unless you set preview-specific ones in Vercel, so a preview signed in to the real Supabase project works with real data.

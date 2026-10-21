@@ -7,6 +7,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
+    "sharp": "0.35.5",
     "web-push": "3.6.7"
+  },
+  "scripts": {
+    "test": "bash tests/run-all.sh"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
   }
 }

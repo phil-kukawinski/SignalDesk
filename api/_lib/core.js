@@ -425,6 +425,50 @@ async function assertPublicUrl(raw, label = 'Links') {
   return url;
 }
 
+// Reads a page's Open Graph tags (title, description, image) for link cards on networks
+// that don't fetch them themselves, such as LinkedIn. Every redirect is checked so a public
+// link can't lead to a private address. Returns null on any problem; previews are optional.
+async function fetchLinkPreview(raw) {
+  try {
+    let target = raw;
+    let response;
+    for (let hop = 0; hop < 5; hop += 1) {
+      const checked = await assertPublicUrl(target);
+      response = await fetch(checked, { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'Mozilla/5.0 (compatible; SignalDeskBot/1.0; link preview)' } });
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) { target = new URL(location, checked).href; continue; }
+      break;
+    }
+    if (!response?.ok || !/html/i.test(response.headers.get('content-type') || '')) return null;
+    const reader = response.body.getReader();
+    let html = '';
+    const decoder = new TextDecoder();
+    while (html.length < 300000) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      if (/<\/head>/i.test(html)) break;
+    }
+    reader.cancel().catch(() => {});
+    const meta = (names) => {
+      for (const name of names) {
+        const tag = new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]*>`, 'i').exec(html)?.[0];
+        const content = tag && /content=(["'])([\s\S]*?)\1/i.exec(tag)?.[2];
+        if (content && content.trim()) return decodeEntities(content.trim());
+      }
+      return '';
+    };
+    const title = meta(['og:title', 'twitter:title']) || decodeEntities((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || '').trim());
+    const description = meta(['og:description', 'twitter:description', 'description']);
+    let image = meta(['og:image:secure_url', 'og:image', 'twitter:image', 'twitter:image:src']);
+    try { image = image ? new URL(image, target).href : ''; } catch { image = ''; }
+    if (!title && !image) return null;
+    return { url: target, title: title.replace(/\s+/g, ' ').slice(0, 200), description: description.replace(/\s+/g, ' ').slice(0, 300), image: /^https?:\/\//.test(image) ? image : '' };
+  } catch {
+    return null;
+  }
+}
+
 function assertPublicFeedUrl(raw) {
   return assertPublicUrl(raw, 'Feed URLs');
 }
@@ -714,6 +758,7 @@ async function runAutopilot({ workspaceId, encryptionKey, staleMinutes = 0, limi
 }
 
 module.exports = {
+  fetchLinkPreview,
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getBearerToken, getUser, databaseRequest, ayrshareRequest,
   encryptSecret: encryptProfileKey, decryptSecret: decryptProfileKey, assertPublicUrl,
