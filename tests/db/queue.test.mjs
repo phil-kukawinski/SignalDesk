@@ -900,6 +900,37 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   assert.match(broken.last_error, /Couldn’t prepare image 1 for Instagram/);
 }
 
+// --- Tag picker lookups and composer link previews ---
+{
+  await db.exec(`update social_connections set status='active', last_error=null where platform='instagram'`);
+  networkHandler = (c) => {
+    const u = new URL(c.url);
+    if (u.hostname === 'graph.facebook.com' && u.pathname.endsWith('/ig1')) {
+      const fields = u.searchParams.get('fields');
+      if (fields.includes('business_discovery.username(acme.co)')) return reply({ business_discovery: { username: 'acme.co', name: 'Acme Co', profile_picture_url: 'https://cdn.test/acme.jpg', followers_count: 1520, media_count: 88 }, id: 'ig1' });
+      if (fields.includes('business_discovery.username(someperson)')) return reply({ error: { message: 'Invalid user id', type: 'OAuthException', code: 110, error_subcode: 2207013 } }, 400);
+      if (fields.includes('business_discovery.username(busy)')) return reply({ error: { message: 'Application request limit reached', code: 4 } }, 400);
+    }
+    if (c.url === 'https://www.pkworks.co/') return new Response('<head><meta property="og:title" content="PK Works"><meta property="og:image" content="https://pkworks.co/og.png"></head>', { headers: { 'content-type': 'text/html' } });
+    throw new Error('unexpected ' + c.url);
+  };
+  r = await call({ action: 'ig-lookup', clientId: 'pk-works', username: '@Acme.Co' }, 'user');
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.deepEqual(r.payload, { status: 'found', username: 'acme.co', name: 'Acme Co', picture: 'https://cdn.test/acme.jpg', followers: 1520, posts: 88 });
+  r = await call({ action: 'ig-lookup', clientId: 'pk-works', username: 'someperson' }, 'user');
+  assert.equal(r.payload.status, 'unverified', 'personal or missing accounts are unverified, not errors');
+  r = await call({ action: 'ig-lookup', clientId: 'pk-works', username: 'busy' }, 'user');
+  assert.equal(r.payload.status, 'unavailable'); assert.match(r.payload.reason, /limiting/);
+  r = await call({ action: 'ig-lookup', clientId: 'pk-works', username: 'bad name!' }, 'user');
+  assert.equal(r.status, 400);
+  r = await call({ action: 'ig-lookup', clientId: 'bright-school-kits', username: 'acme.co' });
+  assert.ok(r.status === 200 && r.payload.status === 'unavailable' || r.status === 404, JSON.stringify(r.payload));
+  r = await call({ action: 'link-preview', url: 'https://www.pkworks.co/' }, 'user');
+  assert.deepEqual(r.payload.preview, { url: 'https://www.pkworks.co/', title: 'PK Works', description: '', image: 'https://pkworks.co/og.png' });
+  r = await call({ action: 'link-preview', url: 'javascript:alert(1)' }, 'user');
+  assert.equal(r.status, 400);
+}
+
 // --- Click-tracking short links ---
 {
   const go = require(`${ROOT}/api/go.js`);

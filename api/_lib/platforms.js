@@ -113,6 +113,21 @@ async function graph(path, { method = 'GET', token, params = {}, sending = false
   return body;
 }
 
+// Looks up a public Instagram business or creator account by username (Business Discovery), so
+// people can confirm they're tagging the right account. Personal accounts can't be looked up.
+async function lookupInstagramAccount(connection, username) {
+  try {
+    const result = await graph(connection.external_id, { token: connection.token, params: { fields: `business_discovery.username(${username}){username,name,profile_picture_url,followers_count,media_count}` } });
+    const found = result.business_discovery;
+    if (!found?.username) return { status: 'unverified' };
+    return { status: 'found', username: found.username, name: found.name || '', picture: found.profile_picture_url || '', followers: found.followers_count ?? null, posts: found.media_count ?? null };
+  } catch (error) {
+    // Instagram answers "not found" both for missing accounts and for personal accounts.
+    if (error.kind === 'invalid' || error.kind === 'unknown') return { status: 'unverified' };
+    throw error;
+  }
+}
+
 const meta = {
   authorizeUrl(state) {
     const url = new URL(`https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`);
@@ -638,5 +653,5 @@ function adapterFor(platform) {
 }
 
 module.exports = {
-  DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
+  lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
 };

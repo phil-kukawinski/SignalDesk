@@ -8,9 +8,9 @@ const {
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
 } = require('./_lib/core');
-const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured } = require('./_lib/platforms');
+const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
 const {
-  PLATFORM_LABELS, listConnections, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
+  PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
   nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
 } = require('./_lib/publishing');
@@ -23,11 +23,11 @@ const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
 const { systemStatus } = require('./_lib/health');
 const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
-const { checkLink } = require('./_lib/core');
+const { checkLink, fetchLinkPreview } = require('./_lib/core');
 
 const CLIENT_ACTIONS = new Set([
   'connect', 'accounts', 'publish', 'update-post', 'analytics', 'comments', 'post-comment', 'messages', 'reply',
-  'oauth-start', 'disconnect'
+  'oauth-start', 'disconnect', 'ig-lookup'
 ]);
 // Actions that go through Ayrshare and need its per-client profile.
 const AYRSHARE_ACTIONS = new Set(['connect', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
@@ -38,14 +38,14 @@ const WORKSPACE_ACTIONS = new Set([
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
-  'system-status', 'stock-search', 'stock-use'
+  'system-status', 'stock-search', 'stock-use', 'link-preview'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview'
 ]);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 const AI_DAILY_LIMIT = 200;
@@ -427,6 +427,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, await systemStatus({ workspaceId, origin, clients: state.clients || [] }));
   }
 
+  if (action === 'link-preview') {
+    const url = typeof body.url === 'string' ? body.url.trim() : '';
+    if (!/^https?:\/\/\S+$/.test(url) || url.length > 2000) return send(res, 400, { error: 'Enter a full web address.' });
+    return send(res, 200, { preview: await fetchLinkPreview(url) });
+  }
+
   if (action === 'stock-search') return send(res, 200, await searchPhotos({ query: body.query, page: body.page, orientation: body.orientation }));
   if (action === 'stock-use') return send(res, 200, { photo: await usePhoto(body.id) });
 
@@ -767,6 +773,19 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({ state, workspace_id: workspaceId, user_id: user.id, client_id: clientId, provider: body.provider, expires_at: new Date(Date.now() + OAUTH_SESSION_MINUTES * 60000).toISOString() })
       });
       return send(res, 200, { sessionId: session.id, url });
+    }
+
+    if (action === 'ig-lookup') {
+      const username = typeof body.username === 'string' ? body.username.trim().replace(/^@/, '').toLowerCase() : '';
+      if (!/^[a-z0-9._]{1,30}$/.test(username)) return send(res, 400, { error: 'Enter an Instagram username.' });
+      const connection = (await listConnections(workspaceId, clientId)).find((item) => item.platform === 'instagram' && item.status === 'active');
+      if (!connection) return send(res, 200, { status: 'unavailable', reason: 'Connect this client’s Instagram account to look up usernames.' });
+      const full = await loadConnection(connection.id, encryptionKey);
+      try {
+        return send(res, 200, await lookupInstagramAccount(full, username));
+      } catch (error) {
+        return send(res, 200, { status: 'unavailable', reason: error.kind === 'rate_limit' ? 'Instagram is limiting lookups right now. Try again in a few minutes.' : 'Instagram lookups aren’t working right now.' });
+      }
     }
 
     if (action === 'disconnect') {
