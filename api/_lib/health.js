@@ -40,6 +40,22 @@ function siteChecks(origin) {
   return checks;
 }
 
+// The browser (js/config.js) and the server (SUPABASE_URL) must use the same Supabase project,
+// or sign-ins made in the browser won't be recognized by the server.
+async function projectCheck(origin) {
+  const ref = (url) => (/^https:\/\/([a-z0-9]+)\.supabase\.co/.exec(String(url || '')) || [])[1] || '';
+  const server = ref(process.env.SUPABASE_URL);
+  const base = (process.env.APP_URL || origin || '').replace(/\/+$/, '');
+  let browser = '';
+  try {
+    const response = await fetch(`${base}/js/config.js`, { signal: AbortSignal.timeout(5000) });
+    browser = ref((/url:\s*'([^']+)'/.exec(await response.text()) || [])[1]);
+  } catch { /* checked below */ }
+  if (!browser) return check('core', 'project', 'Supabase project', 'warn', `The server uses project ${server || '(none)'}. Couldn’t read the site’s js/config.js to compare.`);
+  if (browser !== server) return check('core', 'project', 'Supabase project', 'error', `The site (js/config.js) uses project ${browser}, but the server (SUPABASE_URL) uses ${server}. Sign-ins won’t work.`, 'Point both at the same project: update js/config.js or SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel.');
+  return check('core', 'project', 'Supabase project', 'ok', `Site and server both use project ${server}.`);
+}
+
 async function schedulerChecks() {
   const [publish, worker] = await Promise.all([lastWorkerRun('publish'), lastWorkerRun('worker')]);
   const age = (iso) => (iso ? (Date.now() - Date.parse(iso)) / MINUTE : Infinity);
@@ -139,6 +155,7 @@ async function systemStatus({ workspaceId, origin, clients = [] }) {
   const checks = [
     check('core', 'database', 'Database', tables.length ? 'error' : 'ok', tables.length ? `Missing tables: ${tables.join(', ')}.` : 'Connected, with every table in place.', tables.length ? 'Copy the latest supabase/schema.sql from the project into a new query in the Supabase SQL Editor and run it. Re-running an older saved query tab runs the old version. It’s safe to re-run.' : ''),
     check('core', 'secrets', 'Server keys', config.missing.length ? 'error' : 'ok', config.missing.length ? `Missing: ${config.missing.join(', ')}.` : 'Supabase keys and the encryption key are set.', config.missing.length ? 'Add them in Vercel, then redeploy.' : ''),
+    await projectCheck(origin),
     ...siteChecks(origin),
     ...await schedulerChecks(),
     ...networkChecks(),
