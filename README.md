@@ -7,11 +7,11 @@ Live site: https://signaldesk-social.vercel.app
 ## Run it
 - **Live:** pushing to `main` deploys to Vercel.
 - **Locally with the API:** run `npm install`, then `vercel dev`, and open the address it prints.
-- **Interface only:** open `index.html` in a browser or use VS Code's Live Server extension. There is no build step. Without the API, the app runs in demo mode with sample data.
+- **Interface only:** open `index.html` in a browser or use VS Code's Live Server extension. There is no build step. It opens on the sign-in screen; signing in needs the Supabase project, and publishing needs the API (`vercel dev`).
 
 ## Workspace persistence
 
-Everything is stored in Supabase (project `zuckwjjzhrcesrzbfdak` on the live site) once you sign in. Signed out, the app shows a demo with sample data that stays in that browser.
+Everything is stored in Supabase (project `zuckwjjzhrcesrzbfdak` on the live site) once you sign in. Signed out, the app shows only the sign-in screen, with links to the privacy policy, terms, and data deletion pages.
 
 To point a copy of SignalDesk at a Supabase project:
 1. Run `supabase/schema.sql` in the project's SQL editor.
@@ -86,7 +86,7 @@ API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `2
 Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
 ## Features
-- Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). A client picker at the top (shared with Analytics) shows one client or all of them. Upcoming content filters by network. Demo mode keeps the sample dashboard
+- Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). A client picker at the top (shared with Analytics) shows one client or all of them. Upcoming content filters by network.
 - Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters. Admins can drag a scheduled post to a new day or time (15-minute steps)
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
 - Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
@@ -123,15 +123,14 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Calendar sharing:** each review link also gives a calendar feed for Google Calendar, Outlook, or Apple Calendar, and the calendar has a **Print** view for PDFs
 - **Monthly report emails** to each client on a chosen day (set in the brand kit; needs Resend)
 - **Installable app** with push notifications, a **dark theme** (Settings → Theme), and **Export** for a full backup plus a posts spreadsheet
-- Content Library: when signed in, upload images and videos, tag them, filter by client and type, and add them to a post. Demo mode shows sample collections
+- Content Library: when signed in, upload images and videos, tag them, filter by client and type, and add them to a post.
 - Social Inbox: comments on your published posts, plus Ayrshare DMs when Ayrshare is configured
 - Analytics dashboard with provider-backed account metrics and CSV export
 - Client workspaces, with **Add client** (colors, logo, and voice can be filled in from the client's website)
-- Approval queue for held posts, with approve and request-changes actions; sample approvals appear only in demo mode
+- Approval queue for held posts, with approve and request-changes actions
 - Settings page
 
 ## Known limitations
-- In demo mode the content library shows sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
 - Posts made outside SignalDesk come from an account sync that runs about every 3 hours per account (90 days on the first sync, then 35). **Sync now** on the calendar refreshes one client right away. LinkedIn doesn't let apps read a personal profile's posts, so only posts made through SignalDesk appear for those.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
 - Facebook, Instagram, and Pinterest are connected and syncing on the live site. LinkedIn publishing and Pinterest publishing haven't been tried against the live APIs yet, so expect small fixes on the first real posts.
@@ -178,7 +177,7 @@ Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Uns
 Run `npm install`, then `npm test`. It runs:
 - **Server tests** (`tests/unit/`) with simulated network responses.
 - **Database tests** (`tests/db/`) against a real Postgres (PGlite) loaded with `supabase/schema.sql`, behind a small PostgREST stand-in. They cover publishing, retries, short links, Instagram image conversion, link previews, health checks, and upgrading from the original schema.
-- **Interface tests** (`tests/ui/`) inside the real page in headless Google Chrome.
+- **Interface tests** (`tests/ui/`) inside the real page in headless Google Chrome. The app ships with no sample data, so the interface and browser tests load the sample clients in `tests/fixtures/sample.js`.
 - **Browser checks** (`tests/browser/`): the page loads and every view opens with no errors, plus the composer, sign-in and beta screens, posts from every source, and the client picker. They block every request to Supabase, so they never touch the real project. `screens.mjs` isn't part of `npm test`; it saves a screenshot of every page for a visual review.
 
 The interface and browser checks need Google Chrome installed (set `CHROME` to its path if it isn't in the default macOS location). `tests/` isn't deployed (see `.vercelignore`). None of the tests contact the real networks.

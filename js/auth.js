@@ -32,8 +32,11 @@ $('#auth-form')?.addEventListener('submit',event=>{event.preventDefault();submit
 $('#auth-tabs')?.addEventListener('click',event=>{const tab=event.target.closest('[data-auth-mode]');if(tab)setAuthMode(tab.dataset.authMode);});
 $('#auth-forgot')?.addEventListener('click',()=>setAuthMode('reset'));
 $('#auth-back')?.addEventListener('click',()=>setAuthMode('signin'));
-$('#auth-close')?.addEventListener('click',()=>$('#auth-dialog').close());
-$('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog'))$('#auth-dialog').close();});
+// Signed out, the sign-in box is the whole page: it can't be closed until someone signs in.
+const authLocked=()=>document.body.classList.contains('signed-out');
+$('#auth-close')?.addEventListener('click',()=>{if(!authLocked())$('#auth-dialog').close();});
+$('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog')&&!authLocked())$('#auth-dialog').close();});
+$('#auth-dialog')?.addEventListener('cancel',event=>{if(authLocked())event.preventDefault();});
 $('#auth-sign-out')?.addEventListener('click',async()=>{const{error}=await supabaseClient.auth.signOut();if(error){authNotice(error.message);return;}location.reload();});
 $('#auth-account-settings')?.addEventListener('click',()=>{$('#auth-dialog').close();showView('settings');setTimeout(()=>$('#account-panel')?.scrollIntoView({behavior:'smooth',block:'start'}),200);});
 // Invite links look like /?invite=CODE; remember the code for the sign-up form.

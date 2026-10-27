@@ -1,6 +1,7 @@
-export default async ({ send, evaluate, wait, log }) => {
+export default async ({ send, evaluate, wait, log, sampleData }) => {
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(4000);
+  await sampleData();
   const views = ['overview', 'inbox', 'approvals', 'settings'];
   for (const view of views) {
     await evaluate(`document.querySelector('[data-view="${view}"]')?.click()`); await wait(500);

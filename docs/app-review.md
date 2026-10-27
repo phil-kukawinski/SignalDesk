@@ -10,7 +10,7 @@ Live site: `https://signaldesk-social.vercel.app` (if you move to a custom domai
 
 1. **A reviewer login for SignalDesk.** Reviewers sign in to your app, so create an account just for them:
    - Sign up at the live site with an address like `[review@pkworks.co]` and a strong password. Confirm the email.
-   - In that account's workspace, open **Clients & Accounts**, add a client called **App Review Demo**, and delete the sample clients.
+   - In that account's workspace, open **Clients & Accounts**, and add a client called **App Review Demo** (new workspaces start with no clients).
    - Keep that login active until every review is finished. Put the email and password in each portal's "test credentials" field, never in the written answers.
 2. **Settings → Setup & health shows no ✕** for the network you're submitting.
 3. **The legal pages load:** `/privacy`, `/terms`, `/data-deletion`.

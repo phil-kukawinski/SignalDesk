@@ -306,7 +306,7 @@ Supabase's free plan has no backups you can restore yourself. Until you upgrade,
 ## 7. Making changes to the code
 
 - **Run locally:**
-  - **Interface only:** open `index.html` in a browser. Without the API it runs in demo mode with sample data.
+  - **Interface only:** open `index.html` in a browser. It opens on the sign-in screen; there's no demo mode any more.
   - **Full app with the API:** run `npm install`, then `vercel dev`.
 - **Test:** run `npm test`. It covers the server tests, database tests (a real Postgres loaded with `supabase/schema.sql`), interface tests, and browser checks. Google Chrome is required. The tests never contact Supabase or the social networks.
 - **Deploy:** push to `main`. If you changed `supabase/schema.sql`, run it in the SignalDesk project too.

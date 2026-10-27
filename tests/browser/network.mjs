@@ -1,10 +1,11 @@
 // Calendar and Analytics with posts from every source (simulated sign-in, no network access).
 import fs from 'node:fs';
 const out = process.env.SHOTS || '';
-export default async ({ send, evaluate, wait, log }) => {
+export default async ({ send, evaluate, wait, log, sampleData }) => {
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1200, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3000);
+  await sampleData();
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close()`);
   await evaluate(`(()=>{const at=(days,hour)=>{const d=new Date();d.setDate(d.getDate()+days);d.setHours(hour,0,0,0);return d.toISOString();};
     window.__posts=[{id:'n1',clientId:'pk-works',platform:'facebook',url:'https://facebook.com/1',text:'Posted from the Facebook app\\nSecond line',mediaUrl:'',publishedAt:at(0,9),viaSignalDesk:false,metrics:{likes:12,comments:2,engagements:14,reach:300,engagementRate:4.67},metricsAt:new Date().toISOString()},{id:'n2',clientId:'pk-works',platform:'instagram',url:'https://instagram.com/p/2',text:'Reel from Instagram',mediaUrl:'',publishedAt:at(0,14),viaSignalDesk:false,metrics:{reach:2000,engagements:110,engagementRate:5.5}},{id:'n3',clientId:'pk-works',platform:'facebook',url:'https://facebook.com/3',text:'Scheduled with SignalDesk',publishedAt:at(0,11),viaSignalDesk:true,metrics:{engagements:48}}];

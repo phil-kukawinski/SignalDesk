@@ -3,10 +3,11 @@ import fs from 'node:fs';
 const out = process.env.SHOTS || new URL('.', import.meta.url).pathname;
 const width = Number(process.env.WIDTH || 1440);
 const VIEWS = (process.env.VIEWS || 'overview,calendar,composer,library,inbox,analytics,clients,social-accounts,approvals,settings').split(',');
-export default async ({ send, evaluate, wait, log }) => {
+export default async ({ send, evaluate, wait, log, sampleData }) => {
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 700 });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3500);
+  await sampleData();
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close()`);
   await evaluate(`localStorage.setItem('signaldesk-theme',${JSON.stringify(process.env.THEME || 'light')});applyTheme()`);
   for (const view of VIEWS) {

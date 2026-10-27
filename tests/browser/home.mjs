@@ -1,10 +1,11 @@
 // Command Center client picker: one client or all of them (simulated sign-in, no network access).
 import fs from 'node:fs';
 const out = process.env.SHOTS || '';
-export default async ({ send, evaluate, wait, log }) => {
+export default async ({ send, evaluate, wait, log, sampleData }) => {
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1100, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3000);
+  await sampleData();
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close();try{localStorage.removeItem('signaldesk.homeClient')}catch{}`);
   await evaluate(`(()=>{const at=(days,hour)=>{const d=new Date();d.setDate(d.getDate()+days);d.setHours(hour,0,0,0);return d.toISOString();};
     const post=(id,clientId,title,status,days)=>({id,clientId,title,text:title,status,scheduledFor:at(days,10),createdBy:'u',media:[],mediaAlt:{},platformContent:{},options:{},jobs:[{id:id+'j',platform:'facebook',provider:'direct',status:'queued',runAt:at(days,10)}]});

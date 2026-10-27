@@ -1,5 +1,5 @@
 // Command Center, upcoming filters, calendar dragging, and editing scheduled posts.
-// Command Center: real numbers when signed in. Demo mode keeps the sample dashboard.
+// Command Center numbers, for all clients or the one picked at the top.
 let overviewSummary=null,overviewLoading=false;
 const compactNumber=value=>new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(value||0);
 const shortWhen=iso=>new Date(iso).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'});

@@ -2,10 +2,11 @@
 // Saves screenshots to $SHOTS (or this folder) and logs what it finds.
 import fs from 'node:fs';
 const out = process.env.SHOTS || new URL('.', import.meta.url).pathname;
-export default async ({ send, evaluate, wait, log }) => {
+export default async ({ send, evaluate, wait, log, sampleData }) => {
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1400, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href }); await wait(3500);
+  await sampleData();
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close()`);
   await evaluate(`localStorage.setItem('signaldesk-theme',${JSON.stringify(process.env.THEME || 'light')});applyTheme();document.querySelector('[data-view="composer"]').click()`); await wait(800);
   await evaluate(`(()=>{const c=document.createElement('canvas');c.width=1600;c.height=2400;const g=c.getContext('2d');g.fillStyle='#f4efe6';g.fillRect(0,0,1600,2400);g.fillStyle='#5b8db8';g.beginPath();g.arc(800,1200,600,0,7);g.fill();g.fillStyle='#1a1f3a';g.font='bold 160px sans-serif';g.textAlign='center';g.fillText('PK WORKS',800,1260);window.__img=c.toDataURL('image/png');
