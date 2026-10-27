@@ -25,6 +25,7 @@ const { systemStatus } = require('./_lib/health');
 const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
 const { deletionPlan, deleteAccount } = require('./_lib/account');
 const { brandFromSite } = require('./_lib/brandsite');
+const { listNetworkPosts, syncClient } = require('./_lib/sync');
 const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
 const { checkLink, fetchLinkPreview } = require('./_lib/core');
 
@@ -42,14 +43,14 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site'
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
@@ -451,6 +452,22 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'system-status') {
     const state = await getWorkspaceState(workspaceId);
     return send(res, 200, await systemStatus({ workspaceId, origin, clients: state.clients || [] }));
+  }
+
+  if (action === 'network-posts') {
+    const from = Date.parse(body.from), to = Date.parse(body.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 101 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
+    const platform = typeof body.platform === 'string' && /^[a-z]{2,20}$/.test(body.platform) ? body.platform : '';
+    const clientId = typeof body.clientId === 'string' && body.clientId ? body.clientId : '';
+    const [posts, connections] = await Promise.all([listNetworkPosts(workspaceId, { from, to, clientId, platform }), databaseRequest(`social_connections?${scope}&select=client_id,platform,synced_at,sync_error`)]);
+    return send(res, 200, { posts, accounts: (connections || []).map((row) => ({ clientId: row.client_id, platform: row.platform, syncedAt: row.synced_at, note: row.sync_error })) });
+  }
+
+  if (action === 'sync-now') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const recent = await databaseRequest(`social_connections?${scope}&client_id=eq.${encodeURIComponent(body.clientId)}&synced_at=gte.${new Date(Date.now() - 10 * 60000).toISOString()}&select=id`) || [];
+    if (recent.length) return send(res, 429, { error: 'These accounts synced in the last 10 minutes. Try again shortly.' });
+    return send(res, 200, { results: await syncClient(workspaceId, body.clientId, { encryptionKey }) });
   }
 
   if (action === 'link-preview') {

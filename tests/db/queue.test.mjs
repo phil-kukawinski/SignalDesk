@@ -1142,6 +1142,82 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   delete process.env.UNSPLASH_ACCESS_KEY;
 }
 
+// --- Account history: posts from any source, plus audience numbers ---
+{
+  const { syncDueConnections, syncConnection } = require(`${ROOT}/api/_lib/sync.js`);
+  const day = (offset) => new Date(Date.now() - offset * 86400000).toISOString();
+  const graphCalls = [];
+  networkHandler = (c) => {
+    const u = new URL(c.url);
+    if (u.hostname === 'graph.facebook.com') {
+      graphCalls.push(u.pathname);
+      if (u.pathname.endsWith('/page1/published_posts')) {
+        assert.ok(u.searchParams.get('appsecret_proof'), 'every Graph call is signed');
+        return u.searchParams.get('after') ? reply({ data: [{ id: 'page1_old', message: 'Older', created_time: day(20), reactions: { summary: { total_count: 1 } }, comments: { summary: { total_count: 0 } } }], paging: { cursors: {} } })
+          : reply({ data: [{ id: 'page1_post1', message: 'Fall kits are here', created_time: day(2), permalink_url: 'https://facebook.com/page1/posts/1', full_picture: 'https://cdn.test/1.jpg', reactions: { summary: { total_count: 40 } }, comments: { summary: { total_count: 5 } }, shares: { count: 3 } }, { id: 'page1_native', message: 'Posted from the Facebook app', created_time: day(1), reactions: { summary: { total_count: 12 } }, comments: { summary: { total_count: 2 } } }], paging: { cursors: { after: 'CUR' }, next: 'https://graph.facebook.com/next' } });
+      }
+      if (u.pathname.endsWith('/insights') && u.pathname.includes('page1_')) return reply({ data: [{ name: 'post_impressions_unique', values: [{ value: 500 }] }] });
+      if (u.pathname.endsWith('/page1')) return reply({ followers_count: 1200 });
+      if (u.pathname.endsWith('/ig1/media')) return reply({ data: [{ id: 'ig_native', caption: 'Reel from the app', media_type: 'VIDEO', thumbnail_url: 'https://cdn.test/t.jpg', permalink: 'https://instagram.com/p/x', timestamp: day(3), like_count: 90, comments_count: 4 }, { id: 'ig_old', timestamp: day(200), media_type: 'IMAGE' }], paging: { cursors: { after: 'A' }, next: 'https://graph.facebook.com/n' } });
+      if (u.pathname.endsWith('/ig_native/insights')) return reply({ data: [{ name: 'views', values: [{ value: 3000 }] }, { name: 'reach', values: [{ value: 2000 }] }, { name: 'total_interactions', values: [{ value: 110 }] }] });
+      if (u.pathname.endsWith('/ig1/insights')) return reply({ data: [{ name: u.searchParams.get('metric'), total_value: { value: u.searchParams.get('metric') === 'reach' ? 4000 : 9000 } }] });
+      if (u.pathname.endsWith('/ig1')) return reply({ followers_count: 2500, media_count: 80 });
+    }
+    if (c.url.startsWith('https://api.linkedin.com/rest/posts?author=urn%3Ali%3Aorganization%3A777')) return reply({ elements: [{ id: 'urn:li:share:9', commentary: 'Hiring {hashtag|\\#|baristas} now \\(really\\)', publishedAt: Date.parse(day(4)), content: { article: {} } }] });
+    if (c.url.startsWith('https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A9')) return reply({ likesSummary: { totalLikes: 15 }, commentsSummary: { aggregatedTotalComments: 2 } });
+    if (c.url.startsWith('https://api.linkedin.com/rest/networkSizes/')) return reply({ firstDegreeSize: 340 });
+    if (c.url.includes('/v5/pins?page_size=100')) return reply({ items: [{ id: 'pin9', title: 'Desk setup', description: 'Ideas', created_at: day(5), media: { media_type: 'image', images: { '600x': { url: 'https://i.pinimg.com/600x/a.jpg' } } } }], bookmark: null });
+    if (c.url.includes('/v5/pins/pin9/analytics')) return reply({ all: { lifetime_metrics: { IMPRESSION: 800, SAVE: 12, PIN_CLICK: 30, OUTBOUND_CLICK: 9 } } });
+    if (c.url.endsWith('/v5/user_account')) return reply({ follower_count: 75, monthly_views: 10000 });
+    throw new Error('unexpected ' + c.url);
+  };
+  const { encryptSecret: encrypt } = require(`${ROOT}/api/_lib/core.js`);
+  await db.exec(`insert into social_connections (workspace_id, client_id, platform, external_id, display_name, token_ciphertext, status) values ('${WS}', 'harbor', 'pinterest', 'harborpins', 'Harbor Pins', '${encrypt('pin-token', key)}', 'active') on conflict (workspace_id, client_id, platform) do nothing`);
+  await db.exec(`update social_connections set status='active', last_error=null, synced_at=null`);
+  const result = await syncDueConnections({ encryptionKey: key, limit: 10 });
+  assert.ok(result.synced >= 4, JSON.stringify(result));
+  for (const item of result.results) assert.ok(!item.error, `${item.platform}: ${item.error}`);
+  const nposts = await q(`select platform, external_id, client_id, job_id is not null as via_sd, (metrics->>'engagements')::int as eng, (metrics->>'reach')::int as reach, text from network_posts order by platform, external_id`);
+  const byId = Object.fromEntries(nposts.map((row) => [row.external_id, row]));
+  assert.ok(byId.page1_native && !byId.page1_native.via_sd, 'a post made in the Facebook app is included');
+  assert.equal(byId.page1_post1.via_sd, true, 'SignalDesk’s own post is linked to its job');
+  assert.equal(byId.page1_post1.eng, 48); assert.equal(byId.page1_post1.reach, 500);
+  assert.ok(byId.page1_old, 'later pages are read with the cursor');
+  assert.equal(byId.ig_native.reach, 2000); assert.equal(byId.ig_native.eng, 110);
+  assert.ok(!byId.ig_old, 'posts older than the window are skipped');
+  assert.equal(byId['urn:li:share:9'].text, 'Hiring #baristas now (really)'); assert.equal(byId['urn:li:share:9'].eng, 17);
+  assert.equal(byId.pin9.platform, 'pinterest');
+  const stats = Object.fromEntries((await q(`select platform, metrics from account_stats`)).map((row) => [row.platform, row.metrics]));
+  assert.equal(stats.facebook.followers, 1200); assert.deepEqual([stats.instagram.followers, stats.instagram.reach, stats.instagram.views], [2500, 4000, 9000]);
+  assert.equal(stats.pinterest.followers, 75);
+  // Personal LinkedIn profiles can't be read; the reason is kept for Setup & health and the calendar
+  const personal = (await q(`select sync_error from social_connections where platform='linkedin' and client_id='pk-works'`))[0];
+  assert.match(personal.sync_error, /personal profile/);
+  assert.equal((await syncDueConnections({ encryptionKey: key, limit: 10 })).synced, 0, 'not again until 3 hours have passed');
+  // Calendar data, filtered by network
+  r = await call({ action: 'network-posts', from: day(30), to: new Date(Date.now() + 86400000).toISOString(), platform: 'facebook' }, 'user');
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.deepEqual(r.payload.posts.map((p) => [p.platform, p.viaSignalDesk]).sort(), [['facebook', false], ['facebook', false], ['facebook', true]]);
+  assert.ok(r.payload.accounts.some((a) => a.platform === 'linkedin' && /personal profile/.test(a.note || '')));
+  // The summary counts posts from every source, once each
+  r = await call({ action: 'overview' });
+  assert.ok(r.payload.published.total >= 6, JSON.stringify(r.payload.published)); assert.ok(r.payload.published.viaSignalDesk >= 1);
+  assert.ok(r.payload.engagement.total >= 48 + 14 + 110 + 17, JSON.stringify(r.payload.engagement.total));
+  assert.equal(r.payload.audience.find((a) => a.platform === 'instagram').followers, 2500);
+  // Sync now: limited to once every 10 minutes per client
+  r = await call({ action: 'sync-now', clientId: 'pk-works' });
+  assert.equal(r.status, 429);
+  r = await call({ action: 'sync-now', clientId: 'pk-works' }, 'user');
+  assert.equal(r.status, 403, 'admins only');
+  // An expired sign-in is flagged for reconnecting
+  networkHandler = (c) => reply({ error: { message: 'Error validating access token: Session has expired', type: 'OAuthException', code: 190 } }, 400);
+  const fb = (await q(`select id, workspace_id, client_id, platform, synced_at from social_connections where platform='facebook'`))[0];
+  const failed = await syncConnection(fb, { encryptionKey: key });
+  assert.match(failed.error, /expired/);
+  assert.equal((await q(`select status from social_connections where id='${fb.id}'`))[0].status, 'needs_reauth');
+  await db.exec(`update social_connections set status='active', last_error=null`);
+}
+
 // --- Invite-only beta: platform tools, limits, errors, account deletion, brand kit from a website ---
 {
   process.env.PLATFORM_ADMIN_EMAILS = 'Owner@x.com';

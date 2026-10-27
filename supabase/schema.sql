@@ -432,6 +432,44 @@ create table if not exists public.link_click_days (
 );
 create index if not exists link_click_days_workspace_idx on public.link_click_days (workspace_id, day);
 
+-- Every post on a connected account, wherever it was posted from (SignalDesk, the network's own
+-- app, or another tool), read from the networks so the calendar and analytics show the whole picture.
+create table if not exists public.network_posts (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  connection_id uuid references public.social_connections (id) on delete cascade,
+  platform text not null,
+  external_id text not null,
+  url text,
+  text text,
+  media_url text,
+  media_type text,
+  published_at timestamptz not null,
+  job_id uuid references public.publish_jobs (id) on delete set null,
+  metrics jsonb not null default '{}'::jsonb,
+  metrics_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (workspace_id, platform, external_id)
+);
+create index if not exists network_posts_time_idx on public.network_posts (workspace_id, published_at desc);
+
+-- Account-level numbers per day (followers, reach, views), from each network's account insights.
+create table if not exists public.account_stats (
+  connection_id uuid not null references public.social_connections (id) on delete cascade,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  platform text not null,
+  day date not null,
+  metrics jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (connection_id, day)
+);
+create index if not exists account_stats_workspace_idx on public.account_stats (workspace_id, day);
+alter table public.social_connections add column if not exists synced_at timestamptz;
+alter table public.social_connections add column if not exists sync_error text;
+
 -- Requests from Meta to delete someone's data after they remove SignalDesk from their Facebook
 -- settings. Only the confirmation code and outcome are kept, so the person can check the status.
 create table if not exists public.data_deletion_requests (
@@ -725,6 +763,8 @@ alter table public.push_subscriptions enable row level security;
 alter table public.bio_pages enable row level security;
 alter table public.data_deletion_requests enable row level security;
 alter table public.short_links enable row level security;
+alter table public.network_posts enable row level security;
+alter table public.account_stats enable row level security;
 alter table public.beta_invites enable row level security;
 alter table public.beta_redemptions enable row level security;
 alter table public.app_settings enable row level security;
@@ -737,14 +777,14 @@ revoke all on public.workspaces, public.workspace_members, public.workspace_invi
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors from anon, authenticated;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors to service_role;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

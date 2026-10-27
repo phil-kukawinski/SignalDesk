@@ -836,6 +836,10 @@ async function overviewData(workspaceId, timeZone) {
     lastWorkerRun('publish'),
   ]);
   const clicks = await linkClickSummary(workspaceId).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
+  // Posts from every source (read from the networks by the account sync); SignalDesk's own posts are linked by job.
+  const networkPosts = await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,job_id,metrics&limit=5000`).catch(() => []) || [];
+  const { audienceSummary } = require('./sync');
+  const audience = await audienceSummary(workspaceId).catch(() => []);
   const rows = new Map();
   for (const report of reports || []) {
     for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { clientId: report.client_id, platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements, audience: row.metrics.reach || row.metrics.views || null });
@@ -847,6 +851,13 @@ async function overviewData(workspaceId, timeZone) {
       rows.set(id, { clientId: job.client_id, platform: job.platform, at: Date.parse(job.published_at), engagements: metrics.engagements, audience: metrics.reach || metrics.views || null });
     }
   }
+  for (const post of networkPosts) {
+    const metrics = post.metrics || {};
+    if (typeof metrics.engagements !== 'number') continue;
+    rows.set(post.job_id ? `job:${post.job_id}` : `net:${post.id}`, { clientId: post.client_id, platform: post.platform, at: Date.parse(post.published_at), engagements: metrics.engagements, audience: metrics.reach || metrics.views || null });
+  }
+  const recentNetwork = networkPosts.filter((post) => Date.parse(post.published_at) >= now - 30 * 86400000);
+  const published = { total: recentNetwork.length, viaSignalDesk: recentNetwork.filter((post) => post.job_id).length, clients: new Set(recentNetwork.map((post) => post.client_id)).size, synced: networkPosts.length > 0 };
   const dayKey = (time) => { const parts = zonedParts(new Date(time), timeZone); return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`; };
   const days = Array.from({ length: 30 }, (_, index) => dayKey(now - (29 - index) * 86400000));
   const daily = Object.fromEntries(days.map((day) => [day, 0]));
@@ -868,7 +879,7 @@ async function overviewData(workspaceId, timeZone) {
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
-    clicks,
+    clicks, audience, published,
     engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
@@ -1052,7 +1063,7 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 }
 
 module.exports = {
-  PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
+  ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone

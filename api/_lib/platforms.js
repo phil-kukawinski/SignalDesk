@@ -664,6 +664,120 @@ const pinterest = {
   }
 };
 
+// --- Account history: every post on a connected account, wherever it was posted from ---
+// Used to fill the calendar and analytics with the whole picture, not just SignalDesk's posts.
+// Each returns { posts: [{ externalId, url, text, mediaUrl, mediaType, publishedAt, metrics }], account: { followers, ... } }.
+const HISTORY_PAGES = 4;
+const DETAILED_METRICS = 20;
+const tryOr = async (work, fallback) => { try { return await work(); } catch { return fallback; } };
+
+async function facebookHistory(connection, since) {
+  const page = connection.external_id;
+  const posts = [];
+  let after = '';
+  for (let index = 0; index < HISTORY_PAGES; index += 1) {
+    const result = await graph(`${page}/published_posts`, { token: connection.token, params: { fields: 'id,message,created_time,permalink_url,full_picture,status_type,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)', since: Math.floor(since / 1000), limit: '50', ...(after ? { after } : {}) } });
+    for (const item of result.data || []) {
+      posts.push({
+        externalId: item.id, url: item.permalink_url || `https://www.facebook.com/${item.id}`, text: item.message || '', mediaUrl: item.full_picture || '',
+        mediaType: item.status_type || '', publishedAt: item.created_time,
+        metrics: { likes: item.reactions?.summary?.total_count ?? null, comments: item.comments?.summary?.total_count ?? null, shares: item.shares?.count ?? 0 }
+      });
+    }
+    after = result.paging?.cursors?.after;
+    if (!after || !result.paging?.next) break;
+  }
+  // Reach for the most recent posts (page insight metrics change often, so it's best-effort).
+  for (const post of posts.slice(0, DETAILED_METRICS)) {
+    const reach = await tryOr(async () => (await graph(`${post.externalId}/insights`, { token: connection.token, params: { metric: 'post_impressions_unique' } })).data?.[0]?.values?.[0]?.value ?? null, null);
+    if (reach !== null) post.metrics.reach = reach;
+  }
+  const info = await tryOr(() => graph(page, { token: connection.token, params: { fields: 'followers_count,fan_count' } }), {});
+  return { posts, account: { followers: info.followers_count ?? info.fan_count ?? null } };
+}
+
+async function instagramHistory(connection, since) {
+  const account = connection.external_id;
+  const posts = [];
+  let after = '';
+  for (let index = 0; index < HISTORY_PAGES; index += 1) {
+    const result = await graph(`${account}/media`, { token: connection.token, params: { fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count', limit: '50', ...(after ? { after } : {}) } });
+    let reachedOld = false;
+    for (const item of result.data || []) {
+      if (Date.parse(item.timestamp) < since) { reachedOld = true; continue; }
+      posts.push({
+        externalId: item.id, url: item.permalink || '', text: item.caption || '', mediaUrl: item.media_type === 'VIDEO' ? item.thumbnail_url || '' : item.media_url || '',
+        mediaType: item.media_type || '', publishedAt: item.timestamp, metrics: { likes: item.like_count ?? null, comments: item.comments_count ?? null }
+      });
+    }
+    after = result.paging?.cursors?.after;
+    if (reachedOld || !after || !result.paging?.next) break;
+  }
+  for (const post of posts.slice(0, DETAILED_METRICS)) {
+    const detail = await tryOr(() => meta.metrics({ connection, job: { platform: 'instagram', external_id: post.externalId } }), null);
+    if (detail) post.metrics = { ...post.metrics, ...Object.fromEntries(Object.entries(detail).filter(([, value]) => value !== null)) };
+  }
+  const info = await tryOr(() => graph(account, { token: connection.token, params: { fields: 'followers_count,media_count' } }), {});
+  const day = (metric) => tryOr(async () => (await graph(`${account}/insights`, { token: connection.token, params: { metric, period: 'day', metric_type: 'total_value', since: Math.floor((Date.now() - 86400000) / 1000), until: Math.floor(Date.now() / 1000) } })).data?.[0]?.total_value?.value ?? null, null);
+  return { posts, account: { followers: info.followers_count ?? null, reach: await day('reach'), views: await day('views') } };
+}
+
+async function linkedinHistory(connection, since) {
+  // LinkedIn only lets apps read company Pages' posts; reading a member's own posts is a closed permission.
+  if (!String(connection.external_id).startsWith('urn:li:organization:')) return { posts: [], account: {}, note: 'LinkedIn doesn’t let apps read a personal profile’s posts, so only posts made through SignalDesk appear.' };
+  const author = encodeURIComponent(connection.external_id);
+  const posts = [];
+  for (let start = 0; start < 150; start += 50) {
+    const { payload } = await linkedIn(`posts?author=${author}&q=author&count=50&start=${start}&sortBy=CREATED`, { token: connection.token });
+    let reachedOld = false;
+    for (const item of payload.elements || []) {
+      const at = item.publishedAt || item.createdAt;
+      if (at && at < since) { reachedOld = true; continue; }
+      posts.push({
+        externalId: item.id, url: `https://www.linkedin.com/feed/update/${item.id}/`, text: String(item.commentary || '').replace(/\{hashtag\|\\#\|([^}]+)\}/g, '#$1').replace(/\\([\\|{}@[\]()<>#*_~])/g, '$1'),
+        mediaUrl: '', mediaType: item.content?.media ? 'media' : item.content?.article ? 'article' : 'text', publishedAt: new Date(at || Date.now()).toISOString(), metrics: {}
+      });
+    }
+    if (reachedOld || (payload.elements || []).length < 50) break;
+  }
+  for (const post of posts.slice(0, DETAILED_METRICS)) {
+    const detail = await tryOr(() => linkedin.metrics({ connection, job: { external_id: post.externalId } }), null);
+    if (detail) post.metrics = detail;
+  }
+  const followers = await tryOr(async () => (await linkedIn(`networkSizes/${author}?edgeType=COMPANY_FOLLOWED_BY_MEMBER`, { token: connection.token })).payload.firstDegreeSize ?? null, null);
+  return { posts, account: { followers } };
+}
+
+async function pinterestHistory(connection, since) {
+  const posts = [];
+  let bookmark = '';
+  for (let index = 0; index < 3; index += 1) {
+    const payload = await pinterestApi(`pins?page_size=100${bookmark ? `&bookmark=${encodeURIComponent(bookmark)}` : ''}`, { token: connection.token });
+    let reachedOld = false;
+    for (const item of payload.items || []) {
+      if (Date.parse(item.created_at) < since) { reachedOld = true; continue; }
+      const image = item.media?.images?.['600x'] || item.media?.images?.['400x300'] || Object.values(item.media?.images || {})[0];
+      posts.push({ externalId: item.id, url: `https://www.pinterest.com/pin/${item.id}/`, text: [item.title, item.description].filter(Boolean).join('\n'), mediaUrl: image?.url || '', mediaType: item.media?.media_type || 'image', publishedAt: item.created_at, metrics: {} });
+    }
+    bookmark = payload.bookmark;
+    if (reachedOld || !bookmark) break;
+  }
+  for (const post of posts.slice(0, DETAILED_METRICS)) {
+    const detail = await tryOr(() => pinterest.metrics({ connection, job: { external_id: post.externalId } }), null);
+    if (detail) post.metrics = detail;
+  }
+  const info = await tryOr(() => pinterestApi('user_account', { token: connection.token }), {});
+  return { posts, account: { followers: info.follower_count ?? null, monthlyViews: info.monthly_views ?? null } };
+}
+
+async function accountHistory(platform, connection, since) {
+  if (platform === 'facebook') return facebookHistory(connection, since);
+  if (platform === 'instagram') return instagramHistory(connection, since);
+  if (platform === 'linkedin') return linkedinHistory(connection, since);
+  if (platform === 'pinterest') return pinterestHistory(connection, since);
+  return { posts: [], account: {} };
+}
+
 const PROVIDERS = { meta, linkedin, pinterest };
 const COMMENTABLE = new Set(['facebook', 'instagram', 'linkedin']);
 
@@ -672,5 +786,5 @@ function adapterFor(platform) {
 }
 
 module.exports = {
-  lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
+  accountHistory, lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
 };
