@@ -25,7 +25,7 @@ function needsChange({ format, width, height, size }) {
   return format !== 'jpeg' || ratio < MIN_RATIO - 0.005 || ratio > MAX_RATIO + 0.005 || size > MAX_BYTES || width > 4000;
 }
 
-async function toInstagramJpeg(bytes) {
+async function toInstagramJpeg(bytes, { minRatio = MIN_RATIO, maxRatio = MAX_RATIO, maxWidth = MAX_WIDTH } = {}) {
   const info = await inspect(bytes);
   // Transparent areas become white (most transparent graphics are made for light backgrounds);
   // padding then uses the dominant color of the filled-in image so it blends in.
@@ -34,9 +34,9 @@ async function toInstagramJpeg(bytes) {
   const background = { r: dominant.r, g: dominant.g, b: dominant.b, alpha: 1 };
   // Scale first so the padded result is at most 1440 pixels wide.
   const ratio = info.width / info.height;
-  const targetRatio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio));
+  const targetRatio = Math.min(maxRatio, Math.max(minRatio, ratio));
   const fullWidth = ratio < targetRatio ? info.height * targetRatio : info.width;
-  const scale = Math.min(MAX_WIDTH, fullWidth) / fullWidth;
+  const scale = Math.min(maxWidth, fullWidth) / fullWidth;
   const width = Math.max(1, Math.min(Math.round(fullWidth * scale), Math.round(info.width * scale)));
   const canvasWidth = Math.max(width, Math.round(fullWidth * scale));
   const height = Math.max(1, Math.round(info.height * scale));
@@ -75,4 +75,15 @@ async function instagramImageUrl(url, { download, key }) {
   return { url: await uploadPublic(`system/instagram/${key}.jpg`, result.bytes, 'image/jpeg'), changed: true, padded: result.padded, converted: result.converted };
 }
 
-module.exports = { instagramImageUrl, toInstagramJpeg, inspect, needsChange, MIN_RATIO, MAX_RATIO };
+// Stories are full-screen 9:16. Other shapes are padded (not cropped) to 9:16, 1080 pixels wide.
+const STORY_RATIO = 9 / 16;
+async function storyImageUrl(url, { download, key }) {
+  const file = await download(url);
+  const info = await inspect(file.bytes);
+  const ratio = info.width / info.height;
+  if (info.format === 'jpeg' && Math.abs(ratio - STORY_RATIO) < 0.01 && info.size <= MAX_BYTES && info.width <= 2160) return { url, changed: false };
+  const result = await toInstagramJpeg(file.bytes, { minRatio: STORY_RATIO, maxRatio: STORY_RATIO, maxWidth: 1080 });
+  return { url: await uploadPublic(`system/instagram/${key}-story.jpg`, result.bytes, 'image/jpeg'), changed: true, padded: result.padded, converted: result.converted };
+}
+
+module.exports = { instagramImageUrl, storyImageUrl, STORY_RATIO, toInstagramJpeg, inspect, needsChange, MIN_RATIO, MAX_RATIO };

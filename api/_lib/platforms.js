@@ -11,7 +11,12 @@ const REQUEST_TIMEOUT_MS = 25000;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const VIDEO_PATTERN = /\.(mp4|mov|m4v|webm)(?:[?#]|$)/i;
 
-const DIRECT_PLATFORMS = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin', pinterest: 'pinterest' };
+const DIRECT_PLATFORMS = {
+  facebook: 'meta', instagram: 'meta', instagram_story: 'meta', linkedin: 'linkedin', pinterest: 'pinterest',
+  twitter: 'x', youtube: 'google', tiktok: 'tiktok', threads: 'threads'
+};
+// Instagram Stories post through the client's Instagram connection.
+const CONNECTION_PLATFORM = { instagram_story: 'instagram' };
 
 class PublishError extends Error {
   // kind: auth (reconnect needed), rate_limit and temporary (retry), invalid (fix the post), unknown (may have posted)
@@ -35,6 +40,10 @@ function providerConfigured(provider) {
   // app, so Pages use a second LinkedIn app.
   if (provider === 'linkedin_pages') return Boolean(process.env.LINKEDIN_PAGES_CLIENT_ID && process.env.LINKEDIN_PAGES_CLIENT_SECRET);
   if (provider === 'pinterest') return Boolean(process.env.PINTEREST_APP_ID && process.env.PINTEREST_APP_SECRET);
+  if (provider === 'x') return Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET);
+  if (provider === 'google') return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  if (provider === 'tiktok') return Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
+  if (provider === 'threads') return Boolean(process.env.THREADS_APP_ID && process.env.THREADS_APP_SECRET);
   return false;
 }
 
@@ -208,6 +217,7 @@ const meta = {
   },
 
   async publish(ctx) {
+    if (ctx.job.platform === 'instagram_story') return publishInstagramStory(ctx);
     return ctx.job.platform === 'instagram' ? publishInstagram(ctx) : publishFacebook(ctx);
   },
 
@@ -234,6 +244,8 @@ const meta = {
   },
 
   async metrics({ connection, job }) {
+    // Story insights disappear after 24 hours, so they aren't tracked.
+    if (job.platform === 'instagram_story') return {};
     if (job.platform === 'instagram') {
       const insights = await graph(`${job.external_id}/insights`, { token: connection.token, params: { metric: 'views,reach,likes,comments,shares,saved,total_interactions' } });
       const value = (name) => insights.data?.find((item) => item.name === name)?.values?.[0]?.value ?? null;
@@ -350,6 +362,41 @@ async function publishInstagram({ connection, job, content, options, stage, save
   return { externalId: published.id, url };
 }
 
+// Instagram Stories: one image or video, full screen. Images are converted to a 9:16 JPEG.
+async function publishInstagramStory({ connection, job, content, stage, saveStage, markSent }) {
+  const account = connection.external_id;
+  const url = content.media[0];
+  if (!url) throw new PublishError('invalid', 'Instagram Stories need an image or video.');
+  if (content.media.length > 1) throw new PublishError('invalid', 'An Instagram Story takes one image or video. Schedule each one as its own Story.');
+  let container = stage.storyContainer;
+  if (!container) {
+    const video = mediaKind(url) === 'video';
+    let mediaUrl = url;
+    if (!video) {
+      const { storyImageUrl } = require('./images');
+      try { mediaUrl = (await storyImageUrl(url, { download: downloadMedia, key: job.id })).url; } catch (error) {
+        if (error instanceof PublishError) throw error;
+        throw new PublishError('invalid', `Couldn’t prepare the image for the Story: ${error.message}`);
+      }
+    }
+    container = (await graph(`${account}/media`, { method: 'POST', token: connection.token, params: { media_type: 'STORIES', [video ? 'video_url' : 'image_url']: mediaUrl } })).id;
+    await saveStage({ storyContainer: container, processingSince: new Date().toISOString() });
+    stage = { ...stage, storyContainer: container, processingSince: new Date().toISOString() };
+  }
+  const status = await graph(container, { token: connection.token, params: { fields: 'status_code,status' } });
+  if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
+    await saveStage({ storyContainer: null });
+    throw new PublishError('invalid', `Instagram couldn't process the Story${status.status ? `: ${status.status}` : '.'}`);
+  }
+  if (status.status_code && status.status_code !== 'FINISHED') {
+    if (Date.now() - Date.parse(stage.processingSince) > IG_PROCESSING_LIMIT_MS) throw new PublishError('invalid', 'Instagram was still processing the Story after 30 minutes.');
+    return { pending: true, retryInSeconds: 45 };
+  }
+  await markSent();
+  const published = await graph(`${account}/media_publish`, { method: 'POST', token: connection.token, params: { creation_id: container }, sending: true });
+  return { externalId: published.id, url: connection.username ? `https://www.instagram.com/stories/${connection.username}/` : '' };
+}
+
 // --- LinkedIn: personal profiles and Pages ---
 
 function linkedInHeaders(token, extra = {}) {
@@ -406,7 +453,7 @@ function expiresAt(seconds) {
 }
 
 // Downloads media for networks that need the file itself, following redirects only to public hosts.
-async function downloadMedia(url) {
+async function downloadMedia(url, { maxBytes = MAX_UPLOAD_BYTES } = {}) {
   let target = url;
   let response;
   for (let hop = 0; hop < 4; hop += 1) {
@@ -422,9 +469,10 @@ async function downloadMedia(url) {
     break;
   }
   if (!response.ok) throw new PublishError('invalid', `The media link returned HTTP ${response.status}.`);
-  if (Number(response.headers.get('content-length')) > MAX_UPLOAD_BYTES) throw new PublishError('invalid', 'Media must be 20 MB or smaller.');
+  const limitText = `Media must be ${Math.round(maxBytes / 1048576)} MB or smaller.`;
+  if (Number(response.headers.get('content-length')) > maxBytes) throw new PublishError('invalid', limitText);
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > MAX_UPLOAD_BYTES) throw new PublishError('invalid', 'Media must be 20 MB or smaller.');
+  if (bytes.length > maxBytes) throw new PublishError('invalid', limitText);
   return { bytes, type: response.headers.get('content-type') || 'application/octet-stream' };
 }
 
@@ -787,7 +835,7 @@ async function accountHistory(platform, connection, since) {
   return { posts: [], account: {} };
 }
 
-const PROVIDERS = { meta, linkedin, pinterest };
+const PROVIDERS = { meta, linkedin, pinterest, ...require('./networks')({ request, tokenRequest, PublishError, httpKind, redirectUri, downloadMedia, mediaKind, expiresAt, firstLine }) };
 const COMMENTABLE = new Set(['facebook', 'instagram', 'linkedin']);
 
 function adapterFor(platform) {
@@ -795,5 +843,5 @@ function adapterFor(platform) {
 }
 
 module.exports = {
-  accountHistory, lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
+  CONNECTION_PLATFORM, accountHistory, lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
 };

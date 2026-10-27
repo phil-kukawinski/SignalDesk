@@ -3,7 +3,7 @@ const {
   httpError, databaseRequest, ayrshareRequest, ayrshareConfigured, getProfile, getWorkspaceState,
   encryptSecret, decryptSecret, buildPostBody, COMMENT_PLATFORMS
 } = require('./core');
-const { DIRECT_PLATFORMS, COMMENTABLE, PublishError, providerConfigured, adapterFor } = require('./platforms');
+const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, COMMENTABLE, PublishError, providerConfigured, adapterFor } = require('./platforms');
 
 // SignalDesk's own publishing queue. A scheduled post has one job per network; the worker
 // claims due jobs, publishes them directly (or through Ayrshare for other networks), and
@@ -12,7 +12,7 @@ const { DIRECT_PLATFORMS, COMMENTABLE, PublishError, providerConfigured, adapter
 const MAX_ATTEMPTS = 6;
 const RETRY_MINUTES = [1, 5, 15, 30, 60];
 const REFRESH_WINDOW_MS = 7 * 86400000;
-const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest' };
+const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', threads: 'Threads' };
 // Networks or formats you post to yourself. SignalDesk sends a reminder with the copy and media at the scheduled time.
 const MANUAL_PLATFORMS = { instagram_story: 'Instagram Story', tiktok: 'TikTok', youtube_shorts: 'YouTube Shorts', x: 'X', threads: 'Threads', other: 'Other' };
 const CONNECTION_FIELDS = 'id,workspace_id,client_id,platform,external_id,display_name,username,profile_url,image_url,status,token_expires_at,refresh_expires_at,meta,last_error,expiry_notified_at,updated_at';
@@ -105,7 +105,8 @@ async function resolveDestinations(workspaceId, clientId, platforms, encryptionK
   let profile;
   const destinations = [];
   for (const platform of platforms) {
-    const connection = DIRECT_PLATFORMS[platform] ? connections.find((item) => item.platform === platform) : null;
+    const connectionPlatform = CONNECTION_PLATFORM[platform] || platform;
+    const connection = DIRECT_PLATFORMS[platform] ? connections.find((item) => item.platform === connectionPlatform) : null;
     if (connection?.status === 'active') {
       destinations.push({ platform, provider: 'direct', connectionId: connection.id });
       continue;

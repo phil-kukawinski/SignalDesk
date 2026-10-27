@@ -44,7 +44,7 @@ SignalDesk publishes posts itself. When you schedule a post, `/api/social` saves
 - Expired or revoked sign-ins mark the account **Reconnect needed** and notify admins.
 - If the connection drops after a post was sent, the job is marked **Check the account** instead of retrying, so nothing is posted twice. After checking, an admin can post it again from the post's details.
 
-Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect **directly** through each network's official API, with no publishing-provider fee. Other networks (TikTok, YouTube, X, and so on) can still go through Ayrshare if you add an Ayrshare key; direct connections always take priority.
+Facebook Pages, Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinterest, X, YouTube, and TikTok connect **directly** through each network's official API, with no publishing-provider fee. Other networks can still go through Ayrshare if you add an Ayrshare key; direct connections always take priority.
 
 1. **Supabase.** Run `supabase/schema.sql` in the SQL editor and set `url` and `anonKey` in `js/config.js`. Those two values are browser-visible; never put the service-role key there. The schema creates a public `social-media` bucket for uploads, because networks download media from a public link.
 2. **Server settings.** Add the variables in `.env.example` to the Vercel project's Environment Variables:
@@ -70,6 +70,12 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
    - Create an app at developers.pinterest.com, add `APP_URL/api/oauth` as a redirect URI, and set `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET`.
    - New apps start with limited trial access, so check what yours allows before scheduling real Pins. For testing against Pinterest's sandbox, set `PINTEREST_SANDBOX=true`.
    - You choose a default board when connecting, and you can pick another board per post under **Post options → Pinterest**.
+6b. **X, YouTube, TikTok, and Threads** (each optional; until one is set up, posts to it can use a reminder instead). Every app uses `APP_URL/api/oauth` as its redirect/callback URL.
+   - **X:** at developer.x.com create a project and app, turn on **OAuth 2.0** (type *Web App*, read and write), and set `X_CLIENT_ID` and `X_CLIENT_SECRET`. Posting through the API needs a plan that includes writes; X charges for posting beyond its free allowance. Posts: up to 280 characters, up to 4 images or 1 video.
+   - **YouTube:** in Google Cloud, enable the **YouTube Data API v3**, set up the OAuth consent screen (add the `youtube.upload` and `youtube.readonly` scopes), and create an OAuth client of type *Web application*. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Until Google verifies the app and YouTube completes its API audit, uploads stay private. Vertical videos under 60 seconds become Shorts automatically. Videos up to 250 MB.
+   - **TikTok:** at developers.tiktok.com create an app with **Login Kit** and the **Content Posting API** (Direct Post), scopes `user.info.basic`, `video.upload`, `video.publish`. Set `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`. Until TikTok audits the app, videos post as private. Videos only, up to 250 MB.
+   - **Threads:** in your Meta app, add the **Access the Threads API** use case with `threads_basic` and `threads_content_publish`, add the redirect URL, and set `THREADS_APP_ID` and `THREADS_APP_SECRET` (the Threads app ID and secret, which differ from `META_APP_ID`). Posts: up to 500 characters, text, images, video, or carousels.
+   - **Instagram Stories** use the client's Instagram connection, with no extra setup. Choose **Instagram Story** in the Publishing Studio; images are converted to a 9:16 JPEG.
 7. **Legal pages.** Meta, LinkedIn, and Pinterest ask for a privacy policy, terms, and data deletion instructions. SignalDesk serves them at `/privacy`, `/terms`, and `/data-deletion`. Set `LEGAL_CONTACT_EMAIL` (shown on all three pages) and `LEGAL_OPERATOR_NAME` (your name or business), plus optionally `LEGAL_GOVERNING_LAW` (for example `the State of New York, USA`). The privacy policy lists only the outside services this deployment has turned on, such as Resend or Anthropic. When someone removes SignalDesk in their Facebook settings, Meta calls the deletion callback, SignalDesk deletes that person's Facebook and Instagram connections, and Meta shows them a confirmation code they can look up at `/data-deletion`. Have a lawyer review the pages before offering SignalDesk to other businesses.
 8. **Connect accounts.** In **Social Accounts**, choose a client and select **Connect** on a network. Sign in on the network's own page, then choose which Page, Instagram account, LinkedIn profile or Page, or Pinterest account (and board) belongs to that client. Tokens stay on the server, encrypted; the browser never sees them.
 9. **Optional: Ayrshare** for other networks, the Social Inbox, and account-level analytics. Set `AYRSHARE_API_KEY` and use **Connect via Ayrshare**. For X, also create an X Developer App and set the two `X_TWITTER_*` variables.
@@ -205,7 +211,8 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `sw.js`, `manifest.webmanifest`, `icons/` — the installable app
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
-- `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors
+- `api/_lib/platforms.js` — direct Facebook, Instagram (including Stories), LinkedIn, and Pinterest connectors
+- `api/_lib/networks.js` — direct X, YouTube, TikTok, and Threads connectors
 - `api/_lib/media.js` — daily cleanup of unused uploads
 - `api/_lib/images.js` — converts images Instagram won't accept into JPEGs it will
 - `api/_lib/sync.js`, `js/network.js` — reads posts and follower counts from connected accounts, for the calendar and Analytics

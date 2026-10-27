@@ -81,6 +81,15 @@ function networkChecks() {
   if (providerConfigured('pinterest')) checks.push(check('networks', 'pinterest', 'Pinterest', 'ok', process.env.PINTEREST_SANDBOX === 'true' ? 'Set up, using Pinterest’s sandbox (test Pins only).' : 'Set up.'));
   else if (process.env.PINTEREST_APP_ID) checks.push(check('networks', 'pinterest', 'Pinterest', 'error', 'PINTEREST_APP_ID is set, but PINTEREST_APP_SECRET is missing.', 'Add PINTEREST_APP_SECRET in Vercel, then redeploy.'));
   else checks.push(check('networks', 'pinterest', 'Pinterest', 'off', 'Not set up.', 'Set PINTEREST_APP_ID and PINTEREST_APP_SECRET in Vercel.'));
+  const extra = [
+    ['x', 'X', 'X_CLIENT_ID and X_CLIENT_SECRET', 'Posting needs an X developer app with write access; X charges for API posting beyond its free allowance.'],
+    ['google', 'YouTube', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET', 'Until Google verifies the app, uploads from it stay private on YouTube.'],
+    ['tiktok', 'TikTok', 'TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET', 'Until TikTok audits the app, videos post as private (only you can see them).'],
+    ['threads', 'Threads', 'THREADS_APP_ID and THREADS_APP_SECRET', 'Uses the Threads use case on a Meta app, with its own Threads app ID and secret.']
+  ];
+  for (const [provider, name, keys, note] of extra) {
+    checks.push(providerConfigured(provider) ? check('networks', provider, name, 'ok', `Set up. ${note}`) : check('networks', provider, name, 'off', 'Not set up. Posts can still use a reminder.', `Set ${keys} in Vercel.`));
+  }
   checks.push(process.env.AYRSHARE_API_KEY
     ? check('networks', 'ayrshare', 'Other networks (Ayrshare)', 'ok', 'Set up.')
     : check('networks', 'ayrshare', 'Other networks (Ayrshare)', 'off', 'Optional. TikTok, YouTube, X, and others use reminders instead.'));

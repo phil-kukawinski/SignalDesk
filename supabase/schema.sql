@@ -225,7 +225,7 @@ create table if not exists public.social_connections (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces (id) on delete cascade,
   client_id text not null,
-  platform text not null check (platform in ('facebook', 'instagram', 'linkedin', 'pinterest')),
+  platform text not null check (platform in ('facebook', 'instagram', 'linkedin', 'pinterest', 'twitter', 'youtube', 'tiktok', 'threads')),
   external_id text not null,
   display_name text,
   username text,
@@ -252,7 +252,7 @@ create table if not exists public.oauth_sessions (
   workspace_id uuid not null references public.workspaces (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,
   client_id text not null,
-  provider text not null check (provider in ('meta', 'linkedin', 'pinterest')),
+  provider text not null check (provider in ('meta', 'linkedin', 'pinterest', 'x', 'google', 'tiktok', 'threads')),
   status text not null default 'started' check (status in ('started', 'authorized', 'completed', 'failed')),
   candidates jsonb not null default '[]'::jsonb,
   secret_ciphertext text,
@@ -467,6 +467,11 @@ create table if not exists public.account_stats (
   primary key (connection_id, day)
 );
 create index if not exists account_stats_workspace_idx on public.account_stats (workspace_id, day);
+-- X, YouTube, TikTok, and Threads connect directly too (added October 2026).
+alter table public.social_connections drop constraint if exists social_connections_platform_check;
+alter table public.social_connections add constraint social_connections_platform_check check (platform in ('facebook', 'instagram', 'linkedin', 'pinterest', 'twitter', 'youtube', 'tiktok', 'threads'));
+alter table public.oauth_sessions drop constraint if exists oauth_sessions_provider_check;
+alter table public.oauth_sessions add constraint oauth_sessions_provider_check check (provider in ('meta', 'linkedin', 'pinterest', 'x', 'google', 'tiktok', 'threads'));
 alter table public.social_connections add column if not exists synced_at timestamptz;
 alter table public.social_connections add column if not exists sync_error text;
 

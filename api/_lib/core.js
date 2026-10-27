@@ -3,11 +3,11 @@ const dns = require('node:dns').promises;
 const net = require('node:net');
 
 const PLATFORM_KEYS = new Set([
-  'bluesky', 'facebook', 'gmb', 'instagram', 'linkedin', 'pinterest', 'reddit',
+  'bluesky', 'facebook', 'gmb', 'instagram', 'instagram_story', 'linkedin', 'pinterest', 'reddit',
   'snapchat', 'telegram', 'threads', 'tiktok', 'twitter', 'whatsapp', 'youtube'
 ]);
 const MESSAGE_PLATFORMS = new Set(['facebook', 'instagram', 'twitter', 'whatsapp']);
-const MEDIA_REQUIRED_PLATFORMS = new Set(['instagram', 'pinterest', 'tiktok', 'youtube']);
+const MEDIA_REQUIRED_PLATFORMS = new Set(['instagram', 'instagram_story', 'pinterest', 'tiktok', 'youtube']);
 const COMMENT_PLATFORMS = new Set(['bluesky', 'facebook', 'instagram', 'linkedin', 'reddit', 'tiktok', 'twitter', 'youtube']);
 const VISIBILITY_OPTIONS = {
   linkedin: ['public', 'connections', 'loggedin'],

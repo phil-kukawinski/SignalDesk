@@ -8,7 +8,7 @@ const {
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
 } = require('./_lib/core');
-const { DIRECT_PLATFORMS, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
+const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
@@ -76,6 +76,7 @@ function allowedOrigin(req) {
 function integrations() {
   return {
     meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), linkedinPages: providerConfigured('linkedin_pages'), pinterest: providerConfigured('pinterest'),
+    x: providerConfigured('x'), youtube: providerConfigured('google'), tiktok: providerConfigured('tiktok'), threads: providerConfigured('threads'),
     ayrshare: ayrshareConfigured(), stock: stockConfigured()
   };
 }
@@ -88,7 +89,7 @@ function publicAccounts({ connections = [], ayrshare = null }) {
   return [...PLATFORM_KEYS].map((platform) => {
     const directAvailable = Boolean(DIRECT_PLATFORMS[platform] && providerConfigured(DIRECT_PLATFORMS[platform]));
     const ayrshareAvailable = ayrshareReady && (platform !== 'twitter' || Boolean(process.env.X_TWITTER_OAUTH1_API_KEY && process.env.X_TWITTER_OAUTH1_API_SECRET));
-    const direct = connections.find((item) => item.platform === platform);
+    const direct = connections.find((item) => item.platform === (CONNECTION_PLATFORM[platform] || platform));
     if (direct) {
       return {
         platform, linked: direct.status === 'active', provider: 'direct', status: direct.status, directAvailable, ayrshareAvailable,
@@ -98,7 +99,8 @@ function publicAccounts({ connections = [], ayrshare = null }) {
         autoRenews: Boolean(direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now()),
         expiresAt: direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now() ? direct.refresh_expires_at : direct.token_expires_at,
         ...(platform === 'pinterest' ? { boards: direct.meta?.boards || [], boardId: direct.meta?.boardId || '' } : {}),
-        ...(platform === 'linkedin' ? { kind: direct.meta?.kind || 'member', app: direct.meta?.app || 'profile' } : {})
+        ...(platform === 'linkedin' ? { kind: direct.meta?.kind || 'member', app: direct.meta?.app || 'profile' } : {}),
+        ...(CONNECTION_PLATFORM[platform] ? { via: CONNECTION_PLATFORM[platform] } : {})
       };
     }
     const linked = active.has(platform);
@@ -819,8 +821,9 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'oauth-start') {
-      if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose Meta, LinkedIn, or Pinterest.' });
-      if (!providerConfigured(body.provider) && !(body.provider === 'linkedin' && body.variant === 'pages')) return send(res, 503, { error: `${body.provider === 'meta' ? 'Meta' : body.provider === 'linkedin' ? 'LinkedIn' : 'Pinterest'} isn't set up on the server yet. Add its app ID and secret.` });
+      if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose a network to connect.' });
+      const providerName = { meta: 'Meta', linkedin: 'LinkedIn', pinterest: 'Pinterest', x: 'X', google: 'YouTube', tiktok: 'TikTok', threads: 'Threads' }[body.provider];
+      if (!providerConfigured(body.provider) && !(body.provider === 'linkedin' && body.variant === 'pages')) return send(res, 503, { error: `${providerName} isn't set up on the server yet. Add its app keys in Vercel.` });
       const pages = body.provider === 'linkedin' && body.variant === 'pages';
       if (pages && !providerConfigured('linkedin_pages')) return send(res, 503, { error: 'Company Pages need a second LinkedIn app. Add LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET in Vercel.' });
       const state = (pages ? 'lp_' : '') + crypto.randomBytes(32).toString('base64url');
@@ -846,7 +849,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'disconnect') {
-      if (!DIRECT_PLATFORMS[body.platform]) return send(res, 400, { error: 'Choose a directly connected network.' });
+      if (!DIRECT_PLATFORMS[body.platform] || CONNECTION_PLATFORM[body.platform]) return send(res, 400, { error: 'Choose a directly connected network.' });
       const scope = `workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(clientId)}`;
       const waiting = await databaseRequest(`publish_jobs?${scope}&platform=eq.${body.platform}&provider=eq.direct&status=in.(held,queued)&select=id`) || [];
       await databaseRequest(`social_connections?${scope}&platform=eq.${body.platform}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });

@@ -1,5 +1,5 @@
 // Publishing Studio: per-network copy and media, post options, and drafts.
-const PLATFORM_CHAR_LIMITS={bluesky:300,facebook:63206,gmb:1500,instagram:2200,linkedin:3000,pinterest:500,reddit:40000,telegram:4096,threads:500,tiktok:2200,twitter:280,youtube:5000};
+const PLATFORM_CHAR_LIMITS={bluesky:300,facebook:63206,gmb:1500,instagram:2200,instagram_story:2200,linkedin:3000,pinterest:500,reddit:40000,telegram:4096,threads:500,tiktok:2200,twitter:280,youtube:5000};
 let uploadedMedia=[],sharedMediaPreview=null,platformOverrides={},activeVariant='all';
 function selectedPlatforms(){return $$('.account-select input[type=checkbox]:checked').map(input=>input.value);}
 function platformLabel(platform){return SOCIAL_NETWORKS.find(item=>item[0]===platform)?.[1]||platform;}

@@ -88,7 +88,7 @@ const body = (c) => (c.body ? (typeof c.body === 'string' ? (c.body.startsWith('
 // --- Accounts before connecting ---
 let r = await call({ action: 'accounts', clientId: 'pk-works' });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
-assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, linkedinPages: false, pinterest: true, ayrshare: false, stock: false });
+assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, linkedinPages: false, pinterest: true, x: false, youtube: false, tiktok: false, threads: false, ayrshare: false, stock: false });
 assert.ok(r.payload.accounts.every((a) => !a.linked));
 assert.equal(r.payload.accounts.find((a) => a.platform === 'tiktok').available, false);
 r = await call({ action: 'connect', clientId: 'pk-works' });
@@ -191,7 +191,7 @@ r = await call({ action: 'oauth-finish', sessionId: pinSession, selections: [{ k
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 r = await call({ action: 'accounts', clientId: 'pk-works' });
 const linked = r.payload.accounts.filter((a) => a.linked);
-assert.deepEqual(linked.map((a) => `${a.platform}:${a.provider}`), ['facebook:direct', 'instagram:direct', 'linkedin:direct', 'pinterest:direct']);
+assert.deepEqual(linked.map((a) => `${a.platform}:${a.provider}`), ['facebook:direct', 'instagram:direct', 'instagram_story:direct', 'linkedin:direct', 'pinterest:direct']);
 assert.equal(r.payload.accounts.find((a) => a.platform === 'pinterest').boardId, 'b2');
 
 // --- Schedule a post to all four, with comments and a repost ---

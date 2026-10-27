@@ -8,7 +8,7 @@ const { notify } = require('./_lib/notify');
 // the request body and only its hash is stored.
 
 const LOOKAHEAD_DAYS = 60;
-const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'X', threads: 'Threads', bluesky: 'Bluesky', gmb: 'Google Business Profile', reddit: 'Reddit', telegram: 'Telegram', snapchat: 'Snapchat', whatsapp: 'WhatsApp' };
+const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'X', threads: 'Threads', bluesky: 'Bluesky', gmb: 'Google Business Profile', reddit: 'Reddit', telegram: 'Telegram', snapchat: 'Snapchat', whatsapp: 'WhatsApp' };
 
 async function findLink(token) {
   if (typeof token !== 'string' || !/^[\w-]{40,64}$/.test(token)) return null;

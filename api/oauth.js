@@ -16,8 +16,8 @@ function page(res, status, { ok, message, sessionId }) {
   res.setHeader('cache-control', 'no-store');
   res.setHeader('referrer-policy', 'no-referrer');
   res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SignalDesk</title></head>
-<body style="font:15px/1.5 system-ui,sans-serif;color:#1a1f3a;background:#fdf6f0;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px;text-align:center">
-<div><p style="font-weight:700;margin:0 0 6px">${ok ? 'Signed in' : 'Couldn’t connect'}</p><p style="margin:0;color:#606779">${escapeHtml(message)}</p></div>
+<body style="font:15px/1.5 system-ui,sans-serif;color:#101828;background:#f5f6f8;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px;text-align:center">
+<div><p style="font-weight:700;margin:0 0 6px">${ok ? 'Signed in' : 'Couldn’t connect'}</p><p style="margin:0;color:#5d6676">${escapeHtml(message)}</p></div>
 <script>try{if(window.opener)window.opener.postMessage(${payload},location.origin)}catch(e){}setTimeout(function(){window.close()},${ok ? 700 : 6000})</script>
 </body></html>`);
 }

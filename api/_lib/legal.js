@@ -1,5 +1,5 @@
 // Public legal pages: privacy policy, terms of service, and data deletion instructions.
-// Meta, LinkedIn, and Pinterest ask for these URLs when reviewing an app. The operator's
+// Meta, LinkedIn, Pinterest, X, Google, and TikTok ask for these URLs when reviewing an app. The operator's
 // name and contact email come from LEGAL_OPERATOR_NAME and LEGAL_CONTACT_EMAIL, and the
 // list of outside services reflects which ones this deployment actually has turned on.
 
@@ -74,7 +74,7 @@ footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font
 <body>
 <header><div class="bar"><a class="brand" href="/">SignalDesk</a><nav aria-label="Legal">${nav}</nav></div></header>
 <main>${body}</main>
-<footer>SignalDesk is not affiliated with or endorsed by Meta, Instagram, LinkedIn, or Pinterest.</footer>
+<footer>SignalDesk is not affiliated with or endorsed by Meta, Instagram, Threads, LinkedIn, Pinterest, X, Google, YouTube, or TikTok.</footer>
 </body>
 </html>`;
 }
@@ -97,7 +97,7 @@ function privacyPage() {
 <h3>What you put into SignalDesk</h3>
 <p>Clients, posts and captions, images and videos you upload, image descriptions, notes, templates, brand kits, campaigns, goals, link-in-bio pages, and settings. Team members you invite to your workspace can see this content.</p>
 <h3>Social accounts you connect</h3>
-<p>When you connect Facebook, Instagram, LinkedIn, or Pinterest, you sign in on that network’s own page and choose what to allow. We never see your password for those networks. We receive:</p>
+<p>When you connect Facebook, Instagram, Threads, LinkedIn, Pinterest, X, YouTube, or TikTok, you sign in on that network’s own page and choose what to allow. We never see your password for those networks. We receive:</p>
 <ul>
 <li>An access token that lets SignalDesk act on your behalf. It is encrypted (AES-256-GCM) before it is stored.</li>
 <li>Basic details about the accounts you can manage, such as the account or Page ID, name, username, profile picture, and profile link, and for Pinterest, your board names.</li>
@@ -122,7 +122,9 @@ function privacyPage() {
 <li>To run AI features when you use them, such as drafting captions or describing an image.</li>
 <li>To keep the service secure, fix problems, and prevent abuse.</li>
 </ul>
-<p>We don’t sell your information, use it for advertising, or build profiles of you or the people who interact with your posts. Data from Meta, LinkedIn, and Pinterest is used only to provide the features you use in SignalDesk, following each network’s developer terms, and is never used to train AI models.</p>
+<p>We don’t sell your information, use it for advertising, or build profiles of you or the people who interact with your posts. Data from Meta (Facebook, Instagram, Threads), LinkedIn, Pinterest, X, Google (YouTube), and TikTok is used only to provide the features you use in SignalDesk, following each network’s developer terms, and is never used to train AI models.</p>
+<h3>YouTube</h3>
+<p>SignalDesk uses YouTube API Services to upload the videos you schedule and to read their view, like, and comment counts. By connecting YouTube you agree to the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>, and Google’s handling of your data is described in the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. You can remove SignalDesk’s access at any time on your <a href="https://myaccount.google.com/permissions">Google security settings page</a>. SignalDesk’s use of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including its Limited Use requirements.</p>
 
 <h2>Who we share it with</h2>
 <p>We share information only as needed to run SignalDesk:</p>
@@ -186,7 +188,7 @@ function termsPage() {
 <p>You own the content you put into SignalDesk. You give us permission to store, copy, resize, and send it only as needed to run the service for you, for example to publish a post to the networks you chose. You confirm that you have the rights to everything you publish and that it follows the law and each network’s rules.</p>
 
 <h2>Connected networks</h2>
-<p>When you connect Facebook, Instagram, LinkedIn, Pinterest, or another network, your use of that network is also governed by its own terms and policies. SignalDesk is not affiliated with or endorsed by those companies. They can change or limit their services at any time, which may cause scheduled posts or features to fail. SignalDesk tries again and tells you when a post doesn’t go out, but please check posts that matter.</p>
+<p>When you connect Facebook, Instagram, Threads, LinkedIn, Pinterest, X, YouTube, TikTok, or another network, your use of that network is also governed by its own terms and policies. SignalDesk is not affiliated with or endorsed by those companies. They can change or limit their services at any time, which may cause scheduled posts or features to fail. SignalDesk tries again and tells you when a post doesn’t go out, but please check posts that matter.</p>
 
 <h2>Acceptable use</h2>
 <p>Don’t use SignalDesk to:</p>
@@ -252,10 +254,14 @@ ${status}
 </ol>
 <p>Facebook tells us automatically, and we delete the Facebook and Instagram connections and access tokens linked to your account. Facebook gives you a confirmation code you can use to check the status of your request on this page.</p>
 
-<h2>Remove SignalDesk from LinkedIn or Pinterest</h2>
+<h2>Remove SignalDesk from other networks</h2>
 <ul>
 <li><b>LinkedIn:</b> go to <b>Settings → Data privacy → Permitted services</b> and remove SignalDesk.</li>
 <li><b>Pinterest:</b> go to your <b>Settings</b>, open the list of connected apps, and revoke SignalDesk’s access.</li>
+<li><b>Threads:</b> in the Threads app, go to <b>Settings → Account → Website permissions</b> and remove SignalDesk.</li>
+<li><b>X:</b> go to <b>Settings → Security and account access → Apps and sessions → Connected apps</b> and revoke SignalDesk.</li>
+<li><b>YouTube (Google):</b> open <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> and remove SignalDesk.</li>
+<li><b>TikTok:</b> go to <b>Settings and privacy → Security → Manage app permissions</b> and remove SignalDesk.</li>
 </ul>
 <p>SignalDesk can’t use the access immediately after you revoke it. To also delete the stored connection details, disconnect the account in SignalDesk or email us.</p>
 
