@@ -14,7 +14,7 @@ const RETRY_MINUTES = [1, 5, 15, 30, 60];
 const REFRESH_WINDOW_MS = 7 * 86400000;
 const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', threads: 'Threads' };
 // Networks or formats you post to yourself. SignalDesk sends a reminder with the copy and media at the scheduled time.
-const MANUAL_PLATFORMS = { instagram_story: 'Instagram Story', tiktok: 'TikTok', youtube_shorts: 'YouTube Shorts', x: 'X', threads: 'Threads', other: 'Other' };
+const MANUAL_PLATFORMS = { linkedin_page: 'LinkedIn Page', instagram_story: 'Instagram Story', tiktok: 'TikTok', youtube_shorts: 'YouTube Shorts', x: 'X', threads: 'Threads', other: 'Other' };
 const CONNECTION_FIELDS = 'id,workspace_id,client_id,platform,external_id,display_name,username,profile_url,image_url,status,token_expires_at,refresh_expires_at,meta,last_error,expiry_notified_at,updated_at';
 
 function label(platform) {
