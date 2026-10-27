@@ -266,7 +266,20 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({ workspace_id: workspaceId, email, role: body.role, invited_by: user.id })
     });
-    return send(res, 200, { invited: email });
+    // Let them know: a SignalDesk email with a link that opens sign-up with their address filled in.
+    let emailed = false;
+    try {
+      const { sendEmail, renderEmail, appUrl } = require('./_lib/notify');
+      const workspaceName = (await getWorkspaceState(workspaceId))?.settings?.name || 'a SignalDesk workspace';
+      const roleText = body.role === 'admin' ? 'an Admin (full access)' : 'a User (posts go to an admin for approval)';
+      emailed = await sendEmail(email, `${user.email} invited you to ${workspaceName} on SignalDesk`, renderEmail({
+        eyebrow: 'TEAM INVITE', heading: `Join ${workspaceName} on SignalDesk`,
+        intro: `${user.email} invited you to plan and publish social media with their team, as ${roleText}. Create your SignalDesk account with this email address (${email}) and you’ll join the workspace automatically. No invite code needed.`,
+        sections: [], ctaLabel: 'Create your account', ctaUrl: `${appUrl()}/?join=${encodeURIComponent(email)}`,
+        footer: 'If you weren’t expecting this, you can ignore it.'
+      }));
+    } catch (error) { console.error('Team invite email failed:', error.message); }
+    return send(res, 200, { invited: email, emailed });
   }
 
   if (action === 'update-member' || action === 'remove-member') {

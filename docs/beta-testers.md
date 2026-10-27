@@ -47,6 +47,8 @@ Then send them a short note so they know what to expect:
 >
 > It's a beta, so please double-check posts that matter. Thank you!
 
+**Testers inviting their own teammates:** Settings → Team members → enter the email → **Invite**. SignalDesk emails them a link (no invite code needed); they join that tester's workspace when they sign up with that email.
+
 ## 4. When feedback comes in
 
 Feedback arrives by email from hello@pkworks.co, with the page they were on, their browser, and their workspace; hit **Reply** to answer them. Server errors are collected too: **Settings → Setup & health → Recent problems** shows them, and platform admins get an email summary at most every 6 hours.
@@ -55,7 +57,7 @@ Feedback arrives by email from hello@pkworks.co, with the page they were on, the
 
 ## Branded sign-in emails (Supabase)
 
-Supabase sends the "confirm your email" and "reset your password" emails. By default they say "Supabase", which confuses people. You paste a SignalDesk design into Supabase's dashboard once; there's no script or SQL.
+Supabase sends the "confirm your email" and "reset your password" emails. (Invites don't go through Supabase: beta invites and team invites are sent by SignalDesk itself, already branded, so Supabase's **Invite user** template is never used.) By default they say "Supabase", which confuses people. You paste a SignalDesk design into Supabase's dashboard once; there's no script or SQL.
 
 The designs are in `supabase/email-templates/`:
 

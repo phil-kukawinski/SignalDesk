@@ -8,6 +8,12 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('signed out: ' + JSON.stringify(gate));
   if (!gate.signedOut || !gate.appHidden || !gate.landing || !gate.closedAtFirst || !gate.opensOnClick) log.push('[exception] signed out, the landing page should show and Sign in should open the sign-in box');
   await evaluate(`document.querySelector('#auth-dialog').close()`);
+  // Team invite links (?join=email) open sign-up with the address filled in.
+  await send('Page.navigate', { url: new URL('../../index.html', import.meta.url).href + '?join=teammate@studio.test' }); await wait(3000);
+  const join = JSON.parse(await evaluate(`JSON.stringify({open:document.querySelector('#auth-dialog').open,mode:authMode,email:document.querySelector('#auth-email').value,note:document.querySelector('#auth-message').textContent,clean:!location.search.includes('join')})`));
+  log.push('join link: ' + JSON.stringify(join));
+  if (!join.open || join.mode !== 'signup' || join.email !== 'teammate@studio.test' || !join.clean) log.push('[exception] a ?join= link should open sign-up with the email filled in');
+  await evaluate(`sessionStorage.clear();document.querySelector('#auth-dialog').close()`);
   await sampleData();
   for (const view of ['calendar', 'composer', 'library', 'inbox', 'analytics', 'clients', 'accounts', 'team', 'settings', 'overview']) {
     await evaluate(`document.querySelector('[data-view="${view}"]')?.click()`); await wait(400);
