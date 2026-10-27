@@ -46,6 +46,7 @@ export default async ({ send, evaluate, wait, log }) => {
   await shot('#brand-dialog', 'beta_brand.png');
   await evaluate(`document.querySelector('#brand-dialog').close()`);
   await evaluate(`renderOnboarding()`); await wait(200);
+  await evaluate(`onboardingOpen=true;renderOnboarding()`);
   log.push('checklist after client: ' + await evaluate(`document.querySelector('#onboarding-panel .onboarding-steps').innerText.replace(/\\s+/g,' ').slice(0,200)`));
   // Settings: account and beta invites.
   await evaluate(`showView('settings')`); await wait(800);
