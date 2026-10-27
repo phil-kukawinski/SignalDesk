@@ -62,6 +62,17 @@
       ],
       "destination": "https://socialsignaldesk.com/:path*",
       "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "signaldesk-social.vercel.app"
+        }
+      ],
+      "destination": "https://socialsignaldesk.com/:path",
+      "permanent": true
     }
   ]
 }
