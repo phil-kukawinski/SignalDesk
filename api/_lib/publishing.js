@@ -265,7 +265,7 @@ async function withShortLinks(job, content, options) {
 }
 
 // Clicks on short links over the last 30 days, for the dashboard and Analytics.
-async function linkClickSummary(workspaceId) {
+async function linkClickSummary(workspaceId, clientId = null) {
   const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
   const days = await databaseRequest(`link_click_days?workspace_id=eq.${workspaceId}&day=gte.${since}&select=code,day,clicks&limit=5000`) || [];
   const byCode = {};
@@ -274,8 +274,9 @@ async function linkClickSummary(workspaceId) {
   const codes = Object.keys(byCode);
   const links = [];
   for (let index = 0; index < codes.length; index += 150) {
-    links.push(...(await databaseRequest(`short_links?workspace_id=eq.${workspaceId}&code=in.(${codes.slice(index, index + 150).join(',')})&select=code,url,platform,client_id,post_id`) || []));
+    links.push(...(await databaseRequest(`short_links?workspace_id=eq.${workspaceId}&code=in.(${codes.slice(index, index + 150).join(',')})${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&select=code,url,platform,client_id,post_id`) || []));
   }
+  if (clientId) total = links.reduce((sum, link) => sum + byCode[link.code], 0);
   const byPlatform = {};
   for (const link of links) byPlatform[link.platform] = (byPlatform[link.platform] || 0) + byCode[link.code];
   const top = links.sort((a, b) => byCode[b.code] - byCode[a.code]).slice(0, 10);
@@ -824,22 +825,24 @@ async function refreshRecentMetrics({ encryptionKey, limit = 10 } = {}) {
 
 // --- Command Center summary ---
 
-async function overviewData(workspaceId, timeZone) {
+// clientId narrows everything to one client (the Command Center's client picker).
+async function overviewData(workspaceId, timeZone, clientId = null) {
   const { finishMetrics } = require('./reports');
   const { zonedParts } = require('./core');
   const now = Date.now();
   const windowStart = now - 60 * 86400000;
+  const forClient = clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : '';
   const [reports, jobs, connections, lastRun] = await Promise.all([
-    databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=client_id,data`),
-    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics`),
-    listConnections(workspaceId),
+    databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}${forClient}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=client_id,data`),
+    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}${forClient}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics`),
+    listConnections(workspaceId, clientId),
     lastWorkerRun('publish'),
   ]);
-  const clicks = await linkClickSummary(workspaceId).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
+  const clicks = await linkClickSummary(workspaceId, clientId).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
   // Posts from every source (read from the networks by the account sync); SignalDesk's own posts are linked by job.
-  const networkPosts = await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,job_id,metrics&limit=5000`).catch(() => []) || [];
+  const networkPosts = await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}${forClient}&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,job_id,metrics&limit=5000`).catch(() => []) || [];
   const { audienceSummary } = require('./sync');
-  const audience = await audienceSummary(workspaceId).catch(() => []);
+  const audience = await audienceSummary(workspaceId, clientId).catch(() => []);
   const rows = new Map();
   for (const report of reports || []) {
     for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { clientId: report.client_id, platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements, audience: row.metrics.reach || row.metrics.views || null });
@@ -879,7 +882,7 @@ async function overviewData(workspaceId, timeZone) {
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
-    clicks, audience, published,
+    clientId, clicks, audience, published,
     engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {

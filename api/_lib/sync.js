@@ -90,9 +90,9 @@ async function listNetworkPosts(workspaceId, { from, to, clientId, platform } = 
 }
 
 // Audience numbers for Analytics: latest followers per account, and the change over 30 days.
-async function audienceSummary(workspaceId) {
+async function audienceSummary(workspaceId, clientId = null) {
   const since = dayKey(new Date(Date.now() - 31 * 86400000));
-  const rows = await databaseRequest(`account_stats?workspace_id=eq.${workspaceId}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics&order=day.asc`) || [];
+  const rows = await databaseRequest(`account_stats?workspace_id=eq.${workspaceId}${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics&order=day.asc`) || [];
   const byConnection = {};
   for (const row of rows) (byConnection[row.connection_id] ||= []).push(row);
   return Object.values(byConnection).map((series) => {

@@ -595,8 +595,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'overview') {
+    const clientId = typeof body.clientId === 'string' && /^[\w-]{1,80}$/.test(body.clientId) ? body.clientId : null;
     const [data] = await Promise.all([
-      overviewData(workspaceId, await workspaceTimeZone(workspaceId)),
+      overviewData(workspaceId, await workspaceTimeZone(workspaceId), clientId),
       checkWorkerHealth().catch((error) => console.error('Health check failed:', error.message))
     ]);
     return send(res, 200, data);

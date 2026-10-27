@@ -128,6 +128,8 @@ Go to the live site and select **Sign in** in the top right. Forgot your passwor
 
 A new workspace shows a **Get set up** checklist on the Command Center. Work down it; each step has a button. You can hide the checklist, and everything stays available in the sidebar.
 
+With more than one client, use the picker at the top right of the Command Center to show **All clients** or just one. The numbers, upcoming posts, the attention list, goals and the performance chart all follow your choice, and it's remembered on that device.
+
 ### Add a client
 
 1. **Clients & Accounts → Add client.**
