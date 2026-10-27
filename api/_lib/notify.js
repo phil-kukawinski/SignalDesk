@@ -31,19 +31,19 @@ function withDefaults(row) {
 function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
-    <h2 style="font:700 14px Arial,sans-serif;color:#1a1f3a;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
-    ${section.items.map((item) => `<div style="border:1px solid #e8e0dc;border-radius:10px;padding:12px 14px;margin:0 0 8px">
-      <div style="font:700 13px Arial,sans-serif;color:#1a1f3a">${escapeHtml(item.title)}</div>
-      ${item.body ? `<div style="font:13px/1.5 Arial,sans-serif;color:#606779;margin-top:4px">${escapeHtml(item.body)}</div>` : ''}
-      ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8a8e9a;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
+    <h2 style="font:700 14px Arial,sans-serif;color:#101828;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
+    ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;border-radius:10px;padding:12px 14px;margin:0 0 8px">
+      <div style="font:700 13px Arial,sans-serif;color:#101828">${escapeHtml(item.title)}</div>
+      ${item.body ? `<div style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin-top:4px">${escapeHtml(item.body)}</div>` : ''}
+      ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
-  const html = `<div style="background:#fdf6f0;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e8e0dc;border-radius:16px;padding:28px">
-    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#5b8db8">${escapeHtml(eyebrow)}</div>
-    <h1 style="font:800 20px Arial,sans-serif;color:#1a1f3a;margin:10px 0 6px">${escapeHtml(heading)}</h1>
-    <p style="font:13px/1.5 Arial,sans-serif;color:#606779;margin:0">${escapeHtml(intro)}</p>
+  const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
+    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#2f6db3">${escapeHtml(eyebrow)}</div>
+    <h1 style="font:800 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">${escapeHtml(heading)}</h1>
+    <p style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin:0">${escapeHtml(intro)}</p>
     ${sectionHtml}
-    ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#5b8db8;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
-    ${footer ? `<p style="font:11px Arial,sans-serif;color:#8a8e9a;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
+    ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#2f6db3;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
+    ${footer ? `<p style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
   </div></div>`;
   const text = [heading, '', intro, ...sections.flatMap((section) => ['', section.title.toUpperCase(), ...section.items.map((item) => `- ${item.title}${item.body ? `: ${item.body}` : ''}${item.meta ? ` (${item.meta})` : ''}`)]), '', url].join('\n');
   return { html, text };

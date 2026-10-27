@@ -47,25 +47,26 @@ function layout({ title, active, body }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${escapeHtml(title)} · SignalDesk</title>
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
 <style>
-:root{--ink:#1a1f3a;--muted:#5d6475;--line:#e6e1dc;--bg:#fdf9f5;--card:#fff;--accent:#3f73a3;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--ink:#ededed;--muted:#a3a3a3;--line:#2e2e2e;--bg:#000;--card:#141414;--accent:#8db8e0;color-scheme:dark}}
+:root{--ink:#101828;--muted:#5d6676;--line:#e4e7ec;--bg:#f5f6f8;--card:#fff;--accent:#2f6db3;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--ink:#f2f4f7;--muted:#98a1b0;--line:#24262b;--bg:#000;--card:#0e0f11;--accent:#8fbdee;color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 header{border-bottom:1px solid var(--line);background:var(--card)}
 .bar{max-width:820px;margin:0 auto;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.brand{font-weight:800;color:var(--ink);text-decoration:none;letter-spacing:-.3px}
+.brand{font-weight:700;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
 nav{display:flex;gap:16px;flex-wrap:wrap;font-size:14px}
 nav a{color:var(--muted);text-decoration:none}nav a[aria-current]{color:var(--ink);font-weight:700}
 main{max-width:820px;margin:0 auto;padding:32px 20px 64px}
-h1{font-size:32px;line-height:1.2;margin:0 0 6px;letter-spacing:-.5px}
+h1{font-size:32px;line-height:1.2;margin:0 0 6px;letter-spacing:-.025em}
 .updated{color:var(--muted);margin:0 0 28px;font-size:14px}
 h2{font-size:20px;margin:36px 0 8px}
 h3{font-size:16px;margin:22px 0 4px}
 p,li{overflow-wrap:anywhere}
 ul,ol{padding-left:22px}li{margin:4px 0}
 a{color:var(--accent)}
-.summary,.status{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin:0 0 8px}
+.summary,.status{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:0 0 8px;box-shadow:0 1px 2px #1018280d}
 .status{border-left:4px solid var(--accent)}
 footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:13px}
 </style>
