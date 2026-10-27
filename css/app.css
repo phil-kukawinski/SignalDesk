@@ -1090,3 +1090,15 @@ html[data-theme="dark"] .auth-dialog::backdrop{background:#000000b3}
 .social-account-card.is-connected{border-color:color-mix(in srgb,var(--success-border) 60%,var(--border))}
 .best-time-band.starter{background:color-mix(in srgb,var(--warning-soft) 55%,transparent);border-top:1px dashed var(--warning-border)}
 html[data-theme="dark"] .best-time-band{background:color-mix(in srgb,var(--warning) 9%,transparent);border-top-color:color-mix(in srgb,var(--warning) 35%,transparent)}
+
+/* Explainers and shortcuts */
+.tip{position:relative;display:inline-grid;place-items:center;width:15px;height:15px;margin-left:3px;vertical-align:-3px;color:var(--text-faint);cursor:help;border-radius:50%}
+.tip .ico{width:14px;height:14px}
+.tip:hover,.tip:focus-visible{color:var(--accent)}
+.tip::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);width:max-content;max-width:260px;padding:8px 10px;border-radius:var(--radius);background:var(--text);color:var(--surface);font:500 12px/1.45 var(--font);text-align:left;white-space:normal;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;z-index:30}
+.tip:hover::after,.tip:focus-visible::after{opacity:1;transform:translate(-50%,0)}
+.stat-top .tip::after{left:0;transform:translate(0,4px)}.stat-top .tip:hover::after,.stat-top .tip:focus-visible::after{transform:none}
+.shortcut-list{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;margin:14px 0 0;font-size:var(--text-sm)}
+.shortcut-list dt{white-space:nowrap}.shortcut-list dd{margin:0;color:var(--text-muted)}
+kbd{display:inline-block;min-width:22px;padding:1px 6px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);font:600 11px/18px var(--font);color:var(--text-2);text-align:center}
+.footer-shortcuts{font-size:var(--text-xs);color:var(--text-muted);font-weight:500}.footer-shortcuts kbd{margin-right:4px}

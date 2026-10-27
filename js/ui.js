@@ -39,3 +39,38 @@ function skeletonStatCards(labels){return labels.map(label=>`<div class="stat-ca
 function emptyStateHtml({iconName='info',title,body='',action='',actionAttr=''}){
   return `<div class="empty-state">${icon(iconName)}<b>${escapeHtml(title)}</b>${body?`<p>${escapeHtml(body)}</p>`:''}${action?`<button type="button" class="secondary-button" ${actionAttr}>${escapeHtml(action)}</button>`:''}</div>`;
 }
+
+// A small ⓘ that explains a term on hover or keyboard focus.
+function tip(text){return `<span class="tip" tabindex="0" role="note" aria-label="${escapeHtml(text)}" data-tip="${escapeHtml(text)}">${icon('info')}</span>`;}
+const TIPS={
+  reach:'How many people saw your posts at least once. Each network counts this a little differently.',
+  engagements:'Likes, comments, shares, saves, and clicks added together.',
+  rate:'Engagements divided by reach, so posts to big and small audiences compare fairly.',
+  published:'Everything posted on the connected accounts in the last 30 days, including posts made outside SignalDesk.',
+  source:'“Posted with SignalDesk” are posts scheduled here. “Posted elsewhere” were made directly on the network and brought in by the account sync.',
+  utm:'Adds tags to your links so Google Analytics shows which network and campaign the visitor came from.',
+  shortlinks:'Swaps links for short SignalDesk links that count clicks per network. Instagram captions keep the original links.',
+  reuse:'After it publishes, the post goes back into the client’s posting queue and comes around again after the wait set in the brand kit.'
+};
+// Static markup marks explainers with <i data-tip-key="reach"></i>.
+function hydrateTips(root=document){root.querySelectorAll('i[data-tip-key]').forEach(el=>{const text=TIPS[el.dataset.tipKey];el.outerHTML=text?tip(text):'';});}
+hydrateTips();
+
+// Keyboard shortcuts (ignored while typing). ? lists them.
+const SHORTCUTS=[['N','New post'],['/','Search everything'],['G then H','Go to Command Center'],['G then C','Go to Content Calendar'],['G then A','Go to Analytics'],['G then S','Go to Social Accounts'],['?','Show shortcuts']];
+const GO_KEYS={h:'overview',c:'calendar',a:'analytics',s:'social-accounts',p:'composer',l:'library'};
+let goPending=0;
+function openShortcuts(){let dialog=$('#shortcuts-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='shortcuts-dialog';dialog.className='auth-dialog confirm-dialog';dialog.setAttribute('aria-labelledby','shortcuts-title');dialog.innerHTML=`<form method="dialog" class="auth-form"><h2 id="shortcuts-title">Keyboard shortcuts</h2><dl class="shortcut-list">${SHORTCUTS.map(([keys,label])=>`<dt>${keys.split(' then ').map(key=>`<kbd>${escapeHtml(key)}</kbd>`).join(' then ')}</dt><dd>${escapeHtml(label)}</dd>`).join('')}<dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything</dd></dl><div class="confirm-actions"><button class="secondary-button" value="close">Close</button></div></form>`;document.body.appendChild(dialog);}if(!dialog.open)dialog.showModal();}
+document.addEventListener('keydown',event=>{
+  if(event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey)return;
+  const target=event.target;if(target.closest?.('input,textarea,select,[contenteditable=""],[contenteditable=true]'))return;
+  if(document.querySelector('dialog[open]')||document.body.classList.contains('signed-out'))return;
+  const key=event.key.toLowerCase();
+  if(goPending&&Date.now()-goPending<1200&&GO_KEYS[key]){goPending=0;event.preventDefault();showView(GO_KEYS[key]);return;}
+  goPending=0;
+  if(key==='g'){goPending=Date.now();return;}
+  if(key==='n'){event.preventDefault();showView('composer');setTimeout(()=>$('#post-copy')?.focus(),50);return;}
+  if(event.key==='/'){event.preventDefault();$('#search-button')?.click();return;}
+  if(event.key==='?'){event.preventDefault();openShortcuts();}
+});
+$('#footer-shortcuts')?.addEventListener('click',openShortcuts);
