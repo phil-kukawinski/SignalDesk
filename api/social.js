@@ -52,9 +52,10 @@ const USER_ACTIONS = new Set([
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
   'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts'
 ]);
-const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account']);
+const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
-const AI_DAILY_LIMIT = 200;
+// AI writing help per workspace per day (caption drafts, image descriptions, Fill from website). Keeps costs bounded.
+const AI_DAILY_LIMIT = Math.max(1, parseInt(process.env.AI_DAILY_LIMIT, 10) || 75);
 // Beta limits per workspace, so one account can't run up costs or flood the networks.
 const DAILY_POST_LIMIT = 150;
 const TEAM_LIMIT = 25;
@@ -149,6 +150,40 @@ function normalizeEmail(value) {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) throw httpError(400, 'Enter a valid email address.');
   return email;
+}
+
+// Beta feedback from inside the app: emailed to the platform admins, with replies going to the sender.
+async function sendFeedback(user, body) {
+  const text = typeof body.message === 'string' ? body.message.trim().slice(0, 3000) : '';
+  if (text.length < 3) throw httpError(400, 'Write a few words about what happened or what you’d like.');
+  const kind = ['problem', 'idea', 'question'].includes(body.kind) ? body.kind : 'problem';
+  const context = body.context && typeof body.context === 'object' ? body.context : {};
+  const clean = (value, max) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max);
+  const membership = await getMembership(user.id).catch(() => null);
+  const { renderEmail, emailConfigured } = require('./_lib/notify');
+  const { platformAdmins, recordAppError } = require('./_lib/platform');
+  const admins = platformAdmins();
+  const label = { problem: 'Problem', idea: 'Idea', question: 'Question' }[kind];
+  if (!emailConfigured() || !admins.length) {
+    await recordAppError('feedback', `${label} from ${user.email}: ${text}`.slice(0, 900), membership?.workspace_id).catch(() => {});
+    return { sent: true };
+  }
+  const content = renderEmail({
+    eyebrow: 'BETA FEEDBACK', heading: `${label} from ${user.email}`, intro: 'Sent from inside SignalDesk. Reply to this email to answer them.',
+    sections: [
+      { title: 'Message', items: [{ title: label, body: text }] },
+      { title: 'Where they were', items: [{ title: clean(context.view, 60) || 'Unknown page', body: clean(context.url, 300), meta: `${clean(context.userAgent, 200)}${context.viewport ? ` · ${clean(context.viewport, 20)}` : ''}${membership ? ` · workspace ${membership.workspace_id} (${membership.role})` : ' · no workspace yet'}` }] }
+    ],
+    showCta: false, footer: 'You get these because your email is in PLATFORM_ADMIN_EMAILS.'
+  });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST', headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ from: process.env.NOTIFY_FROM_EMAIL, to: admins, reply_to: user.email, subject: `SignalDesk ${label.toLowerCase()}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`, html: content.html, text: content.text })
+  }).catch(() => null);
+  if (!response?.ok) {
+    await recordAppError('feedback', `${label} from ${user.email}: ${text}`.slice(0, 900), membership?.workspace_id).catch(() => {});
+  }
+  return { sent: true };
 }
 
 async function adminCount(workspaceId) {
@@ -785,13 +820,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const user = await getUser(req);
-    if (!user?.id) return send(res, 401, { error: 'Sign in to connect social accounts.' });
+    if (!user?.id) return send(res, 401, { error: 'Sign in to continue.' });
     // Account actions work even before someone has a workspace (for example, without an invite code).
     if (action === 'account-plan') return send(res, 200, await deletionPlan(user.id));
     if (action === 'delete-account') {
       if (body.confirm !== 'DELETE') return send(res, 400, { error: 'Type DELETE to confirm.' });
       return send(res, 200, await deleteAccount(user));
     }
+    if (action === 'send-feedback') return send(res, 200, await sendFeedback(user, body));
     const membership = await getMembership(user.id);
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
     if (membership.role !== 'admin' && !USER_ACTIONS.has(action)) return send(res, 403, { error: 'Only workspace admins can do that.' });

@@ -32,5 +32,11 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('Analytics all → engagements: ' + await evaluate(`document.querySelectorAll('.analytics-stats .stat-number')[1].innerText`) + ' | posts: ' + await posts() + ' | home picker follows: ' + JSON.stringify(await evaluate(`document.querySelector('#overview-client').value`)));
   await evaluate(`showView('overview')`); await wait(500);
   log.push('back to all → stats: ' + await stats() + ' | upcoming: ' + await upcoming());
+  // Beta feedback goes to the server with the page attached.
+  await evaluate(`window.__fb=null;const base=callSocialApi;callSocialApi=async(b)=>{if(b.action==='send-feedback'){__fb=b;return{sent:true};}return base(b);};document.querySelector('[data-open-feedback]').click()`); await wait(300);
+  await evaluate(`document.querySelector('#feedback-dialog [data-kind="idea"]').click();document.querySelector('#feedback-message').value='A bulk upload would help';document.querySelector('#feedback-form').requestSubmit()`); await wait(400);
+  const fb = JSON.parse(await evaluate(`JSON.stringify({kind:__fb?.kind,message:__fb?.message,view:__fb?.context?.view,open:document.querySelector('#feedback-dialog').open})`));
+  log.push('feedback: ' + JSON.stringify(fb));
+  if (fb.kind !== 'idea' || fb.message !== 'A bulk upload would help' || !fb.view || fb.open) log.push('[exception] feedback should send the kind, message and page, then close');
   await evaluate(`try{localStorage.removeItem('signaldesk.homeClient')}catch{}`);
 };

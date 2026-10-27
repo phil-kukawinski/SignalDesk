@@ -92,7 +92,7 @@ function networkChecks() {
   }
   checks.push(process.env.AYRSHARE_API_KEY
     ? check('networks', 'ayrshare', 'Other networks (Ayrshare)', 'ok', 'Set up.')
-    : check('networks', 'ayrshare', 'Other networks (Ayrshare)', 'off', 'Optional. TikTok, YouTube, X, and others use reminders instead.'));
+    : check('networks', 'ayrshare', 'Other networks (Ayrshare)', 'off', 'Optional. Only needed for networks SignalDesk doesn’t connect directly (Bluesky, Reddit, and others).'));
   return checks;
 }
 

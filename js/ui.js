@@ -60,7 +60,7 @@ hydrateTips();
 const SHORTCUTS=[['N','New post'],['/','Search everything'],['G then H','Go to Command Center'],['G then C','Go to Content Calendar'],['G then A','Go to Analytics'],['G then S','Go to Social Accounts'],['?','Show shortcuts']];
 const GO_KEYS={h:'overview',c:'calendar',a:'analytics',s:'social-accounts',p:'composer',l:'library'};
 let goPending=0;
-function openShortcuts(){let dialog=$('#shortcuts-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='shortcuts-dialog';dialog.className='auth-dialog confirm-dialog';dialog.setAttribute('aria-labelledby','shortcuts-title');dialog.innerHTML=`<form method="dialog" class="auth-form"><h2 id="shortcuts-title">Keyboard shortcuts</h2><dl class="shortcut-list">${SHORTCUTS.map(([keys,label])=>`<dt>${keys.split(' then ').map(key=>`<kbd>${escapeHtml(key)}</kbd>`).join(' then ')}</dt><dd>${escapeHtml(label)}</dd>`).join('')}<dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything</dd></dl><div class="confirm-actions"><button class="text-button" type="button" data-start-tour>Replay the tour</button><span class="push"></span><button class="secondary-button" value="close">Close</button></div></form>`;document.body.appendChild(dialog);}if(!dialog.open)dialog.showModal();}
+function openShortcuts(){let dialog=$('#shortcuts-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='shortcuts-dialog';dialog.className='auth-dialog confirm-dialog';dialog.setAttribute('aria-labelledby','shortcuts-title');dialog.innerHTML=`<form method="dialog" class="auth-form"><h2 id="shortcuts-title">Keyboard shortcuts</h2><dl class="shortcut-list">${SHORTCUTS.map(([keys,label])=>`<dt>${keys.split(' then ').map(key=>`<kbd>${escapeHtml(key)}</kbd>`).join(' then ')}</dt><dd>${escapeHtml(label)}</dd>`).join('')}<dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything</dd></dl><div class="confirm-actions"><button class="text-button" type="button" data-start-tour>Replay the tour</button><button class="text-button" type="button" data-open-feedback>Send feedback</button><span class="push"></span><button class="secondary-button" value="close">Close</button></div></form>`;document.body.appendChild(dialog);}if(!dialog.open)dialog.showModal();}
 document.addEventListener('keydown',event=>{
   if(event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey)return;
   const target=event.target;if(target.closest?.('input,textarea,select,[contenteditable=""],[contenteditable=true]'))return;
@@ -77,3 +77,26 @@ $('#footer-shortcuts')?.addEventListener('click',openShortcuts);
 // Phone navigation: More opens a sheet with the rest of the pages.
 $('#mobile-more')?.addEventListener('click',()=>$('#mobile-more-sheet')?.showModal());
 $('#mobile-more-sheet')?.addEventListener('click',event=>{const sheet=event.currentTarget;if(event.target===sheet||event.target.closest('[data-view]'))sheet.close();});
+
+// Beta feedback: a short message that reaches the SignalDesk team, with the page and browser attached.
+function openFeedback(kind='problem'){
+  let dialog=$('#feedback-dialog');
+  if(!dialog){
+    dialog=document.createElement('dialog');dialog.id='feedback-dialog';dialog.className='auth-dialog feedback-dialog';dialog.setAttribute('aria-labelledby','feedback-title');
+    dialog.innerHTML=`<form class="auth-form" id="feedback-form"><h2 id="feedback-title">Send feedback</h2><p class="feedback-intro">Found a problem or have an idea? It goes straight to the SignalDesk team at PK Works, and we’ll reply by email.</p><div class="view-tabs feedback-kinds" role="radiogroup" aria-label="Type of feedback"><button type="button" role="radio" data-kind="problem">Problem</button><button type="button" role="radio" data-kind="idea">Idea</button><button type="button" role="radio" data-kind="question">Question</button></div><label class="field-label" for="feedback-message">What happened, or what would help?</label><textarea id="feedback-message" class="field" rows="5" maxlength="3000" placeholder="For a problem, tell us what you clicked and what you expected to happen."></textarea><p class="option-hint">We’ll also see which page you were on and your browser, to help us track it down.</p><p class="feedback-status" id="feedback-status" role="status"></p><div class="confirm-actions"><button type="button" class="secondary-button" data-feedback-cancel>Cancel</button><button type="submit" class="primary-button">Send</button></div></form>`;
+    document.body.appendChild(dialog);
+    dialog.addEventListener('click',event=>{const kindButton=event.target.closest('[data-kind]');if(kindButton)setFeedbackKind(kindButton.dataset.kind);if(event.target.closest('[data-feedback-cancel]')||event.target===dialog)dialog.close();});
+    $('#feedback-form').addEventListener('submit',async event=>{
+      event.preventDefault();const message=$('#feedback-message').value.trim(),status=$('#feedback-status'),button=event.currentTarget.querySelector('[type=submit]');
+      if(message.length<3){status.textContent='Write a few words first.';return;}
+      button.disabled=true;status.textContent='Sending…';
+      try{await callSocialApi({action:'send-feedback',kind:dialog.dataset.kind,message,context:{view:viewNames[$('.page.active')?.id?.replace('view-','')]||'',url:location.origin+location.pathname,userAgent:navigator.userAgent,viewport:`${innerWidth}×${innerHeight}`}});dialog.close();$('#feedback-message').value='';toast('Thanks! Your feedback was sent. We’ll reply by email.');}
+      catch(error){status.textContent=friendlyError(error);}finally{button.disabled=false;}
+    });
+  }
+  setFeedbackKind(kind);$('#feedback-status').textContent='';
+  document.querySelectorAll('dialog[open]').forEach(open=>{if(open!==dialog)open.close();});
+  if(!dialog.open)dialog.showModal();setTimeout(()=>$('#feedback-message')?.focus(),50);
+}
+function setFeedbackKind(kind){const dialog=$('#feedback-dialog');if(!dialog)return;dialog.dataset.kind=kind;dialog.querySelectorAll('[data-kind]').forEach(button=>{const on=button.dataset.kind===kind;button.classList.toggle('active',on);button.setAttribute('aria-checked',String(on));});}
+document.addEventListener('click',event=>{if(event.target.closest('[data-open-feedback]')){event.preventDefault();openFeedback();}});

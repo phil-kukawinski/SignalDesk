@@ -14,6 +14,7 @@ function settings() {
   return {
     operator: (process.env.LEGAL_OPERATOR_NAME || '').trim() || 'the operator of SignalDesk',
     operatorName: (process.env.LEGAL_OPERATOR_NAME || '').trim() || 'SignalDesk',
+    operatorUrl: /^https:\/\//.test(process.env.LEGAL_OPERATOR_URL || '') ? process.env.LEGAL_OPERATOR_URL.trim() : '',
     email,
     contact: /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email)
       ? `<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>`
@@ -72,9 +73,9 @@ footer{max-width:820px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font
 </style>
 </head>
 <body>
-<header><div class="bar"><a class="brand" href="/">SignalDesk</a><nav aria-label="Legal">${nav}</nav></div></header>
+<header><div class="bar"><a class="brand" href="/">SignalDesk <span style="font-weight:500;color:var(--muted)">by PK Works</span></a><nav aria-label="Legal">${nav}</nav></div></header>
 <main>${body}</main>
-<footer>SignalDesk is not affiliated with or endorsed by Meta, Instagram, Threads, LinkedIn, Pinterest, X, Google, YouTube, or TikTok.</footer>
+<footer>SignalDesk is a product of <a href="https://www.pkworks.co">PK Works</a>. SignalDesk is not affiliated with or endorsed by Meta, Instagram, Threads, LinkedIn, Pinterest, X, Google, YouTube, or TikTok.</footer>
 </body>
 </html>`;
 }
@@ -89,7 +90,7 @@ function privacyPage() {
 <div class="summary"><p><b>The short version:</b> SignalDesk uses your information only to schedule, publish, and report on your social media posts. It doesn’t sell your data, show ads, or use tracking or advertising cookies. You can disconnect accounts, export your data, or ask for everything to be deleted at any time.</p></div>
 
 <h2>Who we are</h2>
-<p>SignalDesk is a social media planning and publishing tool run by ${escapeHtml(s.operator)} (“we” or “us”). If you have questions about this policy or your data, email ${s.contact}.</p>
+<p>SignalDesk is a social media planning and publishing tool made and run by ${escapeHtml(s.operator)} (“we” or “us”)${s.operatorUrl ? `, <a href="${escapeHtml(s.operatorUrl)}">${escapeHtml(s.operatorUrl.replace(/^https?:\/\/(www\.)?/, ''))}</a>` : ''}. If you have questions about this policy or your data, email ${s.contact}.</p>
 
 <h2>What we collect</h2>
 <h3>Your account</h3>
@@ -180,6 +181,12 @@ function termsPage() {
 
 <h2>The service</h2>
 <p>SignalDesk helps you plan, approve, schedule, and publish social media posts, and report on how they perform. SignalDesk is free to use right now. If we ever introduce paid plans, we’ll tell you in advance, and nothing you use will start costing money without your agreement.</p>
+
+<h2>Beta</h2>
+<p>SignalDesk is in an invite-only beta. Features may change or be removed, some may not work as expected, and networks may refuse connections while our apps are being reviewed by them. Check posts that matter, and keep your own copies of anything important (Settings → Export your data). Beta access is personal to the people we invite and can end at any time.</p>
+
+<h2>Feedback</h2>
+<p>If you send us ideas or feedback, we may use them to improve SignalDesk without owing you anything for them. We’ll never share your feedback publicly with your name attached without asking.</p>
 
 <h2>Your account</h2>
 <p>Give accurate information, keep your password safe, and tell us if you think someone else has used your account. You’re responsible for what happens in your workspace, including what team members you invite do there.</p>

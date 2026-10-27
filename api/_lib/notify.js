@@ -44,6 +44,7 @@ function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', c
     ${sectionHtml}
     ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#2f6db3;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
     ${footer ? `<p style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
+    <p style="font:11px Arial,sans-serif;color:#8d95a3;margin:${footer ? '6px' : '24px'} 0 0">SignalDesk is a product of PK Works · <a href="https://socialsignaldesk.com" style="color:#8d95a3">socialsignaldesk.com</a></p>
   </div></div>`;
   const text = [heading, '', intro, ...sections.flatMap((section) => ['', section.title.toUpperCase(), ...section.items.map((item) => `- ${item.title}${item.body ? `: ${item.body}` : ''}${item.meta ? ` (${item.meta})` : ''}`)]), '', url].join('\n');
   return { html, text };

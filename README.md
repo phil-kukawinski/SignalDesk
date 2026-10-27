@@ -1,5 +1,7 @@
 # SignalDesk — Social Publishing Workspace
 
+SignalDesk is a product of [PK Works](https://www.pkworks.co).
+
 A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
 
 Live site: https://socialsignaldesk.com
@@ -80,7 +82,7 @@ Facebook Pages, Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinter
 8. **Connect accounts.** In **Social Accounts**, choose a client and select **Connect** on a network. Sign in on the network's own page, then choose which Page, Instagram account, LinkedIn profile or Page, or Pinterest account (and board) belongs to that client. Tokens stay on the server, encrypted; the browser never sees them.
 9. **Optional: Ayrshare** for other networks, the Social Inbox, and account-level analytics. Set `AYRSHARE_API_KEY` and use **Connect via Ayrshare**. For X, also create an X Developer App and set the two `X_TWITTER_*` variables.
 10. **Notification emails.** Create a [Resend](https://resend.com) account, verify your sending domain, and set `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL` (for example `SignalDesk <alerts@yourdomain.com>`). Without them, notifications still appear in the app.
-11. **AI features.** For Trend signals, AI proofreading, caption drafts, and image descriptions, set `ANTHROPIC_API_KEY`. All use Claude Opus 5.5. Caption drafts and image descriptions are capped at 200 requests per workspace per day. A trend scan is billed per token plus per web search (up to 8 searches). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans a day.
+11. **AI features.** For Trend signals, AI proofreading, caption drafts, and image descriptions, set `ANTHROPIC_API_KEY`. All use Claude Opus 5.5. Caption drafts, image descriptions, and Fill from website share a cap of 75 requests per workspace per day (change it with `AI_DAILY_LIMIT`). A trend scan is billed per token plus per web search (up to 8 searches). Repeat scans of the same focus within 6 hours reuse the last result, and each workspace is limited to 12 scans a day.
 12. **Stock photos (optional).** Create a free app at [unsplash.com/developers](https://unsplash.com/developers) and set `UNSPLASH_ACCESS_KEY` (the app's Access Key) in Vercel. **🔍 Find a free stock photo** in the Publishing Studio then searches Unsplash and attaches the photo; you can add “Photo by … on Unsplash” to the post. New Unsplash apps start in demo mode, limited to 50 requests an hour; apply for production in the Unsplash dashboard to raise it. Photos stay on Unsplash's servers, as their API terms require.
 13. **Click-tracking short links.** Check **Count clicks with short links** when posting (or turn it on by default in a client's brand kit). When the post publishes, each link becomes `APP_URL/l/<code>`, one per network, so you see clicks per network in the post's details and under **Analytics → Link clicks**. Link-preview robots from the networks aren't counted, and no personal data about the person clicking is stored. Instagram captions keep their original links, since Instagram doesn't make them clickable. If the short-link tables are missing, posts publish with their original links instead of failing.
 14. **Setup & health.** Admins can open **Settings → Setup & health** to see what's configured, whether the scheduler is running, which accounts need reconnecting, and what failed recently, including failed network sign-ins. It never shows secret values.
@@ -170,7 +172,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Status and next steps
-A day-to-day guide, setup checklist, and troubleshooting table is in [docs/walkthrough.md](docs/walkthrough.md). App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
+A day-to-day guide, setup checklist, and troubleshooting table is in [docs/walkthrough.md](docs/walkthrough.md). Inviting beta testers (adding them on each network, the welcome note, and branded sign-in emails) is in [docs/beta-testers.md](docs/beta-testers.md). App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
 
 Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook, Instagram, and Pinterest accounts are connected. Next:
 1. **Meta:** add `read_insights` to the Facebook Login for Business configuration, reconnect Facebook, then complete Business Verification and App Review.
