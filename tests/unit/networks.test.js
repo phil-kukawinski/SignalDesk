@@ -29,6 +29,14 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   assert.equal(DIRECT_PLATFORMS.twitter, 'x'); assert.equal(DIRECT_PLATFORMS.youtube, 'google'); assert.equal(CONNECTION_PLATFORM.instagram_story, 'instagram');
   assert.equal(adapterFor('instagram_story'), PROVIDERS.meta);
 
+  // --- Every network's sign-in page is on the browser's allowed list (js/publishing.js)
+  const hosts = JSON.parse(require('node:fs').readFileSync(ROOT + '/js/publishing.js', 'utf8').match(/const OAUTH_HOSTS=(\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  for (const [name, adapter] of Object.entries(PROVIDERS)) {
+    if (!providerConfigured(name)) continue;
+    const signIn = new URL(adapter.authorizeUrl('state-' + 'b'.repeat(40)));
+    assert.ok(hosts.includes(signIn.hostname), `${name} signs in at ${signIn.hostname}, which js/publishing.js would block`);
+  }
+
   // --- X: PKCE challenge in the sign-in link matches the verifier sent with the code
   const state = 'state-' + 'a'.repeat(40);
   const authUrl = new URL(PROVIDERS.x.authorizeUrl(state));
