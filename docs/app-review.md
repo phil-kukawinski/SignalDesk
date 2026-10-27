@@ -2,7 +2,7 @@
 
 Copy-ready answers for the Meta, LinkedIn, and Pinterest developer reviews, written from how SignalDesk actually uses each permission. Replace anything in **[brackets]** before submitting.
 
-Live site: `https://signaldesk-social.vercel.app` (if you move to a custom domain, update every URL below and in each developer portal).
+Live site: `https://socialsignaldesk.com` (the old address, `https://signaldesk-social.vercel.app`, still works; keep its redirect URL in each portal until every connection has moved).
 
 ---
 
@@ -27,14 +27,14 @@ SignalDesk manages Pages and Instagram accounts for PK Works' clients, not only 
 
 | Field | Value |
 |---|---|
-| App domains | `signaldesk-social.vercel.app` |
-| Privacy Policy URL | `https://signaldesk-social.vercel.app/privacy` |
-| Terms of Service URL | `https://signaldesk-social.vercel.app/terms` |
-| User data deletion | Data deletion callback URL: `https://signaldesk-social.vercel.app/api/legal?event=meta-deletion` |
+| App domains | `socialsignaldesk.com` |
+| Privacy Policy URL | `https://socialsignaldesk.com/privacy` |
+| Terms of Service URL | `https://socialsignaldesk.com/terms` |
+| User data deletion | Data deletion callback URL: `https://socialsignaldesk.com/api/legal?event=meta-deletion` |
 | App icon | `icons/icon-1024.png` (1024×1024) |
 | Category | Business and pages |
-| Facebook Login for Business → Valid OAuth Redirect URIs | `https://signaldesk-social.vercel.app/api/oauth` |
-| Deauthorize callback URL | `https://signaldesk-social.vercel.app/api/legal?event=meta-deauthorize` |
+| Facebook Login for Business → Valid OAuth Redirect URIs | `https://socialsignaldesk.com/api/oauth` |
+| Deauthorize callback URL | `https://socialsignaldesk.com/api/legal?event=meta-deauthorize` |
 
 ### App description (App Review → "Tell us about your app")
 > SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to manage the Facebook Pages and Instagram professional accounts of its small-business clients. An admin connects a client's Page and linked Instagram account by signing in with Facebook and choosing which Page to connect. Team members then write posts, attach images or video, get approval, and schedule them. At the scheduled time SignalDesk publishes the post to the Page and Instagram account, posts an optional first comment, shows comments so the team can reply, and reports engagement for each post in a monthly client report. SignalDesk only acts on Pages and accounts the person explicitly connects, never posts without a scheduled or approved post, and does not sell or share data. Access tokens are encrypted at rest and deleted when an account is disconnected or the person removes the app.
@@ -121,8 +121,8 @@ LinkedIn requires the **Community Management API** to be the **only product on i
 
 Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page** next to **Connect your profile**.
 
-**Auth tab:** Authorized redirect URL `https://signaldesk-social.vercel.app/api/oauth`.
-**Settings tab:** Privacy policy URL `https://signaldesk-social.vercel.app/privacy`. The app must be linked to (and verified by) the **[PK Works]** LinkedIn Page.
+**Auth tab:** Authorized redirect URL `https://socialsignaldesk.com/api/oauth`.
+**Settings tab:** Privacy policy URL `https://socialsignaldesk.com/privacy`. The app must be linked to (and verified by) the **[PK Works]** LinkedIn Page.
 
 ### Community Management API application answers
 
@@ -138,7 +138,7 @@ Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page*
 > PK Works staff who are admins of the client Pages they manage. It isn't offered to the public.
 
 **Data handling**
-> Access tokens are encrypted at rest and deleted when the person disconnects the account in SignalDesk. We don't store information about LinkedIn members other than the name shown on comments they leave on posts SignalDesk published. See https://signaldesk-social.vercel.app/privacy.
+> Access tokens are encrypted at rest and deleted when the person disconnects the account in SignalDesk. We don't store information about LinkedIn members other than the name shown on comments they leave on posts SignalDesk published. See https://socialsignaldesk.com/privacy.
 
 ### LinkedIn screencast script (about 2 minutes, if requested)
 1. Sign in to SignalDesk → **Social Accounts** → choose a client → **Connect** on LinkedIn.
@@ -161,7 +161,7 @@ New Pinterest apps start with **Trial access** (Pins visible only to you, low li
 | `pins:write` | Create the Pins a team schedules |
 | `pins:read` | Read impressions, saves, Pin clicks, and outbound clicks on Pins SignalDesk created, for reports |
 
-**App settings:** Redirect URI `https://signaldesk-social.vercel.app/api/oauth`; Privacy policy `https://signaldesk-social.vercel.app/privacy`.
+**App settings:** Redirect URI `https://socialsignaldesk.com/api/oauth`; Privacy policy `https://socialsignaldesk.com/privacy`.
 
 ### Standard access application answers
 

@@ -2,7 +2,7 @@
 
 Your guide to running SignalDesk: what's set up, what's left, how to use it day to day, and what to do when something breaks.
 
-Live site: **https://signaldesk-social.vercel.app**
+Live site: **https://socialsignaldesk.com**
 Last updated: October 26, 2026
 
 ---
@@ -114,7 +114,7 @@ Until each network approves your app, SignalDesk can only connect accounts that 
    - **Company Pages need a second app:** LinkedIn requires the Community Management API to be alone on its app. Create **SignalDesk Pages**, verify it with the PK Works Page, request the Community Management API using a business email (not Gmail), then add `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET` in Vercel. Details are in `docs/app-review.md`.
 3. **Pinterest:** add `PINTEREST_APP_SECRET` in Vercel, then apply for **Standard** access.
 4. **Before submitting:** create a reviewer login. Reviewers need a SignalDesk account to sign in with. Create an invite (see section 4) and use it to make an account for them.
-5. **X, YouTube, TikTok, Threads** (optional, each on its own): create the developer app, add `https://signaldesk-social.vercel.app/api/oauth` as the redirect URL, and put its keys in Vercel (`X_CLIENT_ID`/`X_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`, `THREADS_APP_ID`/`THREADS_APP_SECRET`). Steps for each are in the README under **Publishing setup → 6b**, and review notes are in `docs/app-review.md`. Re-run `supabase/schema.sql` once so the database accepts the new networks.
+5. **X, YouTube, TikTok, Threads** (optional, each on its own): create the developer app, add `https://socialsignaldesk.com/api/oauth` as the redirect URL, and put its keys in Vercel (`X_CLIENT_ID`/`X_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`, `THREADS_APP_ID`/`THREADS_APP_SECRET`). Steps for each are in the README under **Publishing setup → 6b**, and review notes are in `docs/app-review.md`. Re-run `supabase/schema.sql` once so the database accepts the new networks.
 6. ✅ **Done when** each network shows approved. Then connect your accounts and post a test to each (see section 3).
 
 ---
@@ -219,7 +219,7 @@ New people need an **invite code** to create a workspace. People you invite to *
    - **Note**, for your own records.
    - **Uses**: 1, 5, or 25 people.
    - **Expiry**: 7, 30, or 90 days.
-3. Select **Create invite**, then **Copy link** if you're sending it yourself. Links look like `https://signaldesk-social.vercel.app/?invite=7KQ2MX4P`.
+3. Select **Create invite**, then **Copy link** if you're sending it yourself. Links look like `https://socialsignaldesk.com/?invite=7KQ2MX4P`.
 4. They open the link, select **Create account** (the code is already filled in), and confirm their email.
 
 The invite list shows who used each code. **Revoke** stops a code immediately.

@@ -2,7 +2,7 @@
 
 A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
 
-Live site: https://signaldesk-social.vercel.app
+Live site: https://socialsignaldesk.com
 
 ## Run it
 - **Live:** pushing to `main` deploys to Vercel.
@@ -50,7 +50,7 @@ Facebook Pages, Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinter
 2. **Server settings.** Add the variables in `.env.example` to the Vercel project's Environment Variables:
    - The Supabase values.
    - `SOCIAL_PROFILE_ENCRYPTION_KEY`, from `openssl rand -base64 32`. It encrypts every stored token.
-   - `APP_URL`, your deployed address such as `https://signaldesk.vercel.app`. Sign-in redirects go to `APP_URL/api/oauth`.
+   - `APP_URL`, your site's address: `https://socialsignaldesk.com`. Sign-in redirects go to `APP_URL/api/oauth`, and short links use `APP_URL/l/…`.
    - `APP_ORIGINS`, the exact local and deployed origins, separated by commas.
    - `CRON_SECRET`, from `openssl rand -hex 32`.
 3. **The scheduler.** This works on any Vercel plan. In Supabase, enable the `pg_cron` and `pg_net` extensions, fill in your URL and `CRON_SECRET` in the commented block at the end of `schema.sql`, and run it. It creates two jobs: `/api/cron?only=publish` every minute, and the full worker every 10 minutes (Autopilot, comments, token upkeep, reports, digests). On Vercel Pro you can use Vercel Cron for the same two schedules instead. **Until a scheduler runs, scheduled posts wait.** As a backstop, `vercel.json` adds a daily Vercel Cron call to `/api/cron?only=health` (allowed on every plan). If the every-minute run has stopped and posts are past due, it notifies admins, at most every 12 hours. The Command Center and post details also show a warning.

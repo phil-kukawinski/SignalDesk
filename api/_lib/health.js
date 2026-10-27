@@ -31,7 +31,7 @@ function siteChecks(origin) {
   const appUrl = (process.env.APP_URL || '').replace(/\/+$/, '');
   const origins = (process.env.APP_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean);
   const checks = [];
-  if (!appUrl) checks.push(check('core', 'app-url', 'Site address', 'error', 'APP_URL isn’t set, so network sign-ins and short links can’t work.', 'Set APP_URL in Vercel to this site’s address, e.g. https://signaldesk-social.vercel.app.'));
+  if (!appUrl) checks.push(check('core', 'app-url', 'Site address', 'error', 'APP_URL isn’t set, so network sign-ins and short links can’t work.', 'Set APP_URL in Vercel to this site’s address, e.g. https://socialsignaldesk.com.'));
   else if (!appUrl.startsWith('https://')) checks.push(check('core', 'app-url', 'Site address', 'warn', `APP_URL is ${appUrl}, which isn’t https.`, 'Use the https address of the live site.'));
   else if (origin && origin !== appUrl) checks.push(check('core', 'app-url', 'Site address', 'warn', `APP_URL is ${appUrl}, but you’re using ${origin}. Network sign-ins return to APP_URL.`, 'Update APP_URL if this is the address you use now, and update the redirect URL in each developer app.'));
   else checks.push(check('core', 'app-url', 'Site address', 'ok', `${appUrl}. Network sign-ins return to ${appUrl}/api/oauth.`));
