@@ -114,7 +114,8 @@ Until each network approves your app, SignalDesk can only connect accounts that 
    - **Company Pages need a second app:** LinkedIn requires the Community Management API to be alone on its app. Create **SignalDesk Pages**, verify it with the PK Works Page, request the Community Management API using a business email (not Gmail), then add `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET` in Vercel. Details are in `docs/app-review.md`.
 3. **Pinterest:** add `PINTEREST_APP_SECRET` in Vercel, then apply for **Standard** access.
 4. **Before submitting:** create a reviewer login. Reviewers need a SignalDesk account to sign in with. Create an invite (see section 4) and use it to make an account for them.
-5. ✅ **Done when** each network shows approved. Then connect your accounts and post a test to each (see section 3).
+5. **X, YouTube, TikTok, Threads** (optional, each on its own): create the developer app, add `https://signaldesk-social.vercel.app/api/oauth` as the redirect URL, and put its keys in Vercel (`X_CLIENT_ID`/`X_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`, `THREADS_APP_ID`/`THREADS_APP_SECRET`). Steps for each are in the README under **Publishing setup → 6b**, and review notes are in `docs/app-review.md`. Re-run `supabase/schema.sql` once so the database accepts the new networks.
+6. ✅ **Done when** each network shows approved. Then connect your accounts and post a test to each (see section 3).
 
 ---
 
@@ -126,7 +127,9 @@ Go to the live site and select **Sign in** in the top right. Forgot your passwor
 
 ### Get set up (new workspace)
 
-A new workspace shows a **Get set up** checklist on the Command Center. Work down it; each step has a button. You can hide the checklist, and everything stays available in the sidebar.
+The first time someone signs in, SignalDesk shows a welcome screen and offers a **one-minute tour** that highlights each part of the app. Replay it any time from **New here? → Take the tour** in the sidebar or from the shortcuts list (**?**).
+
+A new workspace also shows a slim **Finish setting up** bar on the Command Center with the next step and its button. **All steps** shows the full list, and **×** hides it.
 
 Press **?** anywhere for keyboard shortcuts: **N** starts a new post, **/** searches, and **G** then **C** jumps to the calendar (**H** home, **A** analytics, **S** social accounts).
 
@@ -150,11 +153,11 @@ The brand kit opens after you add a client. You can also open it any time from t
 
 ### Connect social accounts
 
-1. **Social Accounts** → choose the client → **Connect** on Facebook (this connects Instagram too), LinkedIn, or Pinterest.
+1. **Social Accounts** → choose the client → **Connect** on Facebook (this connects Instagram too), Threads, LinkedIn, Pinterest, X, YouTube, or TikTok.
 2. Sign in on the network's own page and choose the Page, account, or board for this client.
 3. If a connection fails, open **Settings → Setup & health → Recent problems** to see the network's exact reason.
 
-TikTok, YouTube Shorts, X, Threads, and Instagram Stories use **reminders** instead: SignalDesk notifies you at the scheduled time with the copy ready to paste.
+**Instagram Stories** use the Instagram connection: pick **Instagram Story** in the Publishing Studio (images are converted to 9:16). Any network that isn't connected can still use a **reminder**: SignalDesk notifies you at the scheduled time with the copy ready to paste.
 
 ### Create a post (Publishing Studio)
 
