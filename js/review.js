@@ -23,8 +23,7 @@
   }
 
   function versionHtml(version) {
-    const media = version.media.slice(0, 6).map((url) => /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url) ? '<span>▶ Video</span>' : `<img src="${escapeHtml(url)}" alt="" loading="lazy">`).join('');
-    return `<p class="review-copy">${escapeHtml(version.text)}</p>${media ? `<div class="review-media">${media}</div>` : ''}`;
+    return `<p class="review-copy">${escapeHtml(version.text)}</p>${mediaThumbsHtml(version.media, { className: 'large' })}`;
   }
 
   function render() {

@@ -50,8 +50,6 @@ button,input,textarea{font:inherit}
 .review-tabs button{border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:500;cursor:pointer;color:var(--muted)}
 .review-tabs button.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
 .review-copy{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:0;line-height:1.55}
-.review-media{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.review-media img,.review-media span{width:120px;height:120px;border-radius:10px;object-fit:cover;background:var(--surface-3);display:grid;place-items:center;color:var(--muted);font-size:12px}
 .review-notes{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:6px}
 .review-notes li{font-size:13px;color:var(--muted)}
 .review-notes b{color:var(--text)}

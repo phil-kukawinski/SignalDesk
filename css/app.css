@@ -426,9 +426,6 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .post-dialog-head h2{margin:4px 0}
 .post-dialog-head p{margin:0;color:var(--text-muted);font-size:13px}
 .post-dialog-copy{margin:14px 0 8px;padding:12px;border-radius:10px;background:var(--bg);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;max-height:180px;overflow:auto}
-.post-dialog-media{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-.post-dialog-media img,.post-dialog-video{width:72px;height:72px;border-radius:8px;object-fit:cover;background:var(--surface-3)}
-.post-dialog-video{display:grid;place-items:center;font-size:12px;color:var(--text-muted)}
 .job-list{display:grid;gap:8px;margin:14px 0}
 .job-row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px;border:1px solid var(--border-strong);border-radius:10px}
 .job-row b{display:block;font-size:13px}.job-row small{display:block;color:var(--text-muted);font-size:12px;margin-top:2px}
