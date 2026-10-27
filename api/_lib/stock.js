@@ -9,18 +9,23 @@ const API = 'https://api.unsplash.com';
 const REFERRAL = 'utm_source=signaldesk&utm_medium=referral';
 const ORIENTATIONS = new Set(['landscape', 'portrait', 'squarish']);
 
+// The Access Key from the Unsplash app page (UNSPLASH_API_KEY is accepted as another name for it).
+function accessKey() {
+  return process.env.UNSPLASH_ACCESS_KEY || process.env.UNSPLASH_API_KEY || '';
+}
+
 function stockConfigured() {
-  return Boolean(process.env.UNSPLASH_ACCESS_KEY);
+  return Boolean(accessKey());
 }
 
 async function unsplash(path) {
   if (!stockConfigured()) throw httpError(503, 'Stock photos aren’t set up. Add UNSPLASH_ACCESS_KEY in Vercel.');
   const response = await fetch(path.startsWith('https://') ? path : `${API}${path}`, {
-    headers: { authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`, 'accept-version': 'v1' },
+    headers: { authorization: `Client-ID ${accessKey()}`, 'accept-version': 'v1' },
     signal: AbortSignal.timeout(15000)
   }).catch(() => null);
   if (!response) throw httpError(502, 'Couldn’t reach Unsplash. Try again in a moment.');
-  if (response.status === 401) throw httpError(503, 'Unsplash didn’t accept the access key. Check UNSPLASH_ACCESS_KEY in Vercel.');
+  if (response.status === 401) throw httpError(503, 'Unsplash didn’t accept the key. In Vercel, UNSPLASH_ACCESS_KEY (or UNSPLASH_API_KEY) must be the app’s Access Key, not its Secret Key or App ID.');
   if (response.status === 403 || response.status === 429) throw httpError(429, 'Unsplash’s hourly limit was reached. Try again later. Apps in Unsplash’s demo tier get 50 requests an hour; apply for production access to raise it.');
   if (response.status === 404) throw httpError(404, 'That photo is no longer on Unsplash.');
   if (!response.ok) throw httpError(502, `Unsplash returned HTTP ${response.status}.`);

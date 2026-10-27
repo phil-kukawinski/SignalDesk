@@ -32,7 +32,7 @@ function serviceProviders() {
   if (process.env.RESEND_API_KEY) list.push(['Resend', 'sending notification, digest, and report emails']);
   if (process.env.ANTHROPIC_API_KEY) list.push(['Anthropic', 'AI features you choose to use, such as caption drafts, image descriptions, proofreading, and trend summaries. Only the text, images, and brand notes needed for that request are sent']);
   if (process.env.VAPID_PUBLIC_KEY) list.push(['Your browser’s push service (for example Apple, Google, or Mozilla)', 'delivering push notifications to devices where you turned them on']);
-  if (process.env.UNSPLASH_ACCESS_KEY) list.push(['Unsplash', 'stock photo search in the Publishing Studio. Your search words are sent to Unsplash, and photos load from Unsplash’s servers, which shares your IP address with them']);
+  if (process.env.UNSPLASH_ACCESS_KEY || process.env.UNSPLASH_API_KEY) list.push(['Unsplash', 'stock photo search in the Publishing Studio. Your search words are sent to Unsplash, and photos load from Unsplash’s servers, which shares your IP address with them']);
   if (process.env.AYRSHARE_API_KEY) list.push(['Ayrshare', 'publishing to networks that SignalDesk doesn’t connect to directly, when you link them through Ayrshare']);
   return list;
 }

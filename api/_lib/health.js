@@ -108,7 +108,7 @@ function featureChecks(tables) {
       : check('features', 'email', 'Notification emails', 'off', 'Notifications appear in the app only.', 'Set RESEND_API_KEY and NOTIFY_FROM_EMAIL in Vercel.'),
     pushConfigured() ? check('features', 'push', 'Push notifications', 'ok', 'Turn them on per device under the bell → Preferences.')
       : check('features', 'push', 'Push notifications', 'off', 'Not set up.', 'Run npx web-push generate-vapid-keys and set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.'),
-    process.env.UNSPLASH_ACCESS_KEY ? check('features', 'stock', 'Stock photos (Unsplash)', 'ok', 'Search Unsplash from the Publishing Studio.')
+    (process.env.UNSPLASH_ACCESS_KEY || process.env.UNSPLASH_API_KEY) ? check('features', 'stock', 'Stock photos (Unsplash)', 'ok', 'Search Unsplash from the Publishing Studio.')
       : check('features', 'stock', 'Stock photos (Unsplash)', 'off', 'Not set up.', 'Create a free app at unsplash.com/developers and set UNSPLASH_ACCESS_KEY in Vercel.'),
     missingLinks ? check('features', 'links', 'Click-tracking short links', 'error', 'The short link tables are missing, so posts use their original links.', 'Copy the latest supabase/schema.sql into a new Supabase SQL Editor query and run it.')
       : shortLinkBase() ? check('features', 'links', 'Click-tracking short links', 'ok', `Links look like ${shortLinkBase()}/l/AbC123.`)
