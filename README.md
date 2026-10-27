@@ -86,6 +86,7 @@ API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `2
 Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
 ## Features
+- **Interface:** one design system (`css/app.css` tokens) with matching light and dark themes, real icons and network logos, loading placeholders, plain-language errors with **Try again**, one confirmation dialog for anything destructive, ⓘ explainers on terms like reach and engagement rate, keyboard shortcuts (press **?**), post details in a side panel, and a bottom tab bar on phones
 - Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). A client picker at the top (shared with Analytics) shows one client or all of them. Upcoming content filters by network.
 - Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters. Admins can drag a scheduled post to a new day or time (15-minute steps)
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests

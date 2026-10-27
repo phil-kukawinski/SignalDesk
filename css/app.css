@@ -1148,3 +1148,15 @@ kbd{display:inline-block;min-width:22px;padding:1px 6px;border:1px solid var(--b
   .mobile-tabs .mobile-tab span{display:block!important;font-size:11px!important}
   .approval-panel .panel-header{flex-wrap:nowrap}
 }
+
+/* Settings: section list on the left, every panel in one column on the right */
+@media(min-width:901px){
+  #view-settings.page.active{display:grid;grid-template-columns:220px minmax(0,1fr);column-gap:20px;align-items:start}
+  #view-settings>.page-heading{grid-column:1/-1}
+  #view-settings .settings-grid{display:contents}
+  #view-settings .settings-nav{grid-column:1;grid-row:2/span 30;position:sticky;top:72px;margin:0}
+  #view-settings .settings-form,#view-settings>.panel{grid-column:2;margin:0 0 20px;max-width:none}
+}
+.settings-nav b{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);font-weight:600;padding:4px 10px 8px}
+.approval-actions button{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;min-height:30px;padding:0 10px;font-weight:600;font-size:var(--text-xs)}
+.approval-actions button .ico{width:14px;height:14px}
