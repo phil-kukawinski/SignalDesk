@@ -467,6 +467,20 @@ create table if not exists public.account_stats (
   primary key (connection_id, day)
 );
 create index if not exists account_stats_workspace_idx on public.account_stats (workspace_id, day);
+-- Invite requests from the public landing page. Only the server (service role) reads or writes them.
+create table if not exists public.invite_requests (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 80),
+  email text not null check (char_length(email) between 3 and 200),
+  brands text,
+  note text check (char_length(note) <= 600),
+  ip_hash text,
+  status text not null default 'new' check (status in ('new', 'invited', 'declined')),
+  created_at timestamptz not null default now()
+);
+create index if not exists invite_requests_ip_idx on public.invite_requests (ip_hash, created_at desc);
+alter table public.invite_requests enable row level security;
+
 -- X, YouTube, TikTok, and Threads connect directly too (added October 2026).
 alter table public.social_connections drop constraint if exists social_connections_platform_check;
 alter table public.social_connections add constraint social_connections_platform_check check (platform in ('facebook', 'instagram', 'linkedin', 'pinterest', 'twitter', 'youtube', 'tiktok', 'threads'));

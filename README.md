@@ -11,7 +11,7 @@ Live site: https://socialsignaldesk.com
 
 ## Workspace persistence
 
-Everything is stored in Supabase (project `zuckwjjzhrcesrzbfdak` on the live site) once you sign in. Signed out, the app shows only the sign-in screen, with links to the privacy policy, terms, and data deletion pages.
+Everything is stored in Supabase (project `zuckwjjzhrcesrzbfdak` on the live site) once you sign in. Signed out, visitors see the public landing page (what SignalDesk does, the networks, **Request an invite**, and **Sign in**), with links to the privacy policy, terms, and data deletion pages. Invite links open the sign-up form directly.
 
 To point a copy of SignalDesk at a Supabase project:
 1. Run `supabase/schema.sql` in the project's SQL editor.
@@ -202,6 +202,7 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `api/review.js`, `review.html`, `js/review.js`, `css/review.css` — the client review page and calendar feed
 - `api/bio.js`, `bio.html`, `js/bio-page.js`, `css/bio.css` — public link-in-bio pages
 - `robots.txt` — keeps the API and private review links out of search engines
+- Landing page (signed out) — part of `index.html` and `js/landing.js`, with screenshots in `img/` (made with sample clients, not real ones); `api/invite-request.js` emails invite requests to `PLATFORM_ADMIN_EMAILS` and records them in `invite_requests`
 - `api/go.js` — short link redirects (`/l/<code>`) that count clicks
 - `api/_lib/health.js`, `js/health.js` — Settings → Setup & health
 - `api/_lib/stock.js`, `js/stock.js` — Unsplash stock photos

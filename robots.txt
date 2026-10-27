@@ -1,8 +1,7 @@
-# Private review links, the API, and the app itself shouldn't be indexed.
+# The landing page and legal pages can be indexed; the API and private review links can't.
 User-agent: *
 Disallow: /api/
 Disallow: /review.html
-Allow: /privacy
-Allow: /terms
-Allow: /data-deletion
-Allow: /b/
+Allow: /
+
+Sitemap: https://socialsignaldesk.com/sitemap.xml

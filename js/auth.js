@@ -32,8 +32,9 @@ $('#auth-form')?.addEventListener('submit',event=>{event.preventDefault();submit
 $('#auth-tabs')?.addEventListener('click',event=>{const tab=event.target.closest('[data-auth-mode]');if(tab)setAuthMode(tab.dataset.authMode);});
 $('#auth-forgot')?.addEventListener('click',()=>setAuthMode('reset'));
 $('#auth-back')?.addEventListener('click',()=>setAuthMode('signin'));
-// Signed out, the sign-in box is the whole page: it can't be closed until someone signs in.
-const authLocked=()=>document.body.classList.contains('signed-out');
+// The sign-in box closes like any dialog, except while a signed-in person still needs an invite code.
+// Signed in but waiting on an invite code: the box stays open until the code is entered.
+const authLocked=()=>document.body.classList.contains('signed-out')&&authMode==='invite'&&Boolean(activeUser);
 $('#auth-close')?.addEventListener('click',()=>{if(!authLocked())$('#auth-dialog').close();});
 $('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog')&&!authLocked())$('#auth-dialog').close();});
 $('#auth-dialog')?.addEventListener('cancel',event=>{if(authLocked())event.preventDefault();});

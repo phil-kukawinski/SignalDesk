@@ -14,6 +14,9 @@
     },
     "api/go.js": {
       "maxDuration": 10
+    },
+    "api/invite-request.js": {
+      "maxDuration": 15
     }
   },
   "crons": [
@@ -46,6 +49,19 @@
     {
       "source": "/l/:code",
       "destination": "/api/go?code=:code"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.socialsignaldesk.com"
+        }
+      ],
+      "destination": "https://socialsignaldesk.com/:path*",
+      "permanent": true
     }
   ]
 }
