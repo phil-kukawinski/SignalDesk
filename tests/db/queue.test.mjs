@@ -1156,7 +1156,11 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
         return u.searchParams.get('after') ? reply({ data: [{ id: 'page1_old', message: 'Older', created_time: day(20), reactions: { summary: { total_count: 1 } }, comments: { summary: { total_count: 0 } } }], paging: { cursors: {} } })
           : reply({ data: [{ id: 'page1_post1', message: 'Fall kits are here', created_time: day(2), permalink_url: 'https://facebook.com/page1/posts/1', full_picture: 'https://cdn.test/1.jpg', reactions: { summary: { total_count: 40 } }, comments: { summary: { total_count: 5 } }, shares: { count: 3 } }, { id: 'page1_native', message: 'Posted from the Facebook app', created_time: day(1), reactions: { summary: { total_count: 12 } }, comments: { summary: { total_count: 2 } } }], paging: { cursors: { after: 'CUR' }, next: 'https://graph.facebook.com/next' } });
       }
-      if (u.pathname.endsWith('/insights') && u.pathname.includes('page1_')) return reply({ data: [{ name: 'post_impressions_unique', values: [{ value: 500 }] }] });
+      if (u.pathname.endsWith('/insights') && u.pathname.includes('page1_')) {
+        // page1_old only answers the older metric, to cover the fallback.
+        if (u.searchParams.get('metric').includes('post_total_media_view_unique')) return u.pathname.includes('page1_old') ? reply({ error: { message: 'Invalid metric', code: 100 } }, 400) : reply({ data: [{ name: 'post_total_media_view_unique', values: [{ value: 500 }] }, { name: 'post_media_view', values: [{ value: 900 }] }] });
+        return reply({ data: [{ name: 'post_impressions_unique', values: [{ value: 70 }] }] });
+      }
       if (u.pathname.endsWith('/page1')) return reply({ followers_count: 1200 });
       if (u.pathname.endsWith('/ig1/media')) return reply({ data: [{ id: 'ig_native', caption: 'Reel from the app', media_type: 'VIDEO', thumbnail_url: 'https://cdn.test/t.jpg', permalink: 'https://instagram.com/p/x', timestamp: day(3), like_count: 90, comments_count: 4 }, { id: 'ig_old', timestamp: day(200), media_type: 'IMAGE' }], paging: { cursors: { after: 'A' }, next: 'https://graph.facebook.com/n' } });
       if (u.pathname.endsWith('/ig_native/insights')) return reply({ data: [{ name: 'views', values: [{ value: 3000 }] }, { name: 'reach', values: [{ value: 2000 }] }, { name: 'total_interactions', values: [{ value: 110 }] }] });
@@ -1182,6 +1186,8 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   assert.ok(byId.page1_native && !byId.page1_native.via_sd, 'a post made in the Facebook app is included');
   assert.equal(byId.page1_post1.via_sd, true, 'SignalDesk’s own post is linked to its job');
   assert.equal(byId.page1_post1.eng, 48); assert.equal(byId.page1_post1.reach, 500);
+  assert.equal((await q(`select (metrics->>'views')::int as v from network_posts where external_id='page1_post1'`))[0].v, 900, 'views from Meta’s new media view metric');
+  assert.equal((await q(`select (metrics->>'reach')::int as r from network_posts where external_id='page1_old'`))[0].r, 70, 'falls back to the older reach metric');
   assert.ok(byId.page1_old, 'later pages are read with the cursor');
   assert.equal(byId.ig_native.reach, 2000); assert.equal(byId.ig_native.eng, 110);
   assert.ok(!byId.ig_old, 'posts older than the window are skipped');

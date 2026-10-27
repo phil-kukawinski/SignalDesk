@@ -131,6 +131,30 @@ async function lookupInstagramAccount(connection, username) {
   }
 }
 
+// Facebook post reach and views. Meta replaced the old impressions metrics with media views
+// (post_total_media_view_unique = unique viewers, used as reach; post_media_view = views);
+// the old post_impressions_unique stays as a fallback for older API versions.
+async function facebookPostViews(connection, postId) {
+  const read = async (metric) => {
+    const insights = await graph(`${postId}/insights`, { token: connection.token, params: { metric } });
+    const value = (name) => insights.data?.find((item) => item.name === name)?.values?.[0]?.value ?? null;
+    return value;
+  };
+  try {
+    const value = await read('post_total_media_view_unique,post_media_view');
+    const result = {};
+    if (value('post_total_media_view_unique') !== null) result.reach = value('post_total_media_view_unique');
+    if (value('post_media_view') !== null) result.views = value('post_media_view');
+    if (Object.keys(result).length) return result;
+  } catch { /* try the older metric */ }
+  try {
+    const reach = (await read('post_impressions_unique'))('post_impressions_unique');
+    return reach !== null ? { reach } : {};
+  } catch {
+    return {};
+  }
+}
+
 const meta = {
   authorizeUrl(state) {
     const url = new URL(`https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`);
@@ -217,12 +241,7 @@ const meta = {
     }
     const post = await graph(job.external_id, { token: connection.token, params: { fields: 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares' } });
     const metrics = { likes: post.reactions?.summary?.total_count ?? null, comments: post.comments?.summary?.total_count ?? null, shares: post.shares?.count ?? 0 };
-    // Page insight metrics change often, so reach is a best-effort extra.
-    try {
-      const insights = await graph(`${job.external_id}/insights`, { token: connection.token, params: { metric: 'post_impressions_unique' } });
-      metrics.reach = insights.data?.[0]?.values?.[0]?.value ?? null;
-    } catch { /* keep the counts we have */ }
-    return metrics;
+    return { ...metrics, ...(await facebookPostViews(connection, job.external_id)) };
   }
 };
 
@@ -687,11 +706,8 @@ async function facebookHistory(connection, since) {
     after = result.paging?.cursors?.after;
     if (!after || !result.paging?.next) break;
   }
-  // Reach for the most recent posts (page insight metrics change often, so it's best-effort).
-  for (const post of posts.slice(0, DETAILED_METRICS)) {
-    const reach = await tryOr(async () => (await graph(`${post.externalId}/insights`, { token: connection.token, params: { metric: 'post_impressions_unique' } })).data?.[0]?.values?.[0]?.value ?? null, null);
-    if (reach !== null) post.metrics.reach = reach;
-  }
+  // Reach and views for the most recent posts.
+  for (const post of posts.slice(0, DETAILED_METRICS)) Object.assign(post.metrics, await facebookPostViews(connection, post.externalId));
   const info = await tryOr(() => graph(page, { token: connection.token, params: { fields: 'followers_count,fan_count' } }), {});
   return { posts, account: { followers: info.followers_count ?? info.fan_count ?? null } };
 }
@@ -767,7 +783,8 @@ async function pinterestHistory(connection, since) {
     if (detail) post.metrics = detail;
   }
   const info = await tryOr(() => pinterestApi('user_account', { token: connection.token }), {});
-  return { posts, account: { followers: info.follower_count ?? null, monthlyViews: info.monthly_views ?? null } };
+  const count = (value) => (typeof value === 'number' && value >= 0 ? value : null);
+  return { posts, account: { followers: count(info.follower_count), monthlyViews: count(info.monthly_views) } };
 }
 
 async function accountHistory(platform, connection, since) {
