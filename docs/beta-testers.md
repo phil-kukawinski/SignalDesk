@@ -55,34 +55,17 @@ Feedback arrives by email from hello@pkworks.co, with the page they were on, the
 
 ## Branded sign-in emails (Supabase)
 
-Supabase sends the "confirm your email" and "reset your password" emails. Its default wording says "Supabase", which confuses people. Paste these into **Supabase → Authentication → Emails → Templates** (project zuckwjjzhrcesrzbfdak).
+Supabase sends the "confirm your email" and "reset your password" emails. By default they say "Supabase", which confuses people. You paste a SignalDesk design into Supabase's dashboard once; there's no script or SQL.
 
-**Confirm signup**: Subject: `Confirm your SignalDesk account`
+The designs are in `supabase/email-templates/`:
 
-```html
-<div style="background:#f5f6f8;padding:24px;font-family:Arial,sans-serif">
-  <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
-    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#2f6db3">SIGNALDESK</div>
-    <h1 style="font:700 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">Confirm your email</h1>
-    <p style="font:14px/1.5 Arial,sans-serif;color:#5d6676;margin:0">Welcome to SignalDesk. Confirm this is your email address to finish creating your account.</p>
-    <a href="{{ .ConfirmationURL }}" style="display:inline-block;margin-top:20px;background:#2f6db3;color:#fff;font:700 14px Arial,sans-serif;text-decoration:none;padding:11px 18px;border-radius:10px">Confirm my email</a>
-    <p style="font:12px/1.5 Arial,sans-serif;color:#8d95a3;margin-top:24px">If you didn't sign up for SignalDesk, you can ignore this email.<br>SignalDesk is a product of PK Works · socialsignaldesk.com</p>
-  </div>
-</div>
-```
+| Supabase template | Subject to paste | Body file |
+|---|---|---|
+| **Confirm signup** | `Confirm your SignalDesk account` | `confirm-signup.html` |
+| **Reset password** | `Reset your SignalDesk password` | `reset-password.html` |
 
-**Reset password**: Subject: `Reset your SignalDesk password`
-
-```html
-<div style="background:#f5f6f8;padding:24px;font-family:Arial,sans-serif">
-  <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
-    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#2f6db3">SIGNALDESK</div>
-    <h1 style="font:700 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">Reset your password</h1>
-    <p style="font:14px/1.5 Arial,sans-serif;color:#5d6676;margin:0">Someone asked to reset the password for {{ .Email }}. Open the link on this device to choose a new one. It works once and expires soon.</p>
-    <a href="{{ .ConfirmationURL }}" style="display:inline-block;margin-top:20px;background:#2f6db3;color:#fff;font:700 14px Arial,sans-serif;text-decoration:none;padding:11px 18px;border-radius:10px">Choose a new password</a>
-    <p style="font:12px/1.5 Arial,sans-serif;color:#8d95a3;margin-top:24px">If you didn't ask for this, you can ignore this email; your password won't change.<br>SignalDesk is a product of PK Works · socialsignaldesk.com</p>
-  </div>
-</div>
-```
-
-**Change email address** (optional): Subject: `Confirm your new email for SignalDesk`, using the same layout with the heading "Confirm your new email" and the button "Confirm new email".
+For each one:
+1. Supabase (project zuckwjjzhrcesrzbfdak) → **Authentication** → **Emails** → the template's tab.
+2. Replace the **Subject** with the subject above.
+3. In the message body box, select everything, delete it, and paste the whole file's contents. Leave `{{ .ConfirmationURL }}` and `{{ .Email }}` exactly as they are; Supabase fills them in.
+4. **Save**. Use the preview to check it.
