@@ -9,7 +9,7 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .page-wrap{max-width:1600px}
 .brand{align-items:center;gap:11px;padding-bottom:24px}
 .brand strong{display:block;font-size:21px;line-height:1.1;letter-spacing:0}
-.brand .brand-parent{display:block;margin-top:5px;color:#c97a72;font-size:8px;font-weight:600;letter-spacing:.08em}
+.brand 
 .signal-mark{display:block;width:38px;height:38px;flex:none}
 .signal-mark svg{display:block;width:100%;height:100%;overflow:visible}
 .signal-mark path{fill:none;stroke:#5b8db8;stroke-width:2.4;stroke-linecap:round}
@@ -544,3 +544,4 @@ html[data-theme="dark"] .beta-chip{background:#262626;color:#a3a3a3}html[data-th
 .brand-site{display:grid;gap:4px;margin-bottom:6px}.brand-site-row{display:flex;gap:8px}.brand-site-row .field{flex:1;min-width:0}.brand-site-row .secondary-button{white-space:nowrap}.ai-filled{background:#f3efe2!important;border-color:#d9c58f!important}
 html[data-theme="dark"] .ai-filled{background:#2a2617!important;border-color:#6b5a2a!important}
 @media(max-width:620px){.brand-site-row{flex-direction:column}}
+.connect-choice.is-blocked{opacity:.75}.connect-choice.is-blocked small a{color:#3f73a3}

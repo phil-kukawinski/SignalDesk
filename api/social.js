@@ -74,7 +74,7 @@ function allowedOrigin(req) {
 
 function integrations() {
   return {
-    meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), pinterest: providerConfigured('pinterest'),
+    meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), linkedinPages: providerConfigured('linkedin_pages'), pinterest: providerConfigured('pinterest'),
     ayrshare: ayrshareConfigured(), stock: stockConfigured()
   };
 }
@@ -97,7 +97,7 @@ function publicAccounts({ connections = [], ayrshare = null }) {
         autoRenews: Boolean(direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now()),
         expiresAt: direct.refresh_expires_at && Date.parse(direct.refresh_expires_at) > Date.now() ? direct.refresh_expires_at : direct.token_expires_at,
         ...(platform === 'pinterest' ? { boards: direct.meta?.boards || [], boardId: direct.meta?.boardId || '' } : {}),
-        ...(platform === 'linkedin' ? { kind: direct.meta?.kind || 'member' } : {})
+        ...(platform === 'linkedin' ? { kind: direct.meta?.kind || 'member', app: direct.meta?.app || 'profile' } : {})
       };
     }
     const linked = active.has(platform);
@@ -135,6 +135,8 @@ function providerResponseError(error, res, action = '') {
     return send(res, status, { error: message });
   }
   if (error.status) return send(res, error.status, error.payload || { error: error.message });
+  // Network problems (PublishError) carry a plain-language message meant for the person, not a crash.
+  if (error.kind) return send(res, { auth: 401, rate_limit: 429, temporary: 503 }[error.kind] || 400, { error: error.message });
   console.error('Social integration request failed:', error.message);
   recordAppError(`api/social${action ? `:${action}` : ''}`, error);
   return send(res, 500, { error: 'Something went wrong on our side. It’s been logged; try again in a moment.' });
@@ -800,8 +802,10 @@ module.exports = async function handler(req, res) {
 
     if (action === 'oauth-start') {
       if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose Meta, LinkedIn, or Pinterest.' });
-      if (!providerConfigured(body.provider)) return send(res, 503, { error: `${body.provider === 'meta' ? 'Meta' : body.provider === 'linkedin' ? 'LinkedIn' : 'Pinterest'} isn't set up on the server yet. Add its app ID and secret.` });
-      const state = crypto.randomBytes(32).toString('base64url');
+      if (!providerConfigured(body.provider) && !(body.provider === 'linkedin' && body.variant === 'pages')) return send(res, 503, { error: `${body.provider === 'meta' ? 'Meta' : body.provider === 'linkedin' ? 'LinkedIn' : 'Pinterest'} isn't set up on the server yet. Add its app ID and secret.` });
+      const pages = body.provider === 'linkedin' && body.variant === 'pages';
+      if (pages && !providerConfigured('linkedin_pages')) return send(res, 503, { error: 'Company Pages need a second LinkedIn app. Add LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET in Vercel.' });
+      const state = (pages ? 'lp_' : '') + crypto.randomBytes(32).toString('base64url');
       const url = PROVIDERS[body.provider].authorizeUrl(state);
       const [session] = await databaseRequest('oauth_sessions', {
         method: 'POST', headers: { prefer: 'return=representation' },

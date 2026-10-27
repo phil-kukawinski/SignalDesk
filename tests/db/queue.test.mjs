@@ -88,7 +88,7 @@ const body = (c) => (c.body ? (typeof c.body === 'string' ? (c.body.startsWith('
 // --- Accounts before connecting ---
 let r = await call({ action: 'accounts', clientId: 'pk-works' });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
-assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, pinterest: true, ayrshare: false, stock: false });
+assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, linkedinPages: false, pinterest: true, ayrshare: false, stock: false });
 assert.ok(r.payload.accounts.every((a) => !a.linked));
 assert.equal(r.payload.accounts.find((a) => a.platform === 'tiktok').available, false);
 r = await call({ action: 'connect', clientId: 'pk-works' });
@@ -867,6 +867,69 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   await runCron(true);
   assert.equal((await q(`select status from publish_jobs where post_id='${plainPost}'`))[0].status, 'published');
   assert.deepEqual(liBody.content, { article: { source: 'https://down.example/post', title: 'Read this' } });
+}
+
+// --- LinkedIn company Pages through a second app, and network messages shown as written ---
+{
+  await db.exec(`update workspace_state set state = jsonb_set(state, '{clients}', (state->'clients') || '[{"id":"harbor","name":"Harbor Coffee"}]'::jsonb) where workspace_id = '${WS}'`);
+  r = await call({ action: 'oauth-start', clientId: 'harbor', provider: 'linkedin', variant: 'pages' });
+  assert.equal(r.status, 503, 'Pages app not set up yet'); assert.match(r.payload.error, /LINKEDIN_PAGES_CLIENT_ID/);
+  r = await call({ action: 'accounts', clientId: 'harbor' });
+  assert.equal(r.payload.integrations.linkedinPages, false);
+  process.env.LINKEDIN_PAGES_CLIENT_ID = 'lp-id'; process.env.LINKEDIN_PAGES_CLIENT_SECRET = 'lp-secret';
+  assert.equal((await call({ action: 'accounts', clientId: 'harbor' })).payload.integrations.linkedinPages, true);
+  r = await call({ action: 'oauth-start', clientId: 'harbor', provider: 'linkedin', variant: 'pages' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  const pagesUrl = new URL(r.payload.url);
+  assert.equal(pagesUrl.searchParams.get('client_id'), 'lp-id');
+  assert.equal(pagesUrl.searchParams.get('scope'), 'r_organization_admin w_organization_social r_organization_social', 'no openid: the Pages app has only Community Management');
+  assert.match(pagesUrl.searchParams.get('state'), /^lp_/);
+  const pagesSession = r.payload.sessionId;
+  let tokenBody = null;
+  networkHandler = (c) => {
+    if (c.url === 'https://www.linkedin.com/oauth/v2/accessToken') { tokenBody = body(c); return reply({ access_token: 'lp-token', refresh_token: 'lp-refresh', expires_in: 5184000, refresh_token_expires_in: 31536000, scope: 'r_organization_admin,w_organization_social,r_organization_social' }); }
+    if (c.url.startsWith('https://api.linkedin.com/rest/organizationAcls')) return reply({ elements: [{ organization: 'urn:li:organization:777', role: 'ADMINISTRATOR' }] });
+    if (c.url === 'https://api.linkedin.com/rest/organizations/777') return reply({ localizedName: 'Harbor Coffee Co.', vanityName: 'harborcoffee' });
+    throw new Error('unexpected ' + c.url);
+  };
+  page = await callback({ state: (await q(`select state from oauth_sessions where id='${pagesSession}'`))[0].state, code: 'lp-code' });
+  assert.equal(page.statusCode, 200, page.body);
+  assert.deepEqual([tokenBody.client_id, tokenBody.client_secret], ['lp-id', 'lp-secret'], 'the Pages app exchanges its own code');
+  r = await call({ action: 'oauth-session', sessionId: pagesSession });
+  assert.deepEqual(r.payload.candidates.map((c) => c.key), ['linkedin:urn:li:organization:777'], 'only company Pages, no personal profile');
+  r = await call({ action: 'oauth-finish', sessionId: pagesSession, selections: [{ key: 'linkedin:urn:li:organization:777' }] });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  const pageConn = (await q(`select id, external_id, meta from social_connections where client_id='harbor' and platform='linkedin'`))[0];
+  assert.equal(pageConn.external_id, 'urn:li:organization:777'); assert.deepEqual(pageConn.meta, { kind: 'organization', app: 'pages' });
+  r = await call({ action: 'accounts', clientId: 'harbor' });
+  assert.equal(r.payload.accounts.find((a) => a.platform === 'linkedin').app, 'pages');
+  // Renewing the sign-in uses the Pages app too
+  const { PROVIDERS } = require(`${ROOT}/api/_lib/platforms.js`);
+  networkHandler = (c) => { if (c.url === 'https://www.linkedin.com/oauth/v2/accessToken') { tokenBody = body(c); return reply({ access_token: 'lp-token-2', expires_in: 5184000 }); } throw new Error('unexpected ' + c.url); };
+  await PROVIDERS.linkedin.refresh({ refreshToken: 'lp-refresh', meta: { app: 'pages' } });
+  assert.equal(tokenBody.client_id, 'lp-id');
+  await PROVIDERS.linkedin.refresh({ refreshToken: 'li-refresh', meta: { kind: 'member' } });
+  assert.equal(tokenBody.client_id, 'li-id', 'older connections keep using the first app');
+  // A Pages sign-in with no Pages you administer explains itself
+  r = await call({ action: 'oauth-start', clientId: 'harbor', provider: 'linkedin', variant: 'pages' });
+  const emptySession = r.payload.sessionId;
+  networkHandler = (c) => { if (c.url === 'https://www.linkedin.com/oauth/v2/accessToken') return reply({ access_token: 'x', expires_in: 100 }); if (c.url.startsWith('https://api.linkedin.com/rest/organizationAcls')) return reply({ elements: [] }); throw new Error('unexpected ' + c.url); };
+  page = await callback({ state: (await q(`select state from oauth_sessions where id='${emptySession}'`))[0].state, code: 'x' });
+  assert.match(page.body, /didn’t list any company Pages/);
+  // Pinterest with no boards: the reason comes through as written, not as a server error
+  r = await call({ action: 'oauth-start', clientId: 'harbor', provider: 'pinterest' });
+  const boardless = r.payload.sessionId;
+  networkHandler = (c) => {
+    if (c.url === 'https://api.pinterest.com/v5/oauth/token') return reply({ access_token: 'p', refresh_token: 'r', expires_in: 100 });
+    if (c.url.endsWith('/user_account')) return reply({ username: 'newbrand' });
+    if (c.url.includes('/boards')) return reply({ items: [] });
+    throw new Error('unexpected ' + c.url);
+  };
+  page = await callback({ state: (await q(`select state from oauth_sessions where id='${boardless}'`))[0].state, code: 'p' });
+  r = await call({ action: 'oauth-finish', sessionId: boardless, selections: [{ key: 'pinterest:newbrand' }] });
+  assert.equal(r.status, 400, JSON.stringify(r.payload)); assert.match(r.payload.error, /Create a Pinterest board first/);
+  assert.equal((await q(`select count(*)::int as n from app_errors where message like '%Pinterest board%'`))[0].n, 0, 'not logged as a server error');
+  delete process.env.LINKEDIN_PAGES_CLIENT_ID; delete process.env.LINKEDIN_PAGES_CLIENT_SECRET;
 }
 
 // --- Instagram gets a JPEG in its allowed shape ---

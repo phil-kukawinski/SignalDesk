@@ -104,14 +104,22 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 
 ## LinkedIn
 
-### Products to add (App → Products)
-| Product | Access | What it enables in SignalDesk |
-|---|---|---|
-| **Sign In with LinkedIn using OpenID Connect** | Self-serve, approved instantly | Identifies who connected the account (`openid`, `profile`) |
-| **Share on LinkedIn** | Self-serve, approved instantly | Posting to the person's own profile (`w_member_social`) |
-| **Community Management API** | Requires an application and review | Posting to company Pages the person administers (`r_organization_admin`, `w_organization_social`, `r_organization_social`) |
+### Two LinkedIn apps
 
-The first two are enough to post as yourself. After the Community Management API is approved, set `LINKEDIN_ORGANIZATIONS=true` in Vercel and redeploy, and SignalDesk will list the Pages you administer when you connect.
+LinkedIn requires the **Community Management API** to be the **only product on its app**, so SignalDesk uses two apps:
+
+| App | Products | What it enables in SignalDesk | Vercel settings |
+|---|---|---|---|
+| **App 1: profiles** (your existing app) | **Sign In with LinkedIn using OpenID Connect** + **Share on LinkedIn**, both self-serve and instant | Posting to the person's own profile (`openid`, `profile`, `w_member_social`) | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
+| **App 2: company Pages** (new) | **Community Management API** only, Development tier, then Standard | Posting to company Pages the person administers (`r_organization_admin`, `w_organization_social`, `r_organization_social`) | `LINKEDIN_PAGES_CLIENT_ID`, `LINKEDIN_PAGES_CLIENT_SECRET` |
+
+**Before requesting the Community Management API on App 2** (a rejected app can't re-apply; you'd have to create a new one):
+- Name it without "Linked" or "In", for example **SignalDesk Pages**.
+- Associate it with the **PK Works** LinkedIn Page, and have a Page super admin **verify** it (Settings tab → Verify).
+- Use a **business email** such as `phil@pkworks.co` in the request form; personal addresses (Gmail) fail vetting. Have the organization's legal name, address, website, and privacy policy URL ready.
+- Add the same redirect URL and privacy policy URL as App 1.
+
+Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page** next to **Connect your profile**.
 
 **Auth tab:** Authorized redirect URL `https://signaldesk-social.vercel.app/api/oauth`.
 **Settings tab:** Privacy policy URL `https://signaldesk-social.vercel.app/privacy`. The app must be linked to (and verified by) the **[PK Works]** LinkedIn Page.

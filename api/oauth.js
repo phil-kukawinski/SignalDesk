@@ -55,7 +55,7 @@ module.exports = async function handler(req, res) {
   }
   if (!code) return fail('No sign-in code came back. Try again.');
   try {
-    const { candidates, secret } = await PROVIDERS[session.provider].exchange(code);
+    const { candidates, secret } = await PROVIDERS[session.provider].exchange(code, { state });
     if (!candidates.length) return fail(session.provider === 'meta' ? 'No Facebook Pages were shared. Choose at least one Page when Facebook asks.' : 'No accounts were found to connect.');
     await databaseRequest(`oauth_sessions?id=eq.${session.id}`, {
       method: 'PATCH', headers: { prefer: 'return=minimal' },

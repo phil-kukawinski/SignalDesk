@@ -28,7 +28,7 @@ function withDefaults(row) {
   return { ...DEFAULT_PREFERENCES, ...(row || {}) };
 }
 
-function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK · PART OF BEACON', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
+function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#1a1f3a;margin:24px 0 8px">${escapeHtml(section.title)}</h2>

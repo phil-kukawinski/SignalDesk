@@ -31,6 +31,9 @@ function redirectUri() {
 function providerConfigured(provider) {
   if (provider === 'meta') return Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
   if (provider === 'linkedin') return Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
+  // LinkedIn requires the Community Management API (company Pages) to be the only product on its
+  // app, so Pages use a second LinkedIn app.
+  if (provider === 'linkedin_pages') return Boolean(process.env.LINKEDIN_PAGES_CLIENT_ID && process.env.LINKEDIN_PAGES_CLIENT_SECRET);
   if (provider === 'pinterest') return Boolean(process.env.PINTEREST_APP_ID && process.env.PINTEREST_APP_SECRET);
   return false;
 }
@@ -345,6 +348,17 @@ async function linkedIn(path, { method = 'GET', token, body, sending = false } =
   return { payload, headers: response.headers };
 }
 
+// The LinkedIn app to use: 'profile' (Sign In with LinkedIn + Share on LinkedIn) or 'pages'
+// (a separate app with only the Community Management API).
+function linkedInApp(app) {
+  if (app === 'pages' && providerConfigured('linkedin_pages')) {
+    return { app: 'pages', id: process.env.LINKEDIN_PAGES_CLIENT_ID, secret: process.env.LINKEDIN_PAGES_CLIENT_SECRET, scopes: process.env.LINKEDIN_PAGES_SCOPES || 'r_organization_admin w_organization_social r_organization_social' };
+  }
+  return { app: 'profile', id: process.env.LINKEDIN_CLIENT_ID, secret: process.env.LINKEDIN_CLIENT_SECRET, scopes: linkedInScopes() };
+}
+// Sign-ins for the Pages app carry an "lp_" prefix on their state, so the callback knows which app to use.
+const linkedInAppForState = (state) => (String(state || '').startsWith('lp_') ? 'pages' : 'profile');
+
 function linkedInScopes() {
   if (process.env.LINKEDIN_SCOPES) return process.env.LINKEDIN_SCOPES;
   const base = ['openid', 'profile', 'w_member_social'];
@@ -407,27 +421,31 @@ const LINKEDIN_VISIBILITY = { public: 'PUBLIC', connections: 'CONNECTIONS', logg
 
 const linkedin = {
   authorizeUrl(state) {
+    const app = linkedInApp(linkedInAppForState(state));
     const url = new URL('https://www.linkedin.com/oauth/v2/authorization');
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('client_id', process.env.LINKEDIN_CLIENT_ID);
+    url.searchParams.set('client_id', app.id);
     url.searchParams.set('redirect_uri', redirectUri());
     url.searchParams.set('state', state);
-    url.searchParams.set('scope', linkedInScopes());
+    url.searchParams.set('scope', app.scopes);
     return url.href;
   },
 
-  async exchange(code) {
+  async exchange(code, { state } = {}) {
+    const app = linkedInApp(linkedInAppForState(state));
     const token = await tokenRequest('https://www.linkedin.com/oauth/v2/accessToken', {
-      grant_type: 'authorization_code', code, redirect_uri: redirectUri(),
-      client_id: process.env.LINKEDIN_CLIENT_ID, client_secret: process.env.LINKEDIN_CLIENT_SECRET
+      grant_type: 'authorization_code', code, redirect_uri: redirectUri(), client_id: app.id, client_secret: app.secret
     });
-    const { response, body: me } = await request('https://api.linkedin.com/v2/userinfo', { headers: { authorization: `Bearer ${token.access_token}` } });
-    if (!response.ok || !me.sub) throw new PublishError('auth', 'LinkedIn did not share your profile. Make sure the app has "Sign In with LinkedIn using OpenID Connect".');
-    const candidates = [{
-      key: `linkedin:urn:li:person:${me.sub}`, platform: 'linkedin', externalId: `urn:li:person:${me.sub}`,
-      displayName: me.name || 'Your LinkedIn profile', imageUrl: me.picture || '', profileUrl: '', kind: 'member', note: 'Your personal profile'
-    }];
-    const granted = String(token.scope || '').split(/[\s,]+/);
+    const candidates = [];
+    if (app.app === 'profile') {
+      const { response, body: me } = await request('https://api.linkedin.com/v2/userinfo', { headers: { authorization: `Bearer ${token.access_token}` } });
+      if (!response.ok || !me.sub) throw new PublishError('auth', 'LinkedIn did not share your profile. Make sure the app has "Sign In with LinkedIn using OpenID Connect".');
+      candidates.push({
+        key: `linkedin:urn:li:person:${me.sub}`, platform: 'linkedin', externalId: `urn:li:person:${me.sub}`,
+        displayName: me.name || 'Your LinkedIn profile', imageUrl: me.picture || '', profileUrl: '', kind: 'member', note: 'Your personal profile'
+      });
+    }
+    const granted = String(token.scope || app.scopes).split(/[\s,]+/);
     if (granted.includes('w_organization_social')) {
       try {
         const { payload } = await linkedIn('organizationAcls?q=roleAssignee&state=APPROVED&count=50', { token: token.access_token });
@@ -445,20 +463,21 @@ const linkedin = {
         console.error('LinkedIn organization lookup failed:', error.message);
       }
     }
+    if (app.app === 'pages' && !candidates.length) throw new PublishError('invalid', 'LinkedIn didn’t list any company Pages you administer. You need to be a Super admin or Content admin of the Page.');
     return {
       candidates,
-      secret: { token: token.access_token, refreshToken: token.refresh_token || null, expiresAt: expiresAt(token.expires_in), refreshExpiresAt: expiresAt(token.refresh_token_expires_in) }
+      secret: { app: app.app, token: token.access_token, refreshToken: token.refresh_token || null, expiresAt: expiresAt(token.expires_in), refreshExpiresAt: expiresAt(token.refresh_token_expires_in) }
     };
   },
 
   connectionFor(candidate, secret) {
-    return { token: secret.token, refreshToken: secret.refreshToken, expiresAt: secret.expiresAt, refreshExpiresAt: secret.refreshExpiresAt, meta: { kind: candidate.kind } };
+    return { token: secret.token, refreshToken: secret.refreshToken, expiresAt: secret.expiresAt, refreshExpiresAt: secret.refreshExpiresAt, meta: { kind: candidate.kind, app: secret.app || 'profile' } };
   },
 
   async refresh(connection) {
+    const app = linkedInApp(connection.meta?.app);
     const token = await tokenRequest('https://www.linkedin.com/oauth/v2/accessToken', {
-      grant_type: 'refresh_token', refresh_token: connection.refreshToken,
-      client_id: process.env.LINKEDIN_CLIENT_ID, client_secret: process.env.LINKEDIN_CLIENT_SECRET
+      grant_type: 'refresh_token', refresh_token: connection.refreshToken, client_id: app.id, client_secret: app.secret
     });
     return { token: token.access_token, refreshToken: token.refresh_token || connection.refreshToken, expiresAt: expiresAt(token.expires_in), refreshExpiresAt: expiresAt(token.refresh_token_expires_in) || connection.refresh_expires_at };
   },

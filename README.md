@@ -62,7 +62,7 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
 5. **LinkedIn.**
    - Create an app at linkedin.com/developers, linked to a LinkedIn Page, and add the **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn** products.
    - Add `APP_URL/api/oauth` as a redirect URL and set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET`. That lets you post as yourself.
-   - To post as company Pages, apply for the **Community Management API**. Once approved, set `LINKEDIN_ORGANIZATIONS=true`; the sign-in then lists the Pages you administer.
+   - **Company Pages need a second LinkedIn app.** LinkedIn requires the **Community Management API** to be the only product on its app. Create another app (its name can't contain "Linked" or "In"), verify it with the company's LinkedIn Page, add the same redirect URL, and request Community Management API access with a business email. Set `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`, and Social Accounts shows **Connect a company Page** next to **Connect your profile**. Each connection remembers which app it came from, so renewals use the right one. (`LINKEDIN_ORGANIZATIONS=true` is only for the case where LinkedIn later adds the Community Management API to your first app.)
    - LinkedIn sign-ins typically last about 60 days. SignalDesk renews them automatically when LinkedIn issues a refresh token, and otherwise warns admins a week before they expire.
 6. **Pinterest.**
    - Create an app at developers.pinterest.com, add `APP_URL/api/oauth` as a redirect URI, and set `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET`.

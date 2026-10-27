@@ -45,14 +45,14 @@ These live in Vercel → signaldesk → Settings → Environment Variables. Afte
 | `CRON_SECRET` | Lets the scheduler call the site | ✅ Set |
 | `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID` | Facebook and Instagram | ✅ Set, waiting on app review |
 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | LinkedIn | ✅ Set, waiting on products and review |
-| `PINTEREST_APP_ID`, `PINTEREST_SANDBOX` | Pinterest | ⚠️ `PINTEREST_APP_SECRET` still missing |
+| `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_SANDBOX` | Pinterest | ✅ Set |
 | `ANTHROPIC_API_KEY` | AI features | ✅ Set |
 | `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | Email (`SignalDesk <hello@pkworks.co>`) | ✅ Set; domain not verified yet |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Push notifications | ✅ Set |
 | `PLATFORM_ADMIN_EMAILS` | Who sees Beta invites and gets error emails | ✅ Set to your email |
 | `LEGAL_CONTACT_EMAIL`, `LEGAL_OPERATOR_NAME`, `LEGAL_GOVERNING_LAW` | Shown on the privacy, terms, and data deletion pages | ✅ Set |
 | `UNSPLASH_ACCESS_KEY` | Stock photos | ⬜ Not set |
-| `LINKEDIN_ORGANIZATIONS` | Set to `true` only after LinkedIn approves the Community Management API | ⬜ Not set (correct for now) |
+| `LINKEDIN_PAGES_CLIENT_ID`, `LINKEDIN_PAGES_CLIENT_SECRET` | The second LinkedIn app, for company Pages | ⬜ Not set (create the app first) |
 
 ---
 
@@ -110,8 +110,8 @@ Until each network approves your app, SignalDesk can only connect accounts that 
 
 1. **Meta:** start **Business Verification** first (Meta Business Settings → Security Center); it can take days. Then submit App Review for the 10 permissions.
 2. **LinkedIn:**
-   - Add the **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn** products. Both are instant and let you post as yourself.
-   - Apply for the **Community Management API** to post to company Pages. Once approved, set `LINKEDIN_ORGANIZATIONS=true` in Vercel.
+   - **Your existing app:** add **Sign In with LinkedIn using OpenID Connect** (alongside Share on LinkedIn). Both are instant and let you post as yourself.
+   - **Company Pages need a second app:** LinkedIn requires the Community Management API to be alone on its app. Create **SignalDesk Pages**, verify it with the PK Works Page, request the Community Management API using a business email (not Gmail), then add `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET` in Vercel. Details are in `docs/app-review.md`.
 3. **Pinterest:** add `PINTEREST_APP_SECRET` in Vercel, then apply for **Standard** access.
 4. **Before submitting:** create a reviewer login. Reviewers need a SignalDesk account to sign in with. Create an invite (see section 4) and use it to make an account for them.
 5. ✅ **Done when** each network shows approved. Then connect your accounts and post a test to each (see section 3).

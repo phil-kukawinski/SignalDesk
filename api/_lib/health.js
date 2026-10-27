@@ -77,7 +77,7 @@ function networkChecks() {
     const orgs = process.env.LINKEDIN_ORGANIZATIONS === 'true';
     const custom = process.env.LINKEDIN_SCOPES;
     checks.push(check('networks', 'linkedin', 'LinkedIn', custom ? 'warn' : 'ok',
-      `${orgs ? 'Personal profiles and company Pages.' : 'Personal profiles. Company Pages turn on once LinkedIn approves the Community Management API.'}${custom ? ` LINKEDIN_SCOPES overrides the permissions: ${custom}.` : ''}`,
+      `${providerConfigured('linkedin_pages') ? 'Personal profiles, and company Pages through the second (Community Management) app.' : orgs ? 'Personal profiles and company Pages.' : 'Personal profiles. For company Pages, create a second LinkedIn app with only the Community Management API and set LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET.'}${custom ? ` LINKEDIN_SCOPES overrides the permissions: ${custom}.` : ''}`,
       custom ? 'Delete LINKEDIN_SCOPES unless LinkedIn has approved every permission listed.' : 'Your LinkedIn app needs the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products.'));
   } else checks.push(check('networks', 'linkedin', 'LinkedIn', 'off', 'Not set up.', 'Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Vercel.'));
   if (providerConfigured('pinterest')) checks.push(check('networks', 'pinterest', 'Pinterest', 'ok', process.env.PINTEREST_SANDBOX === 'true' ? 'Set up, using Pinterest’s sandbox (test Pins only).' : 'Set up.'));
