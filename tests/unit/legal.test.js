@@ -47,6 +47,16 @@ async function call(url, { method = 'GET', body } = {}) {
   r = await call('/api/legal?event=meta-deletion', { method: 'POST', body: { signed_request: signed({ algorithm: 'HMAC-SHA256', user_id: '1' }, 'bad') } }); assert.equal(r.status, 400);
   r = await call('/api/legal?event=meta-deletion'); assert.equal(r.status, 405);
   delete process.env.META_APP_SECRET; r = await call('/api/legal?event=meta-deletion', { method: 'POST', body: {} }); assert.equal(r.status, 503);
+  // Threads callbacks use the Threads app secret and match Threads connections by account ID.
+  r = await call('/api/legal?event=threads-deletion', { method: 'POST', body: {} }); assert.equal(r.status, 503);
+  process.env.THREADS_APP_SECRET = 'threads-secret';
+  r = await call('/api/legal?event=threads-deletion', { method: 'POST', body: { signed_request: signed({ algorithm: 'HMAC-SHA256', user_id: '555' }, 'meta-secret') } }); assert.equal(r.status, 400);
+  calls.length = 0;
+  r = await call('/api/legal?event=threads-deletion', { method: 'POST', body: { signed_request: signed({ algorithm: 'HMAC-SHA256', user_id: '555' }, 'threads-secret') } });
+  assert.equal(r.status, 200); assert.match(calls.find((c) => c.method === 'DELETE').url, /social_connections\?platform=eq\.threads&external_id=eq\.555/);
+  calls.length = 0;
+  r = await call('/api/legal?event=threads-uninstall', { method: 'POST', body: { signed_request: signed({ algorithm: 'HMAC-SHA256', user_id: '555' }, 'threads-secret') } });
+  assert.equal(r.status, 200); assert.equal(calls[0].body.status, 'needs_reauth'); assert.match(calls[0].body.last_error, /Threads/);
   // Missing contact email falls back to a visible note.
   delete process.env.LEGAL_CONTACT_EMAIL; r = await call('/api/legal?page=privacy'); assert.match(r.sent, /not set up yet/);
   if (process.argv[2]) require('fs').writeFileSync(process.argv[2], (await call('/api/legal?page=privacy')).sent);

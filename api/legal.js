@@ -6,6 +6,8 @@ const { privacyPage, termsPage, deletionPage } = require('./_lib/legal');
 // Meta's two callbacks for when someone removes SignalDesk from their Facebook settings:
 //   POST /api/legal?event=meta-deletion     → delete their connections, return a status link
 //   POST /api/legal?event=meta-deauthorize  → mark their connections as needing sign-in
+// and the same two for Threads, which has its own app secret:
+//   POST /api/legal?event=threads-deletion and ?event=threads-uninstall
 
 const META_PLATFORMS = 'platform=in.(facebook,instagram)';
 
@@ -44,16 +46,19 @@ function siteOrigin(req) {
 }
 
 async function metaCallback(req, res, event) {
-  if (!process.env.META_APP_SECRET) return send(res, 503, { error: 'Meta isn’t set up on this server.' });
+  const threads = event.startsWith('threads-');
+  const secret = threads ? process.env.THREADS_APP_SECRET : process.env.META_APP_SECRET;
+  if (!secret) return send(res, 503, { error: `${threads ? 'Threads' : 'Meta'} isn’t set up on this server.` });
   if (getConfig().missing.length) return send(res, 503, { error: 'The database isn’t set up on this server.' });
-  const data = parseSignedRequest(formBody(req).signed_request, process.env.META_APP_SECRET);
+  const data = parseSignedRequest(formBody(req).signed_request, secret);
   if (!data) return send(res, 400, { error: 'Invalid signed request.' });
-  const match = `${META_PLATFORMS}&meta->>metaUserId=eq.${data.user_id}`;
+  // Threads identifies the person by their Threads user ID, which is the connection's account ID.
+  const match = threads ? `platform=eq.threads&external_id=eq.${data.user_id}` : `${META_PLATFORMS}&meta->>metaUserId=eq.${data.user_id}`;
 
-  if (event === 'meta-deauthorize') {
+  if (event === 'meta-deauthorize' || event === 'threads-uninstall') {
     await databaseRequest(`social_connections?${match}`, {
       method: 'PATCH', headers: { prefer: 'return=minimal' },
-      body: JSON.stringify({ status: 'needs_reauth', last_error: 'Access was removed in Facebook settings. Sign in again to keep posting.', updated_at: new Date().toISOString() })
+      body: JSON.stringify({ status: 'needs_reauth', last_error: `Access was removed in ${threads ? 'Threads' : 'Facebook'} settings. Sign in again to keep posting.`, updated_at: new Date().toISOString() })
     });
     return send(res, 200, { ok: true });
   }
@@ -82,7 +87,7 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url || '/', 'http://localhost');
   const event = url.searchParams.get('event');
   try {
-    if (event === 'meta-deletion' || event === 'meta-deauthorize') {
+    if (['meta-deletion', 'meta-deauthorize', 'threads-deletion', 'threads-uninstall'].includes(event)) {
       if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
       return await metaCallback(req, res, event);
     }
