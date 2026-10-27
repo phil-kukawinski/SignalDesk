@@ -11,15 +11,13 @@ Live site: https://signaldesk-social.vercel.app
 
 ## Workspace persistence
 
-Client workspaces, saved posts, approval statuses, the current draft, and settings persist in this browser by default. This local mode does not sync between browsers or devices.
+Everything is stored in Supabase (project `zuckwjjzhrcesrzbfdak` on the live site) once you sign in. Signed out, the app shows a demo with sample data that stays in that browser.
 
-To enable account-based cloud sync:
-1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.
-2. Set the project URL and anon/public key in `js/config.js`. These are browser-visible values; never put a service-role key in this file.
-3. Serve the site over HTTP or HTTPS, enable email/password authentication in Supabase, and add the local and deployed site URLs to Supabase's allowed URLs.
-4. Select **Connect account** in the app and create an account or sign in.
-
-On first sign-in, existing browser-local workspace data is copied to the new account if it does not already have cloud data.
+To point a copy of SignalDesk at a Supabase project:
+1. Run `supabase/schema.sql` in the project's SQL editor.
+2. Set the project URL and publishable (anon) key in `js/config.js`. These are browser-visible values; never put a service-role key in this file.
+3. Enable email/password sign-in in Supabase, and add the local and deployed site URLs to its allowed redirect URLs.
+4. Select **Sign in** in the app and create an account with an invite code (see **Invite-only beta** below).
 
 ## Team roles
 
@@ -33,6 +31,10 @@ Running SignalDesk on your own? Turn on **Settings → Personal mode** to hide t
 Roles are enforced server-side: `/api/social` rejects admin-only actions for Users and always holds their posts for approval, and a database trigger blocks Users from changing clients, settings, or approval status in shared workspace state. Each person's in-progress draft is stored separately in `user_drafts`. A person can belong to one workspace at a time.
 
 Re-running `supabase/schema.sql` on an older install migrates each existing account into its own workspace as Admin, keeping its clients, posts, and linked social profiles.
+
+## Invite-only beta
+
+New accounts need an invite code while **Settings → Beta invites → Invite only** is on (the default). People listed in `PLATFORM_ADMIN_EMAILS` see that panel and can create and email invite links. Each workspace is limited to 25 teammates, 50 clients, and 150 scheduled posts a day, and anyone can delete their own account in **Settings → Your account**. Server errors are logged in Supabase (`app_errors`) and emailed to the platform admins at most every 6 hours.
 
 ## Publishing setup
 
@@ -55,14 +57,14 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
 4. **Meta (Facebook + Instagram).**
    - Create a Business-type app at developers.facebook.com and add Facebook Login for Business plus the Instagram API with Facebook Login.
    - Add `APP_URL/api/oauth` as a valid OAuth redirect URI.
-   - Set `META_APP_ID` and `META_APP_SECRET`. If your Login for Business setup uses a configuration ID, set `META_LOGIN_CONFIG_ID`; otherwise SignalDesk requests: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_engagement`, `read_insights`, `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_insights`, `business_management`.
+   - Set `META_APP_ID` and `META_APP_SECRET`. If your Login for Business setup uses a configuration ID, set `META_LOGIN_CONFIG_ID` and make sure the configuration includes every permission below (without `read_insights`, Facebook reach and views stay blank); otherwise SignalDesk requests: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_engagement`, `read_insights`, `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_insights`, `business_management`.
    - Instagram accounts must be Business or Creator accounts linked to a Facebook Page you manage.
    - In the app's Basic settings, use `APP_URL/privacy` for the Privacy Policy URL and `APP_URL/terms` for the Terms of Service URL. For **User data deletion**, choose *Data deletion callback URL* and enter `APP_URL/api/legal?event=meta-deletion`. Under Facebook Login for Business settings, set the **Deauthorize callback URL** to `APP_URL/api/legal?event=meta-deauthorize`.
    - While the app is in Development mode, only people with a role on the app can sign in. That's fine for personal use; confirm with Meta whether you need App Review for your setup.
 5. **LinkedIn.**
    - Create an app at linkedin.com/developers, linked to a LinkedIn Page, and add the **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn** products.
    - Add `APP_URL/api/oauth` as a redirect URL and set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET`. That lets you post as yourself.
-   - **Company Pages need a second LinkedIn app.** LinkedIn requires the **Community Management API** to be the only product on its app. Create another app (its name can't contain "Linked" or "In"), verify it with the company's LinkedIn Page, add the same redirect URL, and request Community Management API access with a business email. Set `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`, and Social Accounts shows **Connect a company Page** next to **Connect your profile**. Each connection remembers which app it came from, so renewals use the right one. (`LINKEDIN_ORGANIZATIONS=true` is only for the case where LinkedIn later adds the Community Management API to your first app.)
+   - **Company Pages need a second LinkedIn app.** LinkedIn requires the **Community Management API** to be the only product on its app. Create another app (its name can't contain "Linked" or "In"), verify it with the company's LinkedIn Page, add the same redirect URL, and request Community Management API access with a business email. Set `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`, and Social Accounts shows **Connect a company Page** next to **Connect your profile**. Each connection remembers which app it came from, so renewals use the right one.
    - LinkedIn sign-ins typically last about 60 days. SignalDesk renews them automatically when LinkedIn issues a refresh token, and otherwise warns admins a week before they expire.
 6. **Pinterest.**
    - Create an app at developers.pinterest.com, add `APP_URL/api/oauth` as a redirect URI, and set `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET`.
@@ -79,12 +81,12 @@ Facebook Pages, Instagram professional accounts, LinkedIn, and Pinterest connect
 15. **Push notifications (optional).** Generate keys with `npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and optionally `VAPID_SUBJECT` (for example `mailto:you@example.com`). Each person then turns push on per device under the bell → Preferences. On iPhone and iPad, push works only after adding SignalDesk to the Home Screen.
 16. **Dependencies and time limits.** `package.json` pins `@anthropic-ai/sdk` and `web-push`; Vercel installs it on deploy (run `npm install` for `vercel dev`). `vercel.json` allows the API up to 300 seconds, which needs Vercel's Fluid Compute (on by default for new projects); lower it to 60 if your plan rejects it.
 
-API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `202607`. Override them with `META_GRAPH_VERSION` and `LINKEDIN_API_VERSION` when the networks retire those versions. LinkedIn supports each version for about a year.
+API versions: Meta calls use Graph API `v23.0` and LinkedIn calls use version `202607`. To move to newer versions without a code change, set `META_GRAPH_VERSION` or `LINKEDIN_API_VERSION` in Vercel. LinkedIn supports each version for about a year.
 
 Local static-file or Live Server previews can't run the API; use a Vercel deployment or `vercel dev` for end-to-end testing. Don't paste API keys, encryption keys, or service-role keys into chat or commit them to Git.
 
 ## Features
-- Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). Upcoming content filters by client and network. Demo mode keeps the sample dashboard
+- Command Center with real numbers when signed in: posts scheduled for the next 7 days, approvals waiting, 30-day engagement with a daily chart and network ranking, connected accounts, and a **Needs your attention** list (failed posts, approvals, accounts to reconnect, and a stopped scheduler). A client picker at the top (shared with Analytics) shows one client or all of them. Upcoming content filters by network. Demo mode keeps the sample dashboard
 - Content Calendar with Day, Week (default), and Month views; Day and Week show an hour-by-hour timeline with best-time-to-post bands from your own post history, plus client and status filters. Admins can drag a scheduled post to a new day or time (15-minute steps)
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
 - Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
@@ -124,15 +126,15 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Content Library: when signed in, upload images and videos, tag them, filter by client and type, and add them to a post. Demo mode shows sample collections
 - Social Inbox: comments on your published posts, plus Ayrshare DMs when Ayrshare is configured
 - Analytics dashboard with provider-backed account metrics and CSV export
-- Client workspaces and add-client demo flow
+- Client workspaces, with **Add client** (colors, logo, and voice can be filled in from the client's website)
 - Approval queue for held posts, with approve and request-changes actions; sample approvals appear only in demo mode
 - Settings page
 
 ## Known limitations
 - In demo mode the content library shows sample data. When signed in, the Command Center, calendar, and approvals show only real posts; sample data appears in demo mode.
-- Command Center engagement counts posts SignalDesk published. The worker refreshes metrics for the last 30 days of posts every 12 hours or so (10 posts per run), so new numbers can take a few hours to appear.
+- Posts made outside SignalDesk come from an account sync that runs about every 3 hours per account (90 days on the first sync, then 35). **Sync now** on the calendar refreshes one client right away. LinkedIn doesn't let apps read a personal profile's posts, so only posts made through SignalDesk appear for those.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
-- The direct integrations haven't been run against the live Meta, LinkedIn, or Pinterest APIs yet. They were tested against simulated responses, so expect small fixes on first connection.
+- Facebook, Instagram, and Pinterest are connected and syncing on the live site. LinkedIn publishing and Pinterest publishing haven't been tried against the live APIs yet, so expect small fixes on the first real posts.
 - Instagram only accepts JPEG images between 4:5 and 1.91:1. When a post publishes, SignalDesk converts other images (PNG, WebP, very tall or wide shapes) with `sharp`: transparent areas become white and the image is padded, not cropped, using its dominant color. The converted copy is stored under `system/instagram/` in the media bucket. The composer preview notes when this will happen.
 - Links get preview cards: Facebook receives the post's first link as the post link, and LinkedIn gets a card built from the page's Open Graph title, description, and image (SignalDesk reads the page, since LinkedIn's API doesn't). If the page can't be read, LinkedIn shows a plain card.
 - Direct publishing supports text, images, and video on Facebook and Instagram (Reels and carousels of up to 10 items), and text and images on LinkedIn and Pinterest. LinkedIn and Pinterest video aren't supported yet. Instagram Stories aren't supported.
@@ -140,13 +142,13 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live.
 - Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed doesn't cancel posts it already scheduled; cancel them from the calendar.
 - Instagram tags are spaced along the bottom of a single image; there is no drag-to-position UI yet. Collaborator invites must be accepted on Instagram. Reposts copy the post's text and media but not its comments, and approving a post approves its reposts too.
-- Top Posts covers posts SignalDesk published. For direct posts, numbers come from each network's API and are cached for 6 hours: Instagram insights, Facebook reactions, comments, and shares (reach when Meta provides it), Pinterest Pin analytics, and LinkedIn likes and comments (which may need extra LinkedIn permissions). Anything a network doesn't provide shows as —.
+- Weekly Top Posts covers posts SignalDesk published; **Analytics → Top posts, every source** covers everything on the connected accounts. For direct posts, numbers come from each network's API and are cached for 6 hours: Instagram insights, Facebook reactions, comments, and shares (reach when Meta provides it), Pinterest Pin analytics, and LinkedIn likes and comments (which may need extra LinkedIn permissions). Anything a network doesn't provide shows as —.
 - Best-time bands need about 10 published posts with metrics in weekly Top Posts reports (last 12 weeks); until then the calendar shows clearly labeled starter windows that are general guidance, not your data. Times are shown in the viewer's local time zone.
 - Link checks run from the server and only reach public websites. Some sites block automated checks; those links are marked “couldn't confirm” rather than broken.
 - Trend signals are AI research from public web results at scan time, not platform data feeds. Links are limited to pages the search actually returned, but summaries can still be wrong; confirm trends and audio licensing before using them.
 - Digests and weekly reports run from `/api/cron`, so they need the scheduler from step 3. Notifications refresh every minute while the app is open.
 - First comments and follow-ups wait until their post is live, then retry every 30 minutes (up to 12 times) if posting fails. Pinterest doesn't support comments.
-- The **Connect account** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
+- The **Sign in** button is SignalDesk email sign-in. Social accounts are connected separately in **Social Accounts**. Network passwords are entered only on each network's own sign-in page.
 - The Social Inbox and account-level analytics still use Ayrshare and stay inactive without it. DMs are limited to Facebook, Instagram, X, and WhatsApp. Instagram, Pinterest, TikTok, and YouTube publishing require media.
 - X requires your own developer app and API credits. Provider app reviews, account eligibility, rate limits, message windows, and network policy apply.
 - Client review pages show post images from their public links, so anyone who has a review link can see that client's upcoming posts until it expires or is turned off. Share links only with the client.
@@ -164,18 +166,20 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 ## Status and next steps
 A day-to-day guide, setup checklist, and troubleshooting table is in [docs/walkthrough.md](docs/walkthrough.md). App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
 
-Supabase, Vercel, the scheduler, the legal pages, AI features, and push notifications are set up on the live site. Next:
-1. Once Meta, LinkedIn, and Pinterest approve the developer apps, connect your own accounts and schedule test posts to each network, including an image, a carousel, and an Instagram video.
-2. LinkedIn needs the **Sign In with LinkedIn using OpenID Connect** product before it can connect. Company Pages need the Community Management API; set `LINKEDIN_ORGANIZATIONS=true` after it's approved.
-3. Pinterest needs `PINTEREST_APP_SECRET` alongside `PINTEREST_APP_ID`. Notification emails need `RESEND_API_KEY` and `NOTIFY_FROM_EMAIL`.
-4. Later: LinkedIn and Pinterest video, Instagram Stories, and audit logs.
+Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook, Instagram, and Pinterest accounts are connected. Next:
+1. **Meta:** add `read_insights` to the Facebook Login for Business configuration, reconnect Facebook, then complete Business Verification and App Review.
+2. **LinkedIn:** add **Sign In with LinkedIn using OpenID Connect** to the first app. For company Pages, create the second app with the Community Management API and set `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`.
+3. **Pinterest:** apply for Standard access. **Unsplash:** apply for production access.
+4. Schedule a test post to each network, including an image, a carousel, and an Instagram video.
+5. Before inviting other people: Vercel Pro and Supabase Pro, and a lawyer's review of the legal pages.
+6. Later: LinkedIn and Pinterest video, Instagram Stories, and audit logs.
 
 ## Testing
 Run `npm install`, then `npm test`. It runs:
 - **Server tests** (`tests/unit/`) with simulated network responses.
 - **Database tests** (`tests/db/`) against a real Postgres (PGlite) loaded with `supabase/schema.sql`, behind a small PostgREST stand-in. They cover publishing, retries, short links, Instagram image conversion, link previews, health checks, and upgrading from the original schema.
 - **Interface tests** (`tests/ui/`) inside the real page in headless Google Chrome.
-- **A browser check** (`tests/browser/`) that the page loads and every view opens with no errors.
+- **Browser checks** (`tests/browser/`): the page loads and every view opens with no errors, plus the composer, sign-in and beta screens, posts from every source, and the client picker. They block every request to Supabase, so they never touch the real project. `screens.mjs` isn't part of `npm test`; it saves a screenshot of every page for a visual review.
 
 The interface and browser checks need Google Chrome installed (set `CHROME` to its path if it isn't in the default macOS location). `tests/` isn't deployed (see `.vercelignore`). None of the tests contact the real networks.
 
@@ -184,7 +188,7 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 
 ## Project structure
 - `index.html` — page structure
-- `css/styles.css` — responsive visual design
+- `css/styles.css` — base layout; `css/theme.css` — the current design (loaded after it); `css/auth.css` — the sign-in box
 - `js/*.js` — the interface, one file per area (`base.js` helpers and navigation, `calendar.js`, `composer.js`, `publishing.js`, `overview.js`, `brand.js`, and so on). They load in order from `index.html` and share one global scope, so a file can use anything defined in a file listed before it; `app.js` loads last and starts the app
 - `api/social.js` — authenticated publishing, account, team, and Autopilot API
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
@@ -203,6 +207,11 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors
 - `api/_lib/media.js` — daily cleanup of unused uploads
+- `api/_lib/images.js` — converts images Instagram won't accept into JPEGs it will
+- `api/_lib/sync.js`, `js/network.js` — reads posts and follower counts from connected accounts, for the calendar and Analytics
+- `api/_lib/platform.js`, `js/beta.js`, `js/onboarding.js`, `js/auth.js` — invite-only beta, the error log, first-run setup, and sign-in
+- `api/_lib/account.js` — self-serve account deletion
+- `api/_lib/brandsite.js` — Brand kit → Fill from website
 - `api/_lib/core.js` — shared provider, database, post-option, and RSS helpers
 - `api/_lib/notify.js` — in-app notifications, immediate emails, and digests
 - `api/_lib/reports.js` — Top Posts metrics and weekly reports

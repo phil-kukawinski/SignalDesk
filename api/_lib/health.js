@@ -74,11 +74,9 @@ function networkChecks() {
     ? check('networks', 'meta', 'Facebook & Instagram', 'ok', `App ${process.env.META_APP_ID} is set up${process.env.META_LOGIN_CONFIG_ID ? ', using a Facebook Login for Business configuration' : ''}. Graph API ${process.env.META_GRAPH_VERSION || 'v23.0'}.`)
     : check('networks', 'meta', 'Facebook & Instagram', 'off', 'Not set up.', 'Set META_APP_ID and META_APP_SECRET in Vercel.'));
   if (providerConfigured('linkedin')) {
-    const orgs = process.env.LINKEDIN_ORGANIZATIONS === 'true';
-    const custom = process.env.LINKEDIN_SCOPES;
-    checks.push(check('networks', 'linkedin', 'LinkedIn', custom ? 'warn' : 'ok',
-      `${providerConfigured('linkedin_pages') ? 'Personal profiles, and company Pages through the second (Community Management) app.' : orgs ? 'Personal profiles and company Pages.' : 'Personal profiles. For company Pages, create a second LinkedIn app with only the Community Management API and set LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET.'}${custom ? ` LINKEDIN_SCOPES overrides the permissions: ${custom}.` : ''}`,
-      custom ? 'Delete LINKEDIN_SCOPES unless LinkedIn has approved every permission listed.' : 'Your LinkedIn app needs the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products.'));
+    checks.push(check('networks', 'linkedin', 'LinkedIn', 'ok',
+      providerConfigured('linkedin_pages') ? 'Personal profiles, and company Pages through the second (Community Management) app.' : 'Personal profiles. For company Pages, create a second LinkedIn app with only the Community Management API and set LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET.',
+      'Your LinkedIn app needs the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products.'));
   } else checks.push(check('networks', 'linkedin', 'LinkedIn', 'off', 'Not set up.', 'Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Vercel.'));
   if (providerConfigured('pinterest')) checks.push(check('networks', 'pinterest', 'Pinterest', 'ok', process.env.PINTEREST_SANDBOX === 'true' ? 'Set up, using Pinterest’s sandbox (test Pins only).' : 'Set up.'));
   else if (process.env.PINTEREST_APP_ID) checks.push(check('networks', 'pinterest', 'Pinterest', 'error', 'PINTEREST_APP_ID is set, but PINTEREST_APP_SECRET is missing.', 'Add PINTEREST_APP_SECRET in Vercel, then redeploy.'));

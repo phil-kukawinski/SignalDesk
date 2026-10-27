@@ -26,7 +26,7 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .nav-item.active{background:#d6e4f0;color:#1a1f3a}
 .nav-item.active .nav-icon{color:#5b8db8}
 .nav-icon{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#d6e4f0;color:#5b8db8;font-size:14px}
-.brand-mark{background:#5b8db8;border-radius:50%;box-shadow:none}
+
 .help-card{background:#fdf6f0;border-color:#e8e0dc;border-radius:16px}
 .help-icon{background:#d6e4f0;color:#5b8db8;border-radius:50%}
 .help-card button,.client-card-bottom button,.text-button{color:#416e94}

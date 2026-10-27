@@ -371,20 +371,12 @@ async function linkedIn(path, { method = 'GET', token, body, sending = false } =
 // (a separate app with only the Community Management API).
 function linkedInApp(app) {
   if (app === 'pages' && providerConfigured('linkedin_pages')) {
-    return { app: 'pages', id: process.env.LINKEDIN_PAGES_CLIENT_ID, secret: process.env.LINKEDIN_PAGES_CLIENT_SECRET, scopes: process.env.LINKEDIN_PAGES_SCOPES || 'r_organization_admin w_organization_social r_organization_social' };
+    return { app: 'pages', id: process.env.LINKEDIN_PAGES_CLIENT_ID, secret: process.env.LINKEDIN_PAGES_CLIENT_SECRET, scopes: 'r_organization_admin w_organization_social r_organization_social' };
   }
-  return { app: 'profile', id: process.env.LINKEDIN_CLIENT_ID, secret: process.env.LINKEDIN_CLIENT_SECRET, scopes: linkedInScopes() };
+  return { app: 'profile', id: process.env.LINKEDIN_CLIENT_ID, secret: process.env.LINKEDIN_CLIENT_SECRET, scopes: 'openid profile w_member_social' };
 }
 // Sign-ins for the Pages app carry an "lp_" prefix on their state, so the callback knows which app to use.
 const linkedInAppForState = (state) => (String(state || '').startsWith('lp_') ? 'pages' : 'profile');
-
-function linkedInScopes() {
-  if (process.env.LINKEDIN_SCOPES) return process.env.LINKEDIN_SCOPES;
-  const base = ['openid', 'profile', 'w_member_social'];
-  // Posting as a company Page needs LinkedIn's Community Management API product.
-  if (process.env.LINKEDIN_ORGANIZATIONS === 'true') base.push('r_organization_admin', 'w_organization_social', 'r_organization_social');
-  return base.join(' ');
-}
 
 // LinkedIn's "little text" format treats these characters as markup, so they must be escaped.
 function linkedInCommentary(text) {

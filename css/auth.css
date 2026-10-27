@@ -2,7 +2,7 @@
 .auth-dialog{width:min(420px,calc(100vw - 28px));padding:0;border:1px solid var(--line);border-radius:10px;color:var(--ink);box-shadow:0 20px 60px #20243a30}
 .auth-dialog::backdrop{background:#20243a70;backdrop-filter:blur(2px)}
 .auth-form{padding:24px}
-.auth-form h2{font:700 17px Manrope;margin:0 0 8px}
+.auth-form h2{font:700 17px Inter,system-ui,sans-serif;margin:0 0 8px}
 .auth-form>p:not(.auth-message){font-size:11px;line-height:1.6;color:var(--muted);margin:0 0 18px}
 .auth-form label{display:block;font-size:10px;font-weight:700;color:#596177;margin:13px 0 6px}
 .auth-form input{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit}
@@ -38,7 +38,7 @@
 .live-inbox-detail textarea{width:100%;min-height:70px;resize:vertical;border:1px solid var(--line);border-radius:6px;padding:10px;font:inherit;font-size:10px}
 .live-inbox-list:empty::after{content:'No conversations loaded.';display:block;padding:15px;color:var(--muted);font-size:10px}
 .live-comments{padding:15px 17px;border-top:1px solid var(--line)}
-.live-comments-heading h2{margin:0;font:700 13px Manrope;color:var(--ink)}
+.live-comments-heading h2{margin:0;font:700 13px Inter,system-ui,sans-serif;color:var(--ink)}
 .live-comments-heading p{margin:5px 0 12px;font-size:9px;color:var(--muted)}
 .live-comments-controls{display:grid;grid-template-columns:minmax(180px,1fr) 150px auto;gap:7px;align-items:center}
 .live-comments-list{display:grid;gap:7px;margin-top:11px}

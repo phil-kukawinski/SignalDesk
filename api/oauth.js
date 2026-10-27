@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
     // Only a person backing out is a cancel; anything else is the network refusing the app's setup.
     if (/^(access_denied|user_cancelled_login|user_cancelled_authorize|user_denied)$/.test(errorCode)) return fail(`The sign-in was canceled or declined (${detail}).`);
     const hint = /scope/.test(errorCode) && session.provider === 'linkedin'
-      ? ' In your LinkedIn developer app, add the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products. Company Page permissions need the Community Management API, so leave LINKEDIN_ORGANIZATIONS and LINKEDIN_SCOPES unset until LinkedIn approves it.'
+      ? ' In your LinkedIn developer app, add the “Sign In with LinkedIn using OpenID Connect” and “Share on LinkedIn” products. Company Pages use a second LinkedIn app with only the Community Management API (LINKEDIN_PAGES_CLIENT_ID and LINKEDIN_PAGES_CLIENT_SECRET).'
       : ' Check the app’s settings and permissions on the network’s developer site.';
     return fail(`The network refused the sign-in: ${detail}.${hint}`);
   }
