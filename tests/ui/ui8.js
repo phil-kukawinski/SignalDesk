@@ -31,8 +31,8 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  L('restored',document.querySelector('.page.active').id+' copy:'+document.querySelector('#post-copy').value+' editing:'+!document.querySelector('#editing-banner').hidden);
  document.querySelector('#cancel-edit').click();
  document.querySelector('#post-copy').value='My own draft';
- openPostDialog('p1');await wait(40);document.querySelector('[data-duplicate-post]').click();await wait(20);L('dupArmed',document.querySelector('[data-duplicate-post]').textContent);
- document.querySelector('[data-duplicate-post]').click();await wait(150);
+ openPostDialog('p1');await wait(40);document.querySelector('[data-duplicate-post]').click();await wait(20);L('dupConfirm',document.querySelector('#confirm-dialog')?.open+' '+document.querySelector('#confirm-title')?.textContent);
+ document.querySelector('#confirm-dialog [value=yes]').click();await wait(500);
  L('duplicated',document.querySelector('.page.active').id+' copy:'+document.querySelector('#post-copy').value+' date:'+document.querySelector('#schedule-date').value+' manual:'+selectedManual().join(',')+' alt:'+uploadedMedia[0]?.alt+' checked:'+[...document.querySelectorAll('.account-select input:checked')].map(i=>i.value).join(','));
  // Alt text editor
  L('altEditor',vis(document.querySelector('#alt-editor'))+' value:'+document.querySelector('[data-alt-index]')?.value);
