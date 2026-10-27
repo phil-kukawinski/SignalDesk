@@ -192,6 +192,23 @@
         <footer class="app-footer"><span>© SignalDesk</span><span class="legal-links"><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a></span><button type="button" class="text-button footer-shortcuts" id="footer-shortcuts"><kbd>?</kbd> Shortcuts</button></footer>
       </div>
     </main>
+
+    <nav class="mobile-tabs" aria-label="Main">
+      <button class="nav-item mobile-tab active" type="button" data-view="overview"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"/><path d="M9.5 20.5v-6h5v6"/></svg><span>Home</span></button>
+      <button class="nav-item mobile-tab" type="button" data-view="calendar"><i data-icon="calendar"></i><span>Calendar</span></button>
+      <button class="mobile-create" type="button" data-view="composer" aria-label="Create a post"><i data-icon="plus"></i></button>
+      <button class="nav-item mobile-tab" type="button" data-view="analytics"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6"/></svg><span>Analytics</span></button>
+      <button class="mobile-tab" type="button" id="mobile-more" aria-haspopup="dialog"><i data-icon="more"></i><span>More</span></button>
+    </nav>
+    <dialog id="mobile-more-sheet" class="auth-dialog mobile-sheet" aria-label="More pages"><div class="sheet-handle" aria-hidden="true"></div><div class="sheet-links">
+      <button type="button" data-view="composer"><i data-icon="edit"></i>Publishing Studio</button>
+      <button type="button" data-view="library"><i data-icon="image"></i>Content Library</button>
+      <button type="button" data-view="inbox"><i data-icon="send"></i>Social Inbox</button>
+      <button type="button" data-view="clients"><i data-icon="users"></i>Clients &amp; Accounts</button>
+      <button type="button" data-view="social-accounts"><i data-icon="link"></i>Social Accounts</button>
+      <button type="button" data-view="approvals"><i data-icon="check"></i>Team &amp; Approvals</button>
+      <button type="button" data-view="settings"><i data-icon="layers"></i>Settings</button>
+    </div></dialog>
   </div>
   <div id="toast" class="toast" role="status"></div>
   <dialog id="notification-dialog" class="auth-dialog">

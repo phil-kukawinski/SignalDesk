@@ -74,3 +74,6 @@ document.addEventListener('keydown',event=>{
   if(event.key==='?'){event.preventDefault();openShortcuts();}
 });
 $('#footer-shortcuts')?.addEventListener('click',openShortcuts);
+// Phone navigation: More opens a sheet with the rest of the pages.
+$('#mobile-more')?.addEventListener('click',()=>$('#mobile-more-sheet')?.showModal());
+$('#mobile-more-sheet')?.addEventListener('click',event=>{const sheet=event.currentTarget;if(event.target===sheet||event.target.closest('[data-view]'))sheet.close();});

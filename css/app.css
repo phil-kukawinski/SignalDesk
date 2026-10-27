@@ -1102,3 +1102,49 @@ html[data-theme="dark"] .best-time-band{background:color-mix(in srgb,var(--warni
 .shortcut-list dt{white-space:nowrap}.shortcut-list dd{margin:0;color:var(--text-muted)}
 kbd{display:inline-block;min-width:22px;padding:1px 6px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);font:600 11px/18px var(--font);color:var(--text-2);text-align:center}
 .footer-shortcuts{font-size:var(--text-xs);color:var(--text-muted);font-weight:500}.footer-shortcuts kbd{margin-right:4px}
+
+/* Phones: bottom tab bar instead of the sidebar */
+.mobile-tabs,.mobile-sheet{display:none}
+@media(max-width:700px){
+  .sidebar{display:none}
+  .main-area{margin-left:0;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+  .topbar{padding:0 14px;height:52px}
+  .breadcrumbs .workspace-name,.breadcrumbs .slash{display:none}
+  .breadcrumbs b{font-size:var(--text-base)}
+  .top-actions .auth-button{display:none}
+  .search-button span,.search-button kbd{display:none}
+  .page-wrap{padding:18px 14px 12px}
+  .page-heading{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:18px}
+  .page-heading h1{font-size:22px}
+  .page-heading h1 span{display:block}
+  .page-heading>.primary-button,.page-heading>.secondary-button,.page-heading .overview-client,.page-heading .overview-client .field{width:100%}
+  .page-heading>div:last-child:not(:first-child){display:flex;gap:8px;flex-wrap:wrap}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .stat-card{min-height:118px;padding:14px}
+  .stat-number{font-size:24px}
+  .content-grid{grid-template-columns:1fr}
+  .panel-header{padding:14px 14px 10px;flex-wrap:wrap}
+  .post-list{padding:0 14px 6px}
+  .app-footer{flex-wrap:wrap;gap:8px}
+  .mobile-tabs{display:grid;grid-template-columns:repeat(5,1fr);align-items:end;position:fixed;left:0;right:0;bottom:0;z-index:8;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px);border-top:1px solid var(--border)}
+  .mobile-tab{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:3px;margin:0!important;padding:6px 2px!important;border:0;background:transparent!important;color:var(--text-muted);font:500 11px/1 var(--font);border-radius:var(--radius)}
+  .mobile-tab .ico{width:22px;height:22px}
+  .mobile-tab.active{color:var(--accent)}
+  .mobile-create{justify-self:center;width:52px;height:52px;margin-bottom:2px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 6px 16px -4px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .mobile-create .ico{width:24px;height:24px;stroke-width:2.2}
+  .mobile-sheet[open]{display:block;margin:auto 0 0;width:100vw;max-width:100vw;border-radius:var(--radius-xl) var(--radius-xl) 0 0;border-width:1px 0 0;padding:8px 10px calc(14px + env(safe-area-inset-bottom,0px));animation:sheet-in .25s var(--ease)}
+  .sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--border-strong);margin:4px auto 10px}
+  .sheet-links{display:grid}
+  .sheet-links button{display:flex;align-items:center;gap:12px;padding:13px 12px;border:0;background:transparent;border-radius:var(--radius);font:500 var(--text-base)/1 var(--font);color:var(--text);text-align:left}
+  .sheet-links button:active{background:var(--surface-3)}
+  .sheet-links .ico{width:20px;height:20px;color:var(--text-muted)}
+  .toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  #composer-actions{bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+}
+@keyframes sheet-in{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+[hidden]{display:none!important}
+@media(max-width:700px){
+  .mobile-tabs .mobile-tab{font-size:11px!important;justify-content:center!important}
+  .mobile-tabs .mobile-tab span{display:block!important;font-size:11px!important}
+  .approval-panel .panel-header{flex-wrap:nowrap}
+}
