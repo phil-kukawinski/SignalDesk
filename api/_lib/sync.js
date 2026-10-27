@@ -23,6 +23,14 @@ async function upsertPosts(rows) {
   }
 }
 
+// Facebook returns empty reach and views when the connection wasn't granted read_insights
+// (connections made before it was added to the login configuration). Reconnecting fixes it.
+function insightsNote(platform, rows) {
+  if (platform !== 'facebook' || rows.length < 3) return null;
+  const missing = rows.every((item) => item.metrics?.reach == null && item.metrics?.views == null);
+  return missing ? 'Facebook isn’t sharing reach or views for this Page. Reconnect Facebook in Social Accounts to allow insights.' : null;
+}
+
 async function syncConnection(row, { encryptionKey, now = Date.now() } = {}) {
   let connection = await loadConnection(row.id, encryptionKey);
   if (!connection || connection.status !== 'active') return { skipped: true };
@@ -48,7 +56,7 @@ async function syncConnection(row, { encryptionKey, now = Date.now() } = {}) {
         body: JSON.stringify({ connection_id: row.id, workspace_id: row.workspace_id, client_id: row.client_id, platform: row.platform, day: dayKey(new Date(now)), metrics: account, updated_at: at })
       });
     }
-    await databaseRequest(`social_connections?id=eq.${row.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ synced_at: at, sync_error: history.note || null }) });
+    await databaseRequest(`social_connections?id=eq.${row.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ synced_at: at, sync_error: history.note || insightsNote(row.platform, rows) }) });
     return { posts: rows.length, linked: rows.filter((item) => item.job_id).length, account };
   } catch (error) {
     const message = String(error.message || error).slice(0, 300);
@@ -102,4 +110,4 @@ async function audienceSummary(workspaceId, clientId = null) {
   });
 }
 
-module.exports = { syncConnection, syncDueConnections, syncClient, listNetworkPosts, audienceSummary };
+module.exports = { insightsNote, syncConnection, syncDueConnections, syncClient, listNetworkPosts, audienceSummary };
