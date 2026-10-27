@@ -671,12 +671,17 @@ assert.equal(r.status, 409, 'already done');
 
 // --- Repeats keep local time across daylight saving and support monthly ---
 const { zonedToUtc } = require(`${ROOT}/api/_lib/core.js`);
-const startNy = zonedToUtc(2026, 10, 26, 10, 0, 'America/New_York');
+// Start the Monday before the next November clock change (first Sunday of November), so the weekly repeats cross it.
+const dstYear = (() => { for (let year = new Date().getFullYear(); ; year += 1) { const firstSunday = 1 + ((7 - new Date(Date.UTC(year, 10, 1)).getUTCDay()) % 7); if (Date.UTC(year, 10, firstSunday - 6) > Date.now() + 2 * 86400000) return { year, firstSunday }; } })();
+const startDay = new Date(Date.UTC(dstYear.year, 10, dstYear.firstSunday - 6));
+const startNy = zonedToUtc(startDay.getUTCFullYear(), startDay.getUTCMonth() + 1, startDay.getUTCDate(), 10, 0, 'America/New_York');
+const weeklyLabels = [0, 7, 14].map((days) => { const d = new Date(startDay.getTime() + days * 86400000); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}, 10 AM`; });
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Weekly tip', platforms: ['facebook'], scheduleDate: new Date(startNy).toISOString(), options: { autoRepost: { repeat: 2, days: 7 } } });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 const weekly = await q(`select scheduled_for from scheduled_posts where id='${r.payload.post.id}' or parent_id='${r.payload.post.id}' order by scheduled_for`);
-assert.deepEqual(weekly.map((row) => row.scheduled_for.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: 'numeric' })), ['10/26, 10 AM', '11/2, 10 AM', '11/9, 10 AM']);
-const jan31 = zonedToUtc(2027, 1, 31, 9, 0, 'America/New_York');
+assert.deepEqual(weekly.map((row) => row.scheduled_for.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: 'numeric' })), weeklyLabels);
+const jan31Year = new Date().getMonth() === 0 && new Date().getDate() >= 30 ? new Date().getFullYear() + 1 : new Date().getFullYear() + (new Date().getMonth() === 0 ? 0 : 1);
+const jan31 = zonedToUtc(jan31Year, 1, 31, 9, 0, 'America/New_York');
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Monthly recap', platforms: ['facebook'], scheduleDate: new Date(jan31).toISOString(), options: { autoRepost: { repeat: 2, every: 'month' } } });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 const monthly = await q(`select scheduled_for from scheduled_posts where id='${r.payload.post.id}' or parent_id='${r.payload.post.id}' order by scheduled_for`);
@@ -763,13 +768,15 @@ r = await bioCall('pk-works');
 assert.equal(r.status, 404, 'turned off');
 
 // --- Calendar feed from a review link ---
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Feed check', platforms: ['facebook'], scheduleDate: new Date(Date.now() + 3 * 86400000).toISOString() });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
 r = await call({ action: 'create-review-link', clientId: 'pk-works', days: 30 });
 const feedToken = r.payload.token;
 let feedRes = { statusCode: 0, headers: {}, body: '', status(s) { this.statusCode = s; return this; }, json(p) { this.body = JSON.stringify(p); }, setHeader(k, v) { this.headers[k] = v; }, end(b) { this.body = b; } };
 await review({ method: 'GET', url: `/api/review?format=ics&t=${feedToken}`, headers: {} }, feedRes);
 assert.equal(feedRes.headers['content-type'], 'text/calendar; charset=utf-8');
 assert.match(feedRes.body, /^BEGIN:VCALENDAR\r\n/);
-assert.match(feedRes.body, /SUMMARY:Weekly tip \(Facebook\)/);
+assert.match(feedRes.body, /SUMMARY:Feed check \(Facebook\)/);
 assert.ok(feedRes.body.split('BEGIN:VEVENT').length > 3);
 
 // --- Push subscriptions and delivery ---
