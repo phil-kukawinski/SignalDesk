@@ -21,7 +21,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMoreAct
 // Suggested times: the next few good slots from this client's own history (or common times until
 // there's enough history), shown as one-tap chips under the date and time.
 function suggestedSlots(count=3){
-  const windows=(typeof bestTimes!=='undefined'&&bestTimes.windows)||STARTER_WINDOWS,slots=[],soonest=Date.now()+30*60000;
+  const learned=typeof bestTimes!=='undefined'&&bestTimes.windows,windows=learned&&Object.keys(learned).length?learned:STARTER_WINDOWS,slots=[],soonest=Date.now()+30*60000;
   for(let offset=0;offset<8&&slots.length<count;offset++){
     const day=addDays(startOfDay(new Date()),offset);
     for(const band of (windows[day.getDay()]||[]).slice().sort((a,b)=>a.start-b.start)){
@@ -35,7 +35,8 @@ function renderSuggestedTimes(){
   const box=$('#suggested-times');if(!box)return;
   const fromHistory=typeof bestTimes!=='undefined'&&bestTimes.source==='history';
   const label=(at)=>`${dayHeading(localIsoDate(at))} · ${at.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
-  box.innerHTML=`<span class="suggested-label" title="${fromHistory?'Based on when this workspace’s posts have done best':'Common good times until there’s enough history to learn from'}">${icon('sparkles')}${fromHistory?'Best times':'Suggested'}</span>${suggestedSlots().map(at=>`<button type="button" class="time-chip" data-suggest-at="${at.toISOString()}">${escapeHtml(label(at))}</button>`).join('')}`;
+  const slots=suggestedSlots();if(!slots.length){box.innerHTML='';return;}
+  box.innerHTML=`<span class="suggested-label" title="${fromHistory?'Based on when this workspace’s posts have done best':'Common good times until there’s enough history to learn from'}">${icon('sparkles')}${fromHistory?'Best times':'Suggested'}</span>${slots.map(at=>`<button type="button" class="time-chip" data-suggest-at="${at.toISOString()}">${escapeHtml(label(at))}</button>`).join('')}`;
 }
 $('#suggested-times')?.addEventListener('click',event=>{
   const chip=event.target.closest('[data-suggest-at]');if(!chip)return;
