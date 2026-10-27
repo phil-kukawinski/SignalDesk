@@ -187,7 +187,8 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 
 ## Project structure
 - `index.html` — page structure
-- `css/styles.css` — base layout; `css/theme.css` — the current design (loaded after it); `css/auth.css` — the sign-in box
+- `css/app.css` — every style in one file. It starts with the design tokens (colors, type, spacing, radius, shadows) for light and dark mode, and every rule uses them, so dark mode only redefines the tokens. Network previews keep each network's real colors
+- `js/icons.js` — the interface icons (`icon('plus')`), loaded first
 - `js/*.js` — the interface, one file per area (`base.js` helpers and navigation, `calendar.js`, `composer.js`, `publishing.js`, `overview.js`, `brand.js`, and so on). They load in order from `index.html` and share one global scope, so a file can use anything defined in a file listed before it; `app.js` loads last and starts the app
 - `api/social.js` — authenticated publishing, account, team, and Autopilot API
 - `api/oauth.js` — sign-in callback for Meta, LinkedIn, and Pinterest
@@ -201,7 +202,6 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `api/_lib/captions.js` — AI caption drafts and image descriptions
 - `api/_lib/push.js` — browser push notifications
 - `sw.js`, `manifest.webmanifest`, `icons/` — the installable app
-- `css/dark.css` — the dark theme
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram, LinkedIn, and Pinterest connectors
