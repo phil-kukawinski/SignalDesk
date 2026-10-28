@@ -166,6 +166,7 @@ module.exports = function networks({ request, tokenRequest, PublishError, httpKi
       await markSent();
       const { response, body } = await request(location, { method: 'PUT', headers: { 'content-type': file.type || 'video/mp4' }, body: file.bytes }, { sending: true });
       if (!response.ok) throw new PublishError(response.status >= 500 ? 'unknown' : httpKind(response.status), `YouTube: ${body?.error?.message || `HTTP ${response.status}`}`);
+      if (options.cover?.url) await setYouTubeThumbnail(connection, body.id, options.cover.url);
       return { externalId: body.id, url: `https://www.youtube.com/watch?v=${body.id}` };
     },
     async metrics({ connection, job }) {
@@ -175,6 +176,17 @@ module.exports = function networks({ request, tokenRequest, PublishError, httpKi
       return { views: num(s.viewCount), likes: num(s.likeCount), comments: num(s.commentCount) };
     }
   };
+
+  // Custom thumbnails need a verified YouTube channel, so a refusal is logged, not treated as a failed post.
+  async function setYouTubeThumbnail(connection, videoId, coverUrl) {
+    try {
+      const image = await downloadMedia(coverUrl, { maxBytes: 2 * 1024 * 1024 });
+      const { response, body } = await request(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, { method: 'POST', headers: { authorization: `Bearer ${connection.token}`, 'content-type': image.type || 'image/jpeg' }, body: image.bytes });
+      if (!response.ok) console.error('YouTube thumbnail not set:', body?.error?.message || response.status);
+    } catch (error) {
+      console.error('YouTube thumbnail not set:', error.message);
+    }
+  }
 
   // ---------------------------------------------------------------- TikTok — Content Posting API
   const TT = 'https://open.tiktokapis.com/v2';
@@ -232,7 +244,7 @@ module.exports = function networks({ request, tokenRequest, PublishError, httpKi
         await markSent();
         const init = await tiktokApi('post/publish/video/init/', {
           token: connection.token, sending: true,
-          body: { post_info: { title: content.text.slice(0, 2200), privacy_level: privacy, disable_comment: false, disable_duet: false, disable_stitch: false }, source_info: { source: 'FILE_UPLOAD', video_size: size, chunk_size: chunk, total_chunk_count: count } }
+          body: { post_info: { title: content.text.slice(0, 2200), privacy_level: privacy, disable_comment: false, disable_duet: false, disable_stitch: false, ...(Number.isInteger(options.cover?.offsetMs) ? { video_cover_timestamp_ms: options.cover.offsetMs } : {}) }, source_info: { source: 'FILE_UPLOAD', video_size: size, chunk_size: chunk, total_chunk_count: count } }
         });
         for (let index = 0; index < count; index += 1) {
           const from = index * chunk, to = index === count - 1 ? size : from + chunk;
@@ -267,7 +279,7 @@ module.exports = function networks({ request, tokenRequest, PublishError, httpKi
       const url = new URL('https://threads.net/oauth/authorize');
       url.searchParams.set('client_id', process.env.THREADS_APP_ID);
       url.searchParams.set('redirect_uri', redirectUri());
-      url.searchParams.set('scope', 'threads_basic,threads_content_publish');
+      url.searchParams.set('scope', 'threads_basic,threads_content_publish,threads_manage_insights');
       url.searchParams.set('response_type', 'code');
       url.searchParams.set('state', state);
       return url.href;
@@ -321,6 +333,19 @@ module.exports = function networks({ request, tokenRequest, PublishError, httpKi
       let url = '';
       try { url = (await threadsApi(published.id, { token: connection.token, params: { fields: 'permalink' } })).permalink || ''; } catch { /* live either way */ }
       return { externalId: published.id, url };
+    },
+    // Needs threads_manage_insights. Accounts connected before it was requested get nothing until they reconnect.
+    async metrics({ connection, job }) {
+      let payload;
+      try {
+        payload = await threadsApi(`${job.external_id}/insights`, { token: connection.token, params: { metric: 'views,likes,replies,reposts,quotes,shares' } });
+      } catch (error) {
+        if (error.kind === 'auth' || error.kind === 'invalid') return {};
+        throw error;
+      }
+      const value = (name) => { const item = (payload.data || []).find((entry) => entry.name === name); const number = item?.values?.[0]?.value ?? item?.total_value?.value; return typeof number === 'number' ? number : null; };
+      const shares = ['reposts', 'quotes', 'shares'].map(value).filter((number) => number !== null);
+      return { views: value('views'), likes: value('likes'), comments: value('replies'), shares: shares.length ? shares.reduce((a, b) => a + b, 0) : null };
     }
   };
 

@@ -38,5 +38,20 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   const fb = JSON.parse(await evaluate(`JSON.stringify({kind:__fb?.kind,message:__fb?.message,view:__fb?.context?.view,open:document.querySelector('#feedback-dialog').open})`));
   log.push('feedback: ' + JSON.stringify(fb));
   if (fb.kind !== 'idea' || fb.message !== 'A bulk upload would help' || !fb.view || fb.open) log.push('[exception] feedback should send the kind, message and page, then close');
+  // Analytics time frames: a year asks the server for 365 days and shows weekly points.
+  await evaluate(`(()=>{window.__days=[];const base=callSocialApi;callSocialApi=async(b)=>{if(b.action==='overview'&&b.days){__days.push(b.days+':'+(b.clientId||'all'));const weeks=Array.from({length:53},(_,i)=>({day:new Date(Date.now()-(52-i)*7*864e5).toISOString().slice(0,10),engagements:i%4}));return{range:b.days,step:7,engagement:{total:900,previous:600,measured:40,reach:9000,rate:10,daily:weeks,byPlatform:{facebook:900}},clients:{},connections:{active:1,reauth:[],platforms:['facebook'],clients:1},published:{total:80,viaSignalDesk:5,clients:1,synced:true},audience:[],clicks:null};}if(b.action==='network-posts'){__days.push('posts:'+Math.round((Date.parse(b.to)-Date.parse(b.from))/864e5));return{posts:[],accounts:[]};}return base(b);};showView('analytics');})()`); await wait(500);
+  const options = await evaluate(`[...document.querySelectorAll('#analytics-range option')].map(o=>o.textContent).join(', ')`);
+  log.push('time frames: ' + options);
+  if (options !== 'Last 7 days, Last 14 days, Last 30 days, Last 60 days, Last 90 days, Last 12 months') log.push('[exception] the time frame picker should list 7 days to 12 months');
+  await evaluate(`(()=>{const s=document.querySelector('#analytics-range');s.value='365';s.dispatchEvent(new Event('change'));})()`); await wait(800);
+  const year = JSON.parse(await evaluate(`JSON.stringify({calls:__days,engagements:document.querySelectorAll('.analytics-stats .stat-number')[1]?.innerText,foot:document.querySelectorAll('.analytics-stats .stat-foot')[1]?.innerText,range:document.querySelector('#analytics-trend-panel .performance-range')?.textContent,labels:[...document.querySelectorAll('#analytics-trend-panel .chart-x span')].map(e=>e.textContent),remembered:localStorage.getItem('signaldesk.analyticsDays')})`));
+  log.push('12 months: ' + JSON.stringify(year));
+  if (!year.calls.includes('365:all') || year.engagements !== '900' || !/previous 12 months/.test(year.foot) || year.range !== 'Last 12 months' || year.labels.length !== 7 || year.remembered !== '365' || !year.calls.includes('posts:366')) log.push('[exception] picking 12 months should load and label a year of results');
+  if (out) { const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 1400, height: 1000, scale: 0.7 } }); fs.writeFileSync(out + 'analytics_year.png', Buffer.from(result.data, 'base64')); }
+  // Explainer bubbles float above the page and stay on screen, even in the top-left card.
+  const tipBox = JSON.parse(await evaluate(`(()=>{const t=document.querySelector('.analytics-stats .tip');t.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));const b=document.querySelector('.tip-float').getBoundingClientRect();return JSON.stringify({top:b.top,left:b.left,right:b.right,visible:document.querySelector('.tip-float').classList.contains('visible'),inBody:document.querySelector('.tip-float').parentNode===document.body});})()`));
+  log.push('tooltip: ' + JSON.stringify(tipBox));
+  if (!tipBox.visible || tipBox.top < 0 || tipBox.left < 0 || tipBox.right > 1400 || !tipBox.inBody) log.push('[exception] the explainer bubble should be fully on screen');
+  await evaluate(`document.querySelector('.analytics-stats .tip').dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));(()=>{const s=document.querySelector('#analytics-range');s.value='30';s.dispatchEvent(new Event('change'));})();try{localStorage.removeItem('signaldesk.analyticsDays')}catch{}`);
   await evaluate(`try{localStorage.removeItem('signaldesk.homeClient')}catch{}`);
 };

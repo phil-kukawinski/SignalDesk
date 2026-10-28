@@ -188,7 +188,7 @@ These connect directly too. Each needs its own developer app with `APP_URL/api/o
 - **X:** no review, but posting through the API needs an X plan that includes writes. Use the app description: “SignalDesk schedules and publishes posts that our users write for the X accounts they manage.”
 - **YouTube (Google):** Google verifies apps that use `youtube.upload`. Submit the OAuth consent screen for verification with the privacy policy (`APP_URL/privacy`, which already includes the YouTube API Services disclosures) and a screen recording: connect YouTube in Social Accounts, schedule a video, and show it on the channel. Separately, request a **YouTube API audit** so uploads aren't locked to private.
 - **TikTok:** submit the app for the **Content Posting API** audit. TikTok wants a recording that shows: the creator's nickname and avatar before posting, the privacy choice, the caption, and a clear notice that the post goes to TikTok. Until the audit passes, posts are private.
-- **Threads:** add the **Access the Threads API** use case to the Meta app. For `threads_content_publish`, record connecting Threads and publishing a post; it goes through Meta's normal App Review alongside the Facebook and Instagram permissions.
+- **Threads:** add the **Access the Threads API** use case to the Meta app. For `threads_content_publish`, record connecting Threads and publishing a post; for `threads_manage_insights`, show that post's views and likes in Analytics; it goes through Meta's normal App Review alongside the Facebook and Instagram permissions.
 
 ## After approval
 

@@ -54,7 +54,10 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // After scheduling: confirmation, reset, and calendar.
   log.push('default schedule: ' + await evaluate(`document.querySelector('#schedule-date').value+' '+document.querySelector('#schedule-time').value`) + ' future=' + await evaluate(`new Date(document.querySelector('#schedule-date').value+'T'+document.querySelector('#schedule-time').value)>new Date()`));
   await evaluate(`document.querySelector('#post-copy').value='Copy to clear';postOptions.campaign='Fall';callSocialApi=async()=>({status:'scheduled',post:{id:'p-new',scheduledFor:new Date(Date.now()+3*86400000).toISOString(),reposts:0},queuedComments:1});selectedManual=()=>['tiktok'];loadServerPosts=async()=>{};loadOverview=()=>{};activeUser={id:'u'};`);
-  await evaluate(`publishSocialPost(false,false,false)`); await wait(800);
+  await evaluate(`void publishSocialPost(false,false,false)`); await wait(500);
+  // Instagram and Pinterest have no image here, so SignalDesk asks before posting to the rest.
+  log.push('asked first: ' + await evaluate(`document.querySelector('#confirm-dialog')?.open?document.querySelector('#confirm-title').textContent:'no'`));
+  await evaluate(`document.querySelector('#confirm-dialog')?.open&&document.querySelector('#confirm-dialog button[value="yes"]').click()`); await wait(800);
   log.push('dialog: open=' + await evaluate(`document.querySelector('#scheduled-dialog').open`) + ' "' + await evaluate(`document.querySelector('#scheduled-dialog').innerText.replace(/\\s+/g,' ').slice(0,260)`) + '"');
   log.push('networks listed: ' + await evaluate(`[...document.querySelectorAll('#scheduled-networks li')].map(li=>li.innerText.replace(/\\s+/g,' ')).join(' | ')`) + ' | selectedManual now: ' + await evaluate(`JSON.stringify(selectedManual())`));
   log.push('reset: copy="' + await evaluate(`document.querySelector('#post-copy').value`) + '" media=' + await evaluate(`uploadedMedia.length`) + ' tags="' + await evaluate(`postOptions.tags`) + '" campaign="' + await evaluate(`postOptions.campaign`) + '"');

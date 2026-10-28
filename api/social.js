@@ -506,7 +506,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'network-posts') {
     const from = Date.parse(body.from), to = Date.parse(body.to);
-    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 101 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 368 * 86400000) return send(res, 400, { error: 'Choose a date range of up to a year.' });
     const platform = typeof body.platform === 'string' && /^[a-z]{2,20}$/.test(body.platform) ? body.platform : '';
     const clientId = typeof body.clientId === 'string' && body.clientId ? body.clientId : '';
     const [posts, connections] = await Promise.all([listNetworkPosts(workspaceId, { from, to, clientId, platform }), databaseRequest(`social_connections?${scope}&select=client_id,platform,synced_at,sync_error`)]);
@@ -646,8 +646,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'overview') {
     const clientId = typeof body.clientId === 'string' && /^[\w-]{1,80}$/.test(body.clientId) ? body.clientId : null;
+    const days = Number(body.days) || 30;
     const [data] = await Promise.all([
-      overviewData(workspaceId, await workspaceTimeZone(workspaceId), clientId),
+      overviewData(workspaceId, await workspaceTimeZone(workspaceId), clientId, days),
       checkWorkerHealth().catch((error) => console.error('Health check failed:', error.message))
     ]);
     return send(res, 200, data);

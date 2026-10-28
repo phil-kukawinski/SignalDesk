@@ -85,24 +85,34 @@ async function syncClient(workspaceId, clientId, { encryptionKey } = {}) {
 
 // Posts for the calendar, from every source, in a date range.
 async function listNetworkPosts(workspaceId, { from, to, clientId, platform } = {}) {
-  const query = new URLSearchParams({ select: 'id,client_id,platform,external_id,url,text,media_url,media_type,published_at,job_id,metrics,metrics_at', workspace_id: `eq.${workspaceId}`, order: 'published_at.asc', limit: '1000' });
+  const query = new URLSearchParams({ select: 'id,client_id,platform,external_id,url,text,media_url,media_type,published_at,job_id,metrics,metrics_at', workspace_id: `eq.${workspaceId}`, order: 'published_at.desc', limit: '1000' });
   query.append('published_at', `gte.${new Date(from).toISOString()}`);
   query.append('published_at', `lt.${new Date(to).toISOString()}`);
   if (clientId) query.set('client_id', `eq.${clientId}`);
   if (platform) query.set('platform', `eq.${platform}`);
-  const rows = await databaseRequest(`network_posts?${query}`) || [];
+  // The newest 1,000, returned oldest first.
+  const rows = (await databaseRequest(`network_posts?${query}`) || []).reverse();
   return rows.map((row) => ({
     id: row.id, clientId: row.client_id, platform: row.platform, url: row.url, text: row.text || '', mediaUrl: row.media_url, mediaType: row.media_type,
     publishedAt: row.published_at, viaSignalDesk: Boolean(row.job_id), jobId: row.job_id, metrics: row.metrics || {}, metricsAt: row.metrics_at
   }));
 }
 
-// Audience numbers for Analytics: latest followers per account, and the change over 30 days.
-async function audienceSummary(workspaceId, clientId = null) {
-  const since = dayKey(new Date(Date.now() - 31 * 86400000));
-  const rows = await databaseRequest(`account_stats?workspace_id=eq.${workspaceId}${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics&order=day.asc`) || [];
+// Audience numbers for Analytics: latest followers per account, and the change over the time frame.
+// Only the oldest and newest days are needed, so those are read separately (a year of daily rows is too many).
+async function audienceSummary(workspaceId, clientId = null, rangeDays = 30) {
+  const since = dayKey(new Date(Date.now() - (rangeDays + 1) * 86400000));
+  const base = `account_stats?workspace_id=eq.${workspaceId}${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics`;
+  const [oldest, newest] = await Promise.all([databaseRequest(`${base}&order=day.asc&limit=1000`), databaseRequest(`${base}&order=day.desc&limit=1000`)]);
   const byConnection = {};
-  for (const row of rows) (byConnection[row.connection_id] ||= []).push(row);
+  const seen = new Set();
+  for (const row of [...(oldest || []), ...(newest || []).reverse()]) {
+    const key = `${row.connection_id}:${row.day}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    (byConnection[row.connection_id] ||= []).push(row);
+  }
+  for (const series of Object.values(byConnection)) series.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
   return Object.values(byConnection).map((series) => {
     const latest = series[series.length - 1], first = series.find((row) => typeof row.metrics.followers === 'number');
     const followers = latest.metrics.followers ?? null;

@@ -54,7 +54,7 @@ export async function createRest(db) {
       return `t.${q(col)} ${sym} $${values.length}::${cast(col)}`;
     };
     for (const [key, value] of params) {
-      if (['select', 'order', 'limit', 'on_conflict'].includes(key)) continue;
+      if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(key)) continue;
       if (key === 'or') {
         const items = value.replace(/^\(|\)$/g, '').split(/,(?![^(]*\))/);
         clauses.push(`(${items.map((item) => { const [col, ...rest] = item.split('.'); return one(col, rest.join('.')); }).join(' or ')})`);
@@ -101,7 +101,7 @@ export async function createRest(db) {
       const order = url.searchParams.get('order');
       const orderSql = order ? `order by ${order.split(',').map((item) => { const [col, dir, nulls] = item.split('.'); return `t.${q(col)} ${dir === 'desc' ? 'desc' : 'asc'}${nulls ? ` ${nulls.replace('nulls', 'nulls ')}` : ''}`; }).join(',')}` : '';
       const limit = url.searchParams.get('limit');
-      sql = `select ${rowsJson(table, url.searchParams.get('select') || '*')} as j from ${q(table)} t ${where(table, params, values)} ${orderSql} ${limit ? `limit ${Number(limit)}` : ''}`;
+      sql = `select ${rowsJson(table, url.searchParams.get('select') || '*')} as j from ${q(table)} t ${where(table, params, values)} ${orderSql} ${limit ? `limit ${Number(limit)}` : ''} ${url.searchParams.get('offset') ? `offset ${Number(url.searchParams.get('offset'))}` : ''}`;
       return (await db.query(sql, values)).rows.map((row) => row.j);
     }
     const returning = prefer.includes('return=representation') ? 'returning to_jsonb(t) as j' : '';

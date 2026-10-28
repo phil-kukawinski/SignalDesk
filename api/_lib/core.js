@@ -278,6 +278,20 @@ function validatePostOptions(options, platforms) {
     if (options.pinterest.boardId) pin.boardId = String(options.pinterest.boardId);
     if (Object.keys(pin).length) clean.pinterest = pin;
   }
+  // Video cover: a frame time (milliseconds into the video) and/or an uploaded image.
+  if (options.cover && typeof options.cover === 'object') {
+    const cover = {};
+    if (options.cover.url !== undefined && options.cover.url !== '') {
+      if (typeof options.cover.url !== 'string' || options.cover.url.length > 2000 || !/^https:\/\/\S+$/i.test(options.cover.url)) throw httpError(400, 'The video cover must be an uploaded image.');
+      cover.url = options.cover.url;
+    }
+    if (options.cover.offsetMs !== undefined && options.cover.offsetMs !== null) {
+      const offset = Number(options.cover.offsetMs);
+      if (!Number.isInteger(offset) || offset < 0 || offset > 4 * 3600000) throw httpError(400, 'Choose a cover frame from within the video.');
+      cover.offsetMs = offset;
+    }
+    if (Object.keys(cover).length) clean.cover = cover;
+  }
   if (options.utm === true) clean.utm = true;
   if (options.shortLinks === true) clean.shortLinks = true;
   if (options.autoRepost !== undefined && options.autoRepost !== null) {

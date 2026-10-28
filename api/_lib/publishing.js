@@ -265,10 +265,10 @@ async function withShortLinks(job, content, options) {
   }
 }
 
-// Clicks on short links over the last 30 days, for the dashboard and Analytics.
-async function linkClickSummary(workspaceId, clientId = null) {
-  const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-  const days = await databaseRequest(`link_click_days?workspace_id=eq.${workspaceId}&day=gte.${since}&select=code,day,clicks&limit=5000`) || [];
+// Clicks on short links over the chosen time frame (30 days unless Analytics asks otherwise).
+async function linkClickSummary(workspaceId, clientId = null, rangeDays = 30) {
+  const since = new Date(Date.now() - (rangeDays - 1) * 86400000).toISOString().slice(0, 10);
+  const days = await allRows(`link_click_days?workspace_id=eq.${workspaceId}&day=gte.${since}&select=code,day,clicks&order=day.desc`);
   const byCode = {};
   let total = 0;
   for (const row of days) { byCode[row.code] = (byCode[row.code] || 0) + row.clicks; total += row.clicks; }
@@ -827,23 +827,39 @@ async function refreshRecentMetrics({ encryptionKey, limit = 10 } = {}) {
 // --- Command Center summary ---
 
 // clientId narrows everything to one client (the Command Center's client picker).
-async function overviewData(workspaceId, timeZone, clientId = null) {
+// Time frames Analytics can show. Each is compared with the same length of time before it.
+const OVERVIEW_RANGES = [7, 14, 30, 60, 90, 365];
+
+// Reads every row of a query, a page at a time (the database returns at most 1,000 rows per request).
+async function allRows(path, { pageSize = 1000, maxRows = 20000 } = {}) {
+  const rows = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await databaseRequest(`${path}&limit=${pageSize}&offset=${offset}`) || [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 30) {
   const { finishMetrics } = require('./reports');
   const { zonedParts } = require('./core');
   const now = Date.now();
-  const windowStart = now - 60 * 86400000;
+  const range = OVERVIEW_RANGES.includes(rangeDays) ? rangeDays : 30;
+  const rangeStart = now - range * 86400000;
+  const windowStart = now - 2 * range * 86400000;
   const forClient = clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : '';
   const [reports, jobs, connections, lastRun] = await Promise.all([
     databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}${forClient}&week_start=gte.${new Date(windowStart - 7 * 86400000).toISOString().slice(0, 10)}&select=client_id,data`),
-    databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}${forClient}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics`),
+    allRows(`publish_jobs?workspace_id=eq.${workspaceId}${forClient}&status=eq.published&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,metrics&order=published_at.desc`),
     listConnections(workspaceId, clientId),
     lastWorkerRun('publish'),
   ]);
-  const clicks = await linkClickSummary(workspaceId, clientId).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
+  const clicks = await linkClickSummary(workspaceId, clientId, range).catch((error) => { console.error('Link clicks unavailable:', error.message); return null; });
   // Posts from every source (read from the networks by the account sync); SignalDesk's own posts are linked by job.
-  const networkPosts = await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}${forClient}&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,job_id,metrics&limit=5000`).catch(() => []) || [];
+  const networkPosts = await allRows(`network_posts?workspace_id=eq.${workspaceId}${forClient}&published_at=gte.${new Date(windowStart).toISOString()}&select=id,client_id,platform,published_at,job_id,metrics&order=published_at.desc`).catch(() => []) || [];
   const { audienceSummary } = require('./sync');
-  const audience = await audienceSummary(workspaceId, clientId).catch(() => []);
+  const audience = await audienceSummary(workspaceId, clientId, range).catch(() => []);
   const rows = new Map();
   for (const report of reports || []) {
     for (const row of report.data?.rows || []) if (row.publishedAt && row.metrics) rows.set(row.id, { clientId: report.client_id, platform: row.platform, at: Date.parse(row.publishedAt), engagements: row.metrics.engagements, audience: row.metrics.reach || row.metrics.views || null });
@@ -860,30 +876,34 @@ async function overviewData(workspaceId, timeZone, clientId = null) {
     if (typeof metrics.engagements !== 'number') continue;
     rows.set(post.job_id ? `job:${post.job_id}` : `net:${post.id}`, { clientId: post.client_id, platform: post.platform, at: Date.parse(post.published_at), engagements: metrics.engagements, audience: metrics.reach || metrics.views || null });
   }
-  const recentNetwork = networkPosts.filter((post) => Date.parse(post.published_at) >= now - 30 * 86400000);
+  const recentNetwork = networkPosts.filter((post) => Date.parse(post.published_at) >= rangeStart);
   const published = { total: recentNetwork.length, viaSignalDesk: recentNetwork.filter((post) => post.job_id).length, clients: new Set(recentNetwork.map((post) => post.client_id)).size, synced: networkPosts.length > 0 };
   const dayKey = (time) => { const parts = zonedParts(new Date(time), timeZone); return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`; };
-  const days = Array.from({ length: 30 }, (_, index) => dayKey(now - (29 - index) * 86400000));
+  // Daily points up to 90 days; a year is shown week by week (each point is the week starting that day).
+  const step = range > 90 ? 7 : 1;
+  const points = Math.ceil(range / step);
+  const days = Array.from({ length: points }, (_, index) => dayKey(now - ((points - 1 - index) * step + step - 1) * 86400000));
   const daily = Object.fromEntries(days.map((day) => [day, 0]));
+  const bucketFor = (time) => days[Math.min(points - 1, Math.max(0, points - 1 - Math.floor((now - time) / (step * 86400000))))];
   const byPlatform = {};
   // Per client, for goals: engagement rate counts only posts that report an audience.
   const byClient = {};
   let total = 0, previous = 0, measured = 0, reach = 0, rated = 0;
   for (const row of rows.values()) {
     if (typeof row.engagements !== 'number') continue;
-    if (row.at >= now - 30 * 86400000) {
+    if (row.at >= rangeStart) {
       total += row.engagements;
       measured += 1;
       byPlatform[row.platform] = (byPlatform[row.platform] || 0) + row.engagements;
       const entry = byClient[row.clientId] ||= { engagements: 0, audience: 0, posts: 0 };
       entry.posts += 1;
       if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; reach += row.audience; rated += row.engagements; }
-      const key = dayKey(row.at);
+      const key = step === 1 ? dayKey(row.at) : bucketFor(row.at);
       if (key in daily) daily[key] += row.engagements;
     } else if (row.at >= windowStart) previous += row.engagements;
   }
   return {
-    clientId, clicks, audience, published,
+    clientId, clicks, audience, published, range, step,
     engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
@@ -1070,5 +1090,4 @@ module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
-};
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES };

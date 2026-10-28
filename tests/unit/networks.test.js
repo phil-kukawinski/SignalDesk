@@ -138,5 +138,113 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   assert.match(create.url + String(create.body || ''), /STORIES/);
   await assert.rejects(PROVIDERS.meta.publish(ctx({ job: { id: 'j', platform: 'instagram_story' }, connection: { token: 'pt', external_id: 'ig1' }, content: { text: '', media: ['https://cdn.test/a.mp4', 'https://cdn.test/b.mp4'] } })), /one image or video/);
 
+  // --- Video covers: TikTok takes the frame time, YouTube the uploaded image, Reels either
+  calls.length = 0;
+  statusReplies = ['PUBLISH_COMPLETE'];
+  routes = [
+    [/cdn\.test\/clip\.mp4/, media('video/mp4', 4096)],
+    [/creator_info\/query/, json({ data: { privacy_level_options: ['PUBLIC_TO_EVERYONE'] }, error: { code: 'ok' } })],
+    [/post\/publish\/video\/init/, json({ data: { publish_id: 'pub2', upload_url: 'https://upload.tiktok.test/u2' }, error: { code: 'ok' } })],
+    [/upload\.tiktok\.test/, new Response('', { status: 201 })],
+    [/status\/fetch/, () => json({ data: { status: statusReplies.shift() || 'PUBLISH_COMPLETE' }, error: { code: 'ok' } })]
+  ];
+  await PROVIDERS.tiktok.publish(ctx({ connection: { token: 'ta' }, content: { text: 'With cover', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg', offsetMs: 2500 } } }));
+  assert.equal(JSON.parse(calls.find((call) => /video\/init/.test(call.url)).body).post_info.video_cover_timestamp_ms, 2500);
+
+  calls.length = 0;
+  routes = [
+    [/cdn\.test\/clip\.mp4/, media('video/mp4', 4096)],
+    [/cdn\.test\/cover\.jpg/, media('image/jpeg', 1024)],
+    [/upload\/youtube\/v3\/videos\?uploadType=resumable/, new Response('', { status: 200, headers: { location: 'https://upload.test/session-2' } })],
+    [/upload\.test\/session-2/, json({ id: 'vid456' })],
+    [/thumbnails\/set/, json({ items: [] })]
+  ];
+  out = await PROVIDERS.google.publish(ctx({ connection: { token: 'ga' }, content: { text: 'Cover test', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' } } }));
+  assert.equal(out.externalId, 'vid456');
+  const thumb = calls.find((call) => /thumbnails\/set/.test(call.url));
+  assert.ok(thumb && /videoId=vid456/.test(thumb.url) && thumb.method === 'POST', 'YouTube thumbnail is set');
+  // A refused thumbnail (unverified channel) doesn't fail the upload.
+  routes[4] = [/thumbnails\/set/, json({ error: { message: 'The authenticated user doesn’t have permissions to upload and set custom video thumbnails.' } }, 403)];
+  routes[3] = [/upload\.test\/session-2/, json({ id: 'vid789' })];
+  const originalError = console.error; console.error = () => {};
+  out = await PROVIDERS.google.publish(ctx({ connection: { token: 'ga' }, content: { text: 'Cover test', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' } } }));
+  console.error = originalError;
+  assert.equal(out.externalId, 'vid789');
+
+  calls.length = 0;
+  routes = [
+    [/graph\.facebook\.com\/v23\.0\/ig1\/media_publish/, json({ id: 'reel-1' })],
+    [/graph\.facebook\.com\/v23\.0\/ig1\/media/, json({ id: 'rc1' })],
+    [/graph\.facebook\.com\/v23\.0\/rc1/, json({ status_code: 'FINISHED', permalink: 'https://www.instagram.com/reel/x/' })],
+    [/graph\.facebook\.com\/v23\.0\/reel-1/, json({ permalink: 'https://www.instagram.com/reel/x/' })]
+  ];
+  c = ctx({ job: { id: 'job-r', platform: 'instagram' }, connection: { token: 'pt', external_id: 'ig1', username: 'pkworks' }, content: { text: 'Reel', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg', offsetMs: 1200 } } });
+  for (let i = 0; i < 3; i += 1) { const result = await PROVIDERS.meta.publish(c); if (!result.pending) break; }
+  const reel = calls.find((call) => /ig1\/media$/.test(call.url.split('?')[0]) && /REELS/.test(String(call.body)));
+  assert.ok(reel, 'Reel container created');
+  assert.equal(JSON.parse(reel.body).cover_url, 'https://cdn.test/cover.jpg');
+
+  // --- Facebook video with a cover image: the cover is uploaded to the video's thumbnails
+  calls.length = 0;
+  routes = [
+    [/cdn\.test\/cover\.jpg/, media('image/jpeg', 1024)],
+    [/graph\.facebook\.com\/v23\.0\/page1\/videos/, json({ id: 'fbv1' })],
+    [/graph\.facebook\.com\/v23\.0\/fbv1\/thumbnails/, json({ success: true })]
+  ];
+  out = await PROVIDERS.meta.publish(ctx({ job: { id: 'job-f', platform: 'facebook' }, connection: { token: 'pt', external_id: 'page1' }, content: { text: 'FB video', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' } } }));
+  assert.equal(out.externalId, 'fbv1');
+  const fbThumb = calls.find((call) => /fbv1\/thumbnails/.test(call.url));
+  assert.ok(fbThumb && fbThumb.body instanceof FormData && fbThumb.body.get('source') && fbThumb.body.get('is_preferred') === 'true', 'Facebook cover uploaded');
+
+  // --- Video Pins: register, upload to the address Pinterest gives, wait, then pin with the cover
+  calls.length = 0;
+  let pinStatus = ['processing', 'succeeded'];
+  routes = [
+    [/cdn\.test\/clip\.mp4/, media('video/mp4', 4096)],
+    [/pinterest\.com\/v5\/media\/m-1/, () => json({ media_id: 'm-1', status: pinStatus.shift() })],
+    [/pinterest\.com\/v5\/media$/, json({ media_id: 'm-1', upload_url: 'https://pinterest-uploads.test/s3', upload_parameters: { key: 'k1', policy: 'p1' } })],
+    [/pinterest-uploads\.test/, new Response(null, { status: 204 })],
+    [/pinterest\.com\/v5\/pins$/, json({ id: 'pin-9' }, 201)]
+  ];
+  c = ctx({ job: { id: 'job-p', platform: 'pinterest' }, connection: { token: 'pt', meta: { boardId: 'b1' } }, content: { text: 'Fall kits video', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' } } });
+  assert.equal((await PROVIDERS.pinterest.publish(c)).pending, true, 'uploaded, now processing');
+  const s3 = calls.find((call) => /pinterest-uploads/.test(call.url));
+  assert.ok(s3.body instanceof FormData && s3.body.get('key') === 'k1' && s3.body.get('file'), 'upload carries Pinterest’s fields and the file');
+  assert.equal((await PROVIDERS.pinterest.publish(c)).pending, true, 'still processing');
+  out = await PROVIDERS.pinterest.publish(c);
+  assert.deepEqual(out, { externalId: 'pin-9', url: 'https://www.pinterest.com/pin/pin-9/' });
+  assert.deepEqual(JSON.parse(calls.find((call) => /v5\/pins$/.test(call.url)).body).media_source, { source_type: 'video_id', media_id: 'm-1', cover_image_url: 'https://cdn.test/cover.jpg' });
+  assert.equal(calls.filter((call) => /v5\/media$/.test(call.url)).length, 1, 'registered once');
+
+  // --- LinkedIn video: parts uploaded with their ETags, finalized, posted once available
+  calls.length = 0;
+  let videoStatus = ['PROCESSING', 'AVAILABLE'];
+  routes = [
+    [/cdn\.test\/clip\.mp4/, media('video/mp4', 4096)],
+    [/cdn\.test\/cover\.jpg/, media('image/jpeg', 512)],
+    [/videos\?action=initializeUpload/, json({ value: { video: 'urn:li:video:V1', uploadToken: 'tok', thumbnailUploadUrl: 'https://li-upload.test/thumb', uploadInstructions: [{ uploadUrl: 'https://li-upload.test/p1', firstByte: 0, lastByte: 2047 }, { uploadUrl: 'https://li-upload.test/p2', firstByte: 2048, lastByte: 4095 }] } })],
+    [/li-upload\.test\/p1/, new Response('', { status: 200, headers: { etag: 'e1' } })],
+    [/li-upload\.test\/p2/, new Response('', { status: 200, headers: { etag: 'e2' } })],
+    [/li-upload\.test\/thumb/, new Response('', { status: 201 })],
+    [/videos\?action=finalizeUpload/, json({})],
+    [/rest\/videos\/urn/, () => json({ status: videoStatus.shift() })],
+    [/rest\/posts$/, new Response('', { status: 201, headers: { 'x-restli-id': 'urn:li:share:77' } })]
+  ];
+  c = ctx({ job: { id: 'job-l', platform: 'linkedin' }, connection: { token: 'lt', external_id: 'urn:li:person:abc' }, content: { text: 'New video\nMore', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' } } });
+  assert.equal((await PROVIDERS.linkedin.publish(c)).pending, true);
+  assert.equal(calls.find((call) => /li-upload\.test\/p2/.test(call.url)).body.length, 2048, 'second part is the second half');
+  assert.deepEqual(JSON.parse(calls.find((call) => /finalizeUpload/.test(call.url)).body).finalizeUploadRequest.uploadedPartIds, ['e1', 'e2']);
+  assert.ok(calls.some((call) => /li-upload\.test\/thumb/.test(call.url)), 'cover uploaded');
+  assert.equal((await PROVIDERS.linkedin.publish(c)).pending, true, 'still processing');
+  out = await PROVIDERS.linkedin.publish(c);
+  assert.equal(out.externalId, 'urn:li:share:77');
+  assert.deepEqual(JSON.parse(calls.find((call) => /rest\/posts$/.test(call.url)).body).content, { media: { id: 'urn:li:video:V1', title: 'New video' } });
+
+  // --- Threads stats, and quiet when the account hasn't granted insights yet
+  routes = [[/th-post\/insights/, json({ data: [{ name: 'views', values: [{ value: 120 }] }, { name: 'likes', values: [{ value: 9 }] }, { name: 'replies', values: [{ value: 2 }] }, { name: 'reposts', values: [{ value: 1 }] }, { name: 'quotes', values: [{ value: 1 }] }, { name: 'shares', values: [{ value: 0 }] }] })]];
+  assert.deepEqual(await PROVIDERS.threads.metrics({ connection: { token: 'tha' }, job: { external_id: 'th-post' } }), { views: 120, likes: 9, comments: 2, shares: 2 });
+  routes = [[/th-post\/insights/, json({ error: { message: 'Application does not have permission for this action', code: 10 } }, 403)]];
+  assert.deepEqual(await PROVIDERS.threads.metrics({ connection: { token: 'tha' }, job: { external_id: 'th-post' } }), {});
+
   console.log('network tests passed');
 })().catch((error) => { console.error(error); process.exit(1); });

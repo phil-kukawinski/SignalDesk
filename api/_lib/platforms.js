@@ -257,7 +257,23 @@ const meta = {
   }
 };
 
-async function publishFacebook({ connection, job, content, stage, saveStage, markSent }) {
+// Sets a Facebook video's cover from an uploaded image. A missing cover never fails the post.
+async function setFacebookVideoCover(connection, videoId, coverUrl) {
+  try {
+    const file = await downloadMedia(coverUrl, { maxBytes: 10 * 1024 * 1024 });
+    const form = new FormData();
+    form.set('is_preferred', 'true');
+    form.set('access_token', connection.token);
+    form.set('appsecret_proof', appSecretProof(connection.token));
+    form.set('source', new Blob([file.bytes], { type: file.type || 'image/jpeg' }), 'cover.jpg');
+    const { response, body } = await request(`https://graph.facebook.com/${META_GRAPH_VERSION}/${videoId}/thumbnails`, { method: 'POST', body: form });
+    if (!response.ok || body.error) console.error('Facebook video cover not set:', body.error?.message || response.status);
+  } catch (error) {
+    console.error('Facebook video cover not set:', error.message);
+  }
+}
+
+async function publishFacebook({ connection, job, content, options = {}, stage, saveStage, markSent }) {
   const page = connection.external_id;
   const images = content.media.filter((url) => mediaKind(url) === 'image');
   const videos = content.media.filter((url) => mediaKind(url) === 'video');
@@ -265,6 +281,7 @@ async function publishFacebook({ connection, job, content, stage, saveStage, mar
   if (videos.length) {
     await markSent();
     const result = await graph(`${page}/videos`, { method: 'POST', token: connection.token, params: { file_url: videos[0], description: content.text }, sending: true });
+    if (options.cover?.url) await setFacebookVideoCover(connection, result.id, options.cover.url);
     return { externalId: result.id, url: `https://www.facebook.com/${page}/videos/${result.id}` };
   }
   if (images.length === 1) {
@@ -290,6 +307,12 @@ async function publishFacebook({ connection, job, content, stage, saveStage, mar
 }
 
 const IG_PROCESSING_LIMIT_MS = 30 * 60000;
+// Reels take a cover image, or failing that a frame time.
+function reelCover(cover) {
+  if (cover?.url) return { cover_url: cover.url };
+  if (Number.isInteger(cover?.offsetMs)) return { thumb_offset: cover.offsetMs };
+  return {};
+}
 
 async function publishInstagram({ connection, job, content, options, stage, saveStage, markSent }) {
   const account = connection.external_id;
@@ -324,7 +347,7 @@ async function publishInstagram({ connection, job, content, options, stage, save
     if (media.length === 1) {
       const video = mediaKind(media[0]) === 'video';
       const params = video
-        ? { media_type: 'REELS', video_url: media[0], caption: content.text, share_to_feed: true, ...collaborators }
+        ? { media_type: 'REELS', video_url: media[0], caption: content.text, share_to_feed: true, ...collaborators, ...reelCover(options.cover) }
         : { image_url: prepared[0], caption: content.text, ...collaborators, ...altFor(0) };
       if (instagram.userTags?.length) params.user_tags = tags(!video);
       const id = await create(params);
@@ -545,11 +568,48 @@ const linkedin = {
     const author = connection.external_id;
     const organization = author.startsWith('urn:li:organization:');
     const images = content.media.filter((url) => mediaKind(url) === 'image');
-    if (content.media.some((url) => mediaKind(url) === 'video')) throw new PublishError('invalid', 'Video posts to LinkedIn aren’t supported by direct publishing yet. Use an image or post the video on LinkedIn.');
+    const videos = content.media.filter((url) => mediaKind(url) === 'video');
+    if (videos.length && (videos.length > 1 || images.length)) throw new PublishError('invalid', 'LinkedIn posts take one video, without images.');
     if (images.length > 20) throw new PublishError('invalid', 'LinkedIn posts can include up to 20 images.');
     if (content.text.length > 3000) throw new PublishError('invalid', 'LinkedIn posts can be up to 3,000 characters.');
     const visibility = LINKEDIN_VISIBILITY[options.linkedin?.visibility] || 'PUBLIC';
     if (organization && visibility === 'CONNECTIONS') throw new PublishError('invalid', 'Company Pages can’t post to connections only. Choose Public.');
+    // Video: upload in the parts LinkedIn asks for, finish the upload, then wait until LinkedIn has processed it.
+    let videoUrn = stage.videoUrn;
+    if (videos.length && !videoUrn) {
+      const file = await downloadMedia(videos[0], { maxBytes: 250 * 1024 * 1024 });
+      const thumbnail = Boolean(options.cover?.url);
+      const { payload } = await linkedIn('videos?action=initializeUpload', { method: 'POST', token: connection.token, body: { initializeUploadRequest: { owner: author, fileSizeBytes: file.bytes.length, uploadCaptions: false, uploadThumbnail: thumbnail } } });
+      const upload = payload.value || {};
+      const partIds = [];
+      for (const part of upload.uploadInstructions || []) {
+        const { response } = await request(part.uploadUrl, { method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: file.bytes.subarray(part.firstByte, part.lastByte + 1) });
+        if (!response.ok) throw new PublishError('temporary', `LinkedIn didn’t accept the video upload (HTTP ${response.status}).`);
+        partIds.push(response.headers.get('etag'));
+      }
+      await linkedIn('videos?action=finalizeUpload', { method: 'POST', token: connection.token, body: { finalizeUploadRequest: { video: upload.video, uploadToken: upload.uploadToken || '', uploadedPartIds: partIds } } });
+      if (thumbnail && upload.thumbnailUploadUrl) {
+        // The cover is a nice-to-have: the video posts with LinkedIn's own cover if this fails.
+        try {
+          const image = await downloadMedia(options.cover.url, { maxBytes: 10 * 1024 * 1024 });
+          const sent = await request(upload.thumbnailUploadUrl, { method: 'PUT', headers: { authorization: `Bearer ${connection.token}`, 'content-type': image.type || 'image/jpeg' }, body: image.bytes });
+          if (!sent.response.ok) console.error('LinkedIn video cover not set: HTTP', sent.response.status);
+        } catch (error) {
+          console.error('LinkedIn video cover not set:', error.message);
+        }
+      }
+      videoUrn = upload.video;
+      await saveStage({ videoUrn, processingSince: new Date().toISOString() });
+      return { pending: true, retryInSeconds: 30 };
+    }
+    if (videoUrn) {
+      const { payload: video } = await linkedIn(`videos/${encodeURIComponent(videoUrn)}`, { token: connection.token });
+      if (video.status === 'PROCESSING_FAILED') { await saveStage({ videoUrn: null }); throw new PublishError('invalid', `LinkedIn couldn’t process the video${video.processingFailureReason ? `: ${video.processingFailureReason}` : '.'}`); }
+      if (video.status !== 'AVAILABLE') {
+        if (Date.now() - Date.parse(stage.processingSince || 0) > 30 * 60000) { await saveStage({ videoUrn: null }); throw new PublishError('temporary', 'LinkedIn was still processing the video after 30 minutes.'); }
+        return { pending: true, retryInSeconds: 30 };
+      }
+    }
     let imageUrns = stage.imageUrns || [];
     if (images.length && imageUrns.length !== images.length) {
       imageUrns = [];
@@ -571,7 +631,8 @@ const linkedin = {
       isReshareDisabledByAuthor: false
     };
     const withAlt = (id, index) => ({ id, ...(content.alt?.[images[index]] ? { altText: content.alt[images[index]].slice(0, 4086) } : {}) });
-    if (imageUrns.length === 1) body.content = { media: withAlt(imageUrns[0], 0) };
+    if (videoUrn) body.content = { media: { id: videoUrn, title: firstLine(content.text, 200) || 'Video' } };
+    else if (imageUrns.length === 1) body.content = { media: withAlt(imageUrns[0], 0) };
     else if (imageUrns.length > 1) body.content = { multiImage: { images: imageUrns.map(withAlt) } };
     else if (firstLink(content.text)) {
       // LinkedIn's API doesn't read the page, so SignalDesk fills in the card's title,
@@ -691,10 +752,11 @@ const pinterest = {
     return { token: token.access_token, refreshToken: token.refresh_token || connection.refreshToken, expiresAt: expiresAt(token.expires_in), refreshExpiresAt: expiresAt(token.refresh_token_expires_in) || connection.refresh_expires_at };
   },
 
-  async publish({ connection, content, options, markSent }) {
+  async publish({ connection, content, options, stage = {}, saveStage = async () => {}, markSent }) {
     const images = content.media.filter((url) => mediaKind(url) === 'image');
-    if (content.media.some((url) => mediaKind(url) === 'video')) throw new PublishError('invalid', 'Video Pins aren’t supported by direct publishing yet. Use an image.');
-    if (!images.length) throw new PublishError('invalid', 'Pins need an image.');
+    const videos = content.media.filter((url) => mediaKind(url) === 'video');
+    if (videos.length && (videos.length > 1 || images.length)) throw new PublishError('invalid', 'A video Pin takes one video, without images.');
+    if (!images.length && !videos.length) throw new PublishError('invalid', 'Pins need an image or video.');
     if (images.length > 5) throw new PublishError('invalid', 'Pins can include up to 5 images.');
     const pin = options.pinterest || {};
     const boardId = pin.boardId || connection.meta?.boardId;
@@ -703,11 +765,36 @@ const pinterest = {
     const body = {
       board_id: boardId,
       title: (pin.title || firstLine(content.text, 100)).slice(0, 100),
-      description: content.text.slice(0, 800),
-      media_source: images.length === 1 ? { source_type: 'image_url', url: images[0] } : { source_type: 'multiple_image_urls', items: images.map((url) => ({ url })) }
+      description: content.text.slice(0, 800)
     };
+    if (videos.length) {
+      // Video Pins: register the upload, send the file, wait for Pinterest to process it, then create the Pin.
+      let mediaId = stage.pinMediaId;
+      if (!mediaId) {
+        const registered = await pinterestApi('media', { method: 'POST', token: connection.token, body: { media_type: 'video' } });
+        const file = await downloadMedia(videos[0], { maxBytes: 250 * 1024 * 1024 });
+        const form = new FormData();
+        for (const [key, value] of Object.entries(registered.upload_parameters || {})) form.set(key, value);
+        form.set('file', new Blob([file.bytes], { type: file.type || 'video/mp4' }), 'video.mp4');
+        const upload = await request(registered.upload_url, { method: 'POST', body: form });
+        if (!upload.response.ok) throw new PublishError('temporary', `Pinterest didn’t accept the video upload (HTTP ${upload.response.status}).`);
+        mediaId = registered.media_id;
+        await saveStage({ pinMediaId: mediaId, processingSince: new Date().toISOString() });
+        return { pending: true, retryInSeconds: 30 };
+      }
+      const media = await pinterestApi(`media/${encodeURIComponent(mediaId)}`, { token: connection.token });
+      if (media.status === 'failed') { await saveStage({ pinMediaId: null }); throw new PublishError('invalid', 'Pinterest couldn’t process the video.'); }
+      if (media.status !== 'succeeded') {
+        if (Date.now() - Date.parse(stage.processingSince || 0) > 30 * 60000) { await saveStage({ pinMediaId: null }); throw new PublishError('temporary', 'Pinterest was still processing the video after 30 minutes.'); }
+        return { pending: true, retryInSeconds: 30 };
+      }
+      // Pinterest needs a cover: the one chosen in SignalDesk, or the video's first frame.
+      body.media_source = { source_type: 'video_id', media_id: mediaId, ...(options.cover?.url ? { cover_image_url: options.cover.url } : { cover_image_key_frame_time: 0 }) };
+    } else {
+      body.media_source = images.length === 1 ? { source_type: 'image_url', url: images[0] } : { source_type: 'multiple_image_urls', items: images.map((url) => ({ url })) };
+      if (content.alt?.[images[0]]) body.alt_text = content.alt[images[0]].slice(0, 500);
+    }
     if (link) body.link = link;
-    if (content.alt?.[images[0]]) body.alt_text = content.alt[images[0]].slice(0, 500);
     await markSent();
     const result = await pinterestApi('pins', { method: 'POST', token: connection.token, body, sending: true });
     return { externalId: result.id, url: `https://www.pinterest.com/pin/${result.id}/` };

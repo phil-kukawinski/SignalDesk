@@ -42,6 +42,8 @@ assert.equal(t.matchesKeywords({ include_keywords: '', exclude_keywords: 'sale' 
 ['127.0.0.1', '10.1.2.3', '192.168.0.4', '172.20.0.1', '169.254.169.254', '::1', 'fd00::1', '::ffff:127.0.0.1', '100.64.0.1'].forEach((ip) => assert.ok(t.isPrivateAddress(ip), ip));
 ['8.8.8.8', '2606:4700::1111', '172.32.0.1'].forEach((ip) => assert.ok(!t.isPrivateAddress(ip), ip));
 
+assert.deepEqual(core.validatePostOptions({ cover: { url: 'https://cdn.test/c.jpg', offsetMs: 1500, video: 'ignored' } }, ['instagram']).cover, { url: 'https://cdn.test/c.jpg', offsetMs: 1500 });
+for (const cover of [{ url: 'javascript:alert(1)' }, { url: 'http://insecure.test/c.jpg' }, { offsetMs: -5 }, { offsetMs: 1.5 }]) assert.throws(() => core.validatePostOptions({ cover }, ['tiktok']), (e) => e.status === 400, JSON.stringify(cover));
 const opts = core.validatePostOptions({ collaborators: ['@one', 'two'], userTags: [{ username: 'a', x: 0.5, y: 0.9 }, { username: 'b' }], visibility: { linkedin: 'connections', youtube: 'unlisted', tiktok: 'friends' }, firstComment: ' #tags ', followUpComments: [{ comment: 'later', delayMinutes: 60 }], autoRepost: { repeat: 3, days: 7 } }, ['instagram', 'linkedin', 'youtube']);
 assert.deepEqual(opts.instagramOptions, { collaborators: ['one', 'two'], userTags: [{ username: 'a', x: 0.5, y: 0.9 }, { username: 'b' }] });
 assert.deepEqual(opts.linkedin, { visibility: 'connections' }); assert.deepEqual(opts.youtube, { visibility: 'unlisted' }); assert.equal(opts.tiktok, undefined);

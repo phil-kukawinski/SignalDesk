@@ -45,7 +45,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  const brandAfter=[...document.querySelectorAll('#checklist .check-item')].find(i=>i.querySelector('.check-title').textContent.startsWith('On brand'));L('onBrandOk',brandAfter.className.replace('check-item ',''));
  set('#post-campaign','Fall Launch');document.querySelector('#post-evergreen').click();
  L('campaignOptions',[...document.querySelectorAll('#campaign-list option')].map(o=>o.value).join(','));
- await publishSocialPost(false,true);await wait(30);
+ const queued=publishSocialPost(false,true);await wait(30);L('askedFirst',document.querySelector('#confirm-dialog')?.open?document.querySelector('#confirm-title').textContent:'no');if(document.querySelector('#confirm-dialog')?.open)document.querySelector('#confirm-dialog button[value="yes"]').click();await queued;await wait(30);
  const pub=calls.filter(c=>c.action==='publish').pop();L('queuePublish','queue:'+pub.queue+' date:'+pub.scheduleDate+' campaign:'+pub.campaign+' evergreen:'+pub.evergreen+' utm:'+pub.options.utm);
  // AI proofread includes brand notes
  await runProofread();L('proofBrand',calls.filter(c=>c.action==='proofread').pop()?.brand?.replace(/\n/g,' | '));

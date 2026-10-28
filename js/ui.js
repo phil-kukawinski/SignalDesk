@@ -46,7 +46,7 @@ const TIPS={
   reach:'How many people saw your posts at least once. Each network counts this a little differently.',
   engagements:'Likes, comments, shares, saves, and clicks added together.',
   rate:'Engagements divided by reach, so posts to big and small audiences compare fairly.',
-  published:'Everything posted on the connected accounts in the last 30 days, including posts made outside SignalDesk.',
+  published:'Everything posted on the connected accounts in the time frame shown, including posts made outside SignalDesk.',
   source:'“Posted with SignalDesk” are posts scheduled here. “Posted elsewhere” were made directly on the network and brought in by the account sync.',
   utm:'Adds tags to your links so Google Analytics shows which network and campaign the visitor came from.',
   shortlinks:'Swaps links for short SignalDesk links that count clicks per network. Instagram captions keep the original links.',
@@ -100,3 +100,16 @@ function openFeedback(kind='problem'){
 }
 function setFeedbackKind(kind){const dialog=$('#feedback-dialog');if(!dialog)return;dialog.dataset.kind=kind;dialog.querySelectorAll('[data-kind]').forEach(button=>{const on=button.dataset.kind===kind;button.classList.toggle('active',on);button.setAttribute('aria-checked',String(on));});}
 document.addEventListener('click',event=>{if(event.target.closest('[data-open-feedback]')){event.preventDefault();openFeedback();}});
+// Explainer bubbles float above the page, so cards that clip their contents can't cut them off.
+// They sit above the icon, flip below when there isn't room, and stay inside the window.
+(function(){let bubble=null,current=null;
+  function show(target){const text=target.dataset.tip;if(!text)return;if(!bubble){bubble=document.createElement('div');bubble.className='tip-float';bubble.setAttribute('role','tooltip');}const host=target.closest('dialog[open]')||document.body;if(bubble.parentNode!==host)host.appendChild(bubble);current=target;bubble.textContent=text;bubble.classList.remove('below');bubble.style.left='0px';bubble.style.top='0px';bubble.hidden=false;
+    const icon=target.getBoundingClientRect(),box=bubble.getBoundingClientRect(),gap=8,edge=8;let top=icon.top-box.height-gap;if(top<edge){top=icon.bottom+gap;bubble.classList.add('below');}
+    const left=Math.min(Math.max(edge,icon.left+icon.width/2-box.width/2),window.innerWidth-box.width-edge);bubble.style.left=`${left}px`;bubble.style.top=`${top}px`;bubble.classList.add('visible');}
+  function hide(target){if(target&&target!==current)return;current=null;if(bubble){bubble.classList.remove('visible');bubble.hidden=true;}}
+  document.addEventListener('mouseover',event=>{const target=event.target.closest?.('.tip[data-tip]');if(target&&target!==current)show(target);});
+  document.addEventListener('mouseout',event=>{const target=event.target.closest?.('.tip[data-tip]');if(target&&!target.contains(event.relatedTarget))hide(target);});
+  document.addEventListener('focusin',event=>{if(event.target.matches?.('.tip[data-tip]'))show(event.target);});
+  document.addEventListener('focusout',event=>{if(event.target.matches?.('.tip[data-tip]'))hide(event.target);});
+  window.addEventListener('scroll',()=>hide(),true);
+})();

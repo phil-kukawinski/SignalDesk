@@ -28,7 +28,7 @@ for test in tests/ui/ui*.js; do
 done
 
 echo "Browser"
-for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs; do
+for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs tests/browser/formats.mjs; do
   out=$(SHOTS="${TMPDIR:-/tmp}/" node tests/browser/cdp.mjs "$step" 2>&1 | grep -v 'offline in this test')
   if echo "$out" | grep -q '\[exception\]\|\[console.error\]'; then fail "$(basename "$step")" "$(echo "$out" | grep '\[exception\]\|\[console.error\]' | head -5)"
   else pass "$(basename "$step")"; fi
