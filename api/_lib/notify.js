@@ -2,9 +2,12 @@ const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zon
 const { sendPush } = require('./push');
 
 const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing'];
-const DEFAULT_PREFERENCES = { email_frequency: 'daily', email_categories: CATEGORIES, weekly_day: 1, last_digest_at: null };
+const FREQUENCIES = ['immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'];
+const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, last_digest_at: null };
 const DIGEST_HOUR = 8;
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing' };
 
 function emailConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.NOTIFY_FROM_EMAIL);
@@ -28,7 +31,7 @@ function withDefaults(row) {
   return { ...DEFAULT_PREFERENCES, ...(row || {}) };
 }
 
-function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these under the bell icon → Preferences in SignalDesk.' }) {
+function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these in SignalDesk under Settings → Notifications.' }) {
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#101828;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
@@ -118,7 +121,58 @@ async function weeklyReportSection(workspaceId, clients) {
   return items.length ? [{ title: 'Top posts last week', items }] : [];
 }
 
-// Sends daily digests and weekly wrap-ups at 8 AM in each workspace's time zone.
+const ordinal = (n) => `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th')}`;
+const clampInt = (value, min, max, fallback) => { const n = parseInt(value, 10); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback; };
+const dayNumber = (date, timeZone) => Date.parse(`${localDateKey(date, timeZone)}T00:00:00Z`) / 86400000;
+
+// Whether a digest is due today (8 AM or later, local time) and the period it covers.
+function digestSchedule(prefs, now, timeZone) {
+  const frequency = prefs.email_frequency;
+  const parts = zonedParts(now, timeZone);
+  const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+  const monthlyDay = clampInt(prefs.monthly_day, 1, 28, 1), yearlyMonth = clampInt(prefs.yearly_month, 1, 12, 1), customDays = clampInt(prefs.custom_days, 2, 180, 14);
+  let due = false, start = new Date(now);
+  if (frequency === 'daily') { due = true; start = new Date(now - 86400000); }
+  else if (frequency === 'weekly') { due = weekday === prefs.weekly_day; start = new Date(now - 7 * 86400000); }
+  else if (frequency === 'monthly') { due = parts.day === monthlyDay; start.setUTCMonth(start.getUTCMonth() - 1); }
+  else if (frequency === 'yearly') { due = parts.month === yearlyMonth && parts.day === 1; start.setUTCFullYear(start.getUTCFullYear() - 1); }
+  else if (frequency === 'custom') {
+    // Counted from the last one sent, or from when this schedule was chosen.
+    const anchor = prefs.last_digest_at || prefs.updated_at;
+    due = Boolean(anchor) && dayNumber(now, timeZone) - dayNumber(new Date(anchor), timeZone) >= customDays;
+    start = new Date(now - customDays * 86400000);
+  }
+  if (parts.hour < DIGEST_HOUR) due = false;
+  if (due && prefs.last_digest_at && localDateKey(new Date(prefs.last_digest_at), timeZone) === localDateKey(now, timeZone)) due = false;
+  return { due, start, monthlyDay, yearlyMonth, customDays };
+}
+
+function digestCopy(prefs, schedule, count) {
+  const { email_frequency: frequency } = prefs;
+  if (frequency === 'daily') return { subject: 'Your SignalDesk daily digest', heading: 'Daily digest', intro: `${count} update${count === 1 ? '' : 's'} since your last digest.`, listTitle: 'Since yesterday' };
+  if (frequency === 'weekly') return { subject: 'Your SignalDesk weekly wrap-up', heading: 'Weekly wrap-up', intro: `Here's what came through your workspace this week, sent ${WEEKDAY_NAMES[prefs.weekly_day]}s at 8 AM.`, listTitle: 'This week' };
+  if (frequency === 'monthly') return { subject: 'Your SignalDesk monthly wrap-up', heading: 'Monthly wrap-up', intro: `Here's your workspace's past month, sent on the ${ordinal(schedule.monthlyDay)} of each month at 8 AM.`, listTitle: 'Latest updates' };
+  if (frequency === 'yearly') return { subject: 'Your SignalDesk year in review', heading: 'Year in review', intro: `Here's your workspace's past year, sent every ${MONTH_NAMES[schedule.yearlyMonth - 1]} 1 at 8 AM.`, listTitle: 'Latest updates' };
+  return { subject: 'Your SignalDesk wrap-up', heading: 'Your wrap-up', intro: `Here's what came through your workspace in the last ${schedule.customDays} days.`, listTitle: 'Latest updates' };
+}
+
+// Posts published in the period: totals per client and the five that did best.
+async function periodPostsSection(workspaceId, clients, since) {
+  const { allRows } = require('./publishing');
+  const rows = await allRows(`network_posts?workspace_id=eq.${workspaceId}&published_at=gte.${since}&select=client_id,platform,text,url,published_at,metrics&order=published_at.desc`, { maxRows: 5000 }).catch(() => []) || [];
+  if (!rows.length) return [];
+  const nameOf = (id) => clients.find((client) => client.id === id)?.name || id;
+  const sum = (list, key) => { const values = list.map((row) => row.metrics?.[key]).filter((value) => typeof value === 'number'); return values.length ? values.reduce((a, b) => a + b, 0) : null; };
+  const byClient = new Map();
+  rows.forEach((row) => byClient.set(row.client_id, [...(byClient.get(row.client_id) || []), row]));
+  const totals = [...byClient].map(([clientId, list]) => ({ title: `${nameOf(clientId)} · ${list.length} post${list.length === 1 ? '' : 's'} published`, body: `${formatNumber(sum(list, 'views'))} views · ${formatNumber(sum(list, 'engagements'))} engagements` }));
+  const top = rows.filter((row) => typeof row.metrics?.engagements === 'number').sort((a, b) => b.metrics.engagements - a.metrics.engagements).slice(0, 5);
+  const sections = [{ title: 'Your posts', items: totals }];
+  if (top.length) sections.push({ title: 'Top posts', items: top.map((row, index) => ({ title: `#${index + 1} · ${nameOf(row.client_id)} on ${row.platform}`, body: row.text || '(no caption)', meta: `${formatNumber(row.metrics.views)} views · ${formatNumber(row.metrics.engagements)} engagements${row.url ? ` · ${row.url}` : ''}` })) });
+  return sections;
+}
+
+// Sends digests and wrap-ups (daily, weekly, monthly, yearly, or every few days) at 8 AM in each workspace's time zone.
 async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
   if (!emailConfigured()) return { sent: 0, configured: false };
   const members = await databaseRequest('workspace_members?select=user_id,email,role,workspace_id') || [];
@@ -128,37 +182,34 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
   for (const member of members) {
     if (sent >= limit) break;
     const prefs = withDefaults(preferences.get(member.user_id));
-    if (!['daily', 'weekly'].includes(prefs.email_frequency) || !member.email) continue;
+    if (!['daily', 'weekly', 'monthly', 'yearly', 'custom'].includes(prefs.email_frequency) || !member.email) continue;
     if (!states.has(member.workspace_id)) states.set(member.workspace_id, await getWorkspaceState(member.workspace_id));
     const state = states.get(member.workspace_id);
     const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
-    const parts = zonedParts(now, timeZone);
-    const weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
-    if (parts.hour < DIGEST_HOUR) continue;
-    if (prefs.email_frequency === 'weekly' && weekday !== prefs.weekly_day) continue;
-    if (prefs.last_digest_at && localDateKey(new Date(prefs.last_digest_at), timeZone) === localDateKey(now, timeZone)) continue;
-    const windowDays = prefs.email_frequency === 'weekly' ? 7 : 1;
-    const since = prefs.last_digest_at && Date.parse(prefs.last_digest_at) > now - windowDays * 86400000 ? prefs.last_digest_at : new Date(now - windowDays * 86400000).toISOString();
-    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, order: 'created_at.desc', limit: '50' });
+    const schedule = digestSchedule(prefs, now, timeZone);
+    if (!schedule.due) continue;
+    const since = prefs.last_digest_at && Date.parse(prefs.last_digest_at) > schedule.start ? prefs.last_digest_at : schedule.start.toISOString();
+    const short = ['daily', 'weekly'].includes(prefs.email_frequency);
+    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, order: 'created_at.desc', limit: short ? '50' : '1000' });
     const notifications = await databaseRequest(`notifications?${query}`) || [];
+    const copy = digestCopy(prefs, schedule, notifications.length);
+    const listItem = (item) => ({ title: item.title, body: item.body, meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) });
     const sections = [];
-    if (notifications.length) {
-      sections.push({
-        title: prefs.email_frequency === 'weekly' ? 'This week' : 'Since yesterday',
-        items: notifications.map((item) => ({ title: item.title, body: item.body, meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }))
-      });
+    if (notifications.length && short) sections.push({ title: copy.listTitle, items: notifications.map(listItem) });
+    if (notifications.length && !short) {
+      // Longer periods: a count per category, then only the latest few.
+      const counts = new Map();
+      notifications.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
+      sections.push({ title: 'At a glance', items: [...counts].map(([category, count]) => ({ title: CATEGORY_LABELS[category] || category, body: `${count}${count === 1000 ? '+' : ''} update${count === 1 ? '' : 's'}` })) });
+      sections.push({ title: copy.listTitle, items: notifications.slice(0, 8).map(listItem) });
     }
-    if (prefs.email_frequency === 'weekly' && member.role === 'admin' && prefs.email_categories.includes('reports')) {
-      sections.push(...await weeklyReportSection(member.workspace_id, state.clients || []));
+    if (member.role === 'admin' && prefs.email_categories.includes('reports')) {
+      if (prefs.email_frequency === 'weekly') sections.push(...await weeklyReportSection(member.workspace_id, state.clients || []));
+      else if (!short) sections.push(...await periodPostsSection(member.workspace_id, state.clients || [], since));
     }
     try {
       if (sections.length) {
-        const weekly = prefs.email_frequency === 'weekly';
-        await sendEmail(member.email, weekly ? 'Your SignalDesk weekly wrap-up' : 'Your SignalDesk daily digest', renderEmail({
-          heading: weekly ? 'Weekly wrap-up' : 'Daily digest',
-          intro: weekly ? `Here's what came through your workspace this week, sent ${WEEKDAY_NAMES[prefs.weekly_day]}s at 8 AM.` : `${notifications.length} update${notifications.length === 1 ? '' : 's'} since your last digest.`,
-          sections
-        }));
+        await sendEmail(member.email, copy.subject, renderEmail({ heading: copy.heading, intro: copy.intro, sections }));
         sent += 1;
       }
       await databaseRequest('notification_preferences?on_conflict=user_id', {
@@ -227,4 +278,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { CATEGORIES, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { CATEGORIES, FREQUENCIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

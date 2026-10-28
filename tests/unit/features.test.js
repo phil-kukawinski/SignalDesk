@@ -44,6 +44,7 @@ global.fetch = async (input, opts = {}) => {
   if (url.includes('/rest/v1/post_submissions?workspace_id=eq.ws-1&provider_post_id=eq.post-1&select')) return ok([{ submitted_by: U, title: 'Fall kits are here', decided_at: null }]);
   if (url.includes('/rest/v1/notifications?') && method === 'GET') return ok([{ title: 'New post awaiting approval', body: 'x', category: 'approvals', created_at: new Date().toISOString() }]);
   if (url.includes('/rest/v1/weekly_reports?') && method === 'GET') return ok([]);
+  if (url.includes('/rest/v1/network_posts?') && method === 'GET') return ok(url.includes('offset=0') || !url.includes('offset=') ? [{ client_id: 'pk-works', platform: 'instagram', text: 'Fall kits', url: 'https://instagram.com/p/9', published_at: '2026-10-20T14:00:00Z', metrics: { views: 900, engagements: 70 } }] : []);
   if (url.includes('/rest/v1/trend_reports?') && method === 'GET') return ok([]);
   if (url.includes('/rest/v1/trend_reports') && method === 'POST') return ok([{ id: 't1', ...body, created_at: new Date().toISOString() }], 201);
   if (url.includes('/rest/v1/')) return ok(null, 204);
@@ -100,5 +101,24 @@ const future = new Date(Date.now() + 86400000).toISOString();
   prefsRows[0].last_digest_at = '2026-10-16T13:00:00Z';
   d = await processEmailDigests({ now: new Date('2026-10-16T20:00:00Z') }); assert.equal(d.sent, 0);
   d = await processEmailDigests({ now: new Date('2026-10-19T13:00:00Z') }); assert.equal(d.sent, 2); // Monday: both
+  // Monthly is the default: no saved preferences means a wrap-up on the 1st only, with post results for admins.
+  prefsRows = [];
+  d = await processEmailDigests({ now: new Date('2026-10-19T13:00:00Z') }); assert.equal(d.sent, 0);
+  calls.length = 0;
+  d = await processEmailDigests({ now: new Date('2026-11-01T13:00:00Z') }); assert.equal(d.sent, 2);
+  const wraps = calls.filter((c) => c.url === 'https://api.resend.com/emails');
+  assert.equal(wraps[0].body.subject, 'Your SignalDesk monthly wrap-up');
+  const adminWrap = wraps.find((c) => c.body.to[0] === 'admin@x.com').body.text, userWrap = wraps.find((c) => c.body.to[0] === 'user@x.com').body.text;
+  assert.match(adminWrap, /AT A GLANCE[\s\S]*Approvals: 1 update[\s\S]*YOUR POSTS[\s\S]*1 post published: 900 views · 70 engagements[\s\S]*TOP POSTS/);
+  assert.doesNotMatch(userWrap, /YOUR POSTS/, 'only admins get post results');
+  assert.match(calls.find((c) => c.url.includes('/notifications?')).url, /created_at=gt\.2026-10-01T13/, 'covers the past month');
+  // Monthly on another day, yearly on the 1st of its month, custom every N days from when it was chosen.
+  const p = (frequency, extra = {}) => [{ user_id: A, email_frequency: frequency, email_categories: ['approvals'], weekly_day: 1, monthly_day: 15, yearly_month: 1, custom_days: 10, last_digest_at: null, updated_at: '2026-10-10T15:00:00Z', ...extra }, { user_id: U, email_frequency: 'off' }];
+  prefsRows = p('monthly'); assert.equal((await processEmailDigests({ now: new Date('2026-11-01T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-11-15T13:00:00Z') })).sent, 1);
+  prefsRows = p('yearly'); assert.equal((await processEmailDigests({ now: new Date('2026-11-01T13:00:00Z') })).sent, 0);
+  calls.length = 0; assert.equal((await processEmailDigests({ now: new Date('2027-01-01T14:00:00Z') })).sent, 1);
+  assert.equal(calls.find((c) => c.url === 'https://api.resend.com/emails').body.subject, 'Your SignalDesk year in review');
+  prefsRows = p('custom'); assert.equal((await processEmailDigests({ now: new Date('2026-10-19T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-10-20T13:00:00Z') })).sent, 1);
+  prefsRows = p('custom', { last_digest_at: '2026-10-20T13:00:00Z' }); assert.equal((await processEmailDigests({ now: new Date('2026-10-29T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-10-30T13:00:00Z') })).sent, 1);
   console.log('feature tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

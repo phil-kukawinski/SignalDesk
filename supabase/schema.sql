@@ -176,12 +176,21 @@ create index if not exists notifications_user_idx on public.notifications (user_
 create table if not exists public.notification_preferences (
   user_id uuid primary key references auth.users (id) on delete cascade,
   workspace_id uuid references public.workspaces (id) on delete cascade,
-  email_frequency text not null default 'daily' check (email_frequency in ('immediate', 'daily', 'weekly', 'off')),
+  email_frequency text not null default 'monthly',
   email_categories text[] not null default '{approvals,autopilot,reports,team,publishing}',
   weekly_day int not null default 1 check (weekly_day between 0 and 6),
   last_digest_at timestamptz,
   updated_at timestamptz not null default now()
 );
+-- Wrap-ups can be daily, weekly, monthly (the default), yearly, or every few days.
+alter table public.notification_preferences add column if not exists monthly_day int not null default 1;
+alter table public.notification_preferences add column if not exists yearly_month int not null default 1;
+alter table public.notification_preferences add column if not exists custom_days int not null default 14;
+alter table public.notification_preferences alter column email_frequency set default 'monthly';
+alter table public.notification_preferences drop constraint if exists notification_preferences_email_frequency_check;
+alter table public.notification_preferences add constraint notification_preferences_email_frequency_check check (email_frequency in ('immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'));
+alter table public.notification_preferences drop constraint if exists notification_preferences_schedule_check;
+alter table public.notification_preferences add constraint notification_preferences_schedule_check check (monthly_day between 1 and 28 and yearly_month between 1 and 12 and custom_days between 2 and 180);
 
 -- Who submitted each held post, so the approver's decision can notify them.
 create table if not exists public.post_submissions (
@@ -829,8 +838,8 @@ create policy "Users can manage their notification preferences"
   with check (auth.uid() = user_id and (workspace_id is null or public.workspace_role(workspace_id) is not null));
 revoke all on public.notification_preferences from anon, authenticated;
 grant select on public.notification_preferences to authenticated;
-grant insert (user_id, workspace_id, email_frequency, email_categories, weekly_day, updated_at),
-  update (user_id, workspace_id, email_frequency, email_categories, weekly_day, updated_at)
+grant insert (user_id, workspace_id, email_frequency, email_categories, weekly_day, monthly_day, yearly_month, custom_days, updated_at),
+  update (user_id, workspace_id, email_frequency, email_categories, weekly_day, monthly_day, yearly_month, custom_days, updated_at)
   on public.notification_preferences to authenticated;
 
 drop policy if exists "Members can read workspace state" on public.workspace_state;

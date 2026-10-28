@@ -107,8 +107,8 @@ document.addEventListener('click',event=>{if(event.target.closest('[data-open-fe
     const icon=target.getBoundingClientRect(),box=bubble.getBoundingClientRect(),gap=8,edge=8;let top=icon.top-box.height-gap;if(top<edge){top=icon.bottom+gap;bubble.classList.add('below');}
     const left=Math.min(Math.max(edge,icon.left+icon.width/2-box.width/2),window.innerWidth-box.width-edge);bubble.style.left=`${left}px`;bubble.style.top=`${top}px`;bubble.classList.add('visible');}
   function hide(target){if(target&&target!==current)return;current=null;if(bubble){bubble.classList.remove('visible');bubble.hidden=true;}}
-  document.addEventListener('mouseover',event=>{const target=event.target.closest?.('.tip[data-tip]');if(target&&target!==current)show(target);});
-  document.addEventListener('mouseout',event=>{const target=event.target.closest?.('.tip[data-tip]');if(target&&!target.contains(event.relatedTarget))hide(target);});
+  document.addEventListener('mouseover',event=>{const target=event.target.closest?.('.tip[data-tip],.chart-hit[data-tip]');if(target&&target!==current)show(target);});
+  document.addEventListener('mouseout',event=>{const target=event.target.closest?.('.tip[data-tip],.chart-hit[data-tip]');if(target&&!target.contains(event.relatedTarget))hide(target);});
   document.addEventListener('focusin',event=>{if(event.target.matches?.('.tip[data-tip]'))show(event.target);});
   document.addEventListener('focusout',event=>{if(event.target.matches?.('.tip[data-tip]'))hide(event.target);});
   window.addEventListener('scroll',()=>hide(),true);
