@@ -476,6 +476,17 @@ create table if not exists public.account_stats (
   primary key (connection_id, day)
 );
 create index if not exists account_stats_workspace_idx on public.account_stats (workspace_id, day);
+-- Each post's numbers once a day for its first 90 days, so a post's details can show how it grew.
+create table if not exists public.post_metric_days (
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  connection_id uuid references public.social_connections (id) on delete cascade,
+  platform text not null,
+  external_id text not null,
+  day date not null,
+  metrics jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, platform, external_id, day)
+);
 -- Invite requests from the public landing page. Only the server (service role) reads or writes them.
 create table if not exists public.invite_requests (
   id uuid primary key default gen_random_uuid(),
@@ -793,6 +804,7 @@ alter table public.data_deletion_requests enable row level security;
 alter table public.short_links enable row level security;
 alter table public.network_posts enable row level security;
 alter table public.account_stats enable row level security;
+alter table public.post_metric_days enable row level security;
 alter table public.beta_invites enable row level security;
 alter table public.beta_redemptions enable row level security;
 alter table public.app_settings enable row level security;
@@ -805,14 +817,14 @@ revoke all on public.workspaces, public.workspace_members, public.workspace_invi
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats from anon, authenticated;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats to service_role;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

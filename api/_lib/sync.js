@@ -23,6 +23,28 @@ async function upsertPosts(rows) {
   }
 }
 
+// One row per post per day (the latest numbers that day), for posts in their first 90 days.
+const TRACK_DAYS = 90;
+async function recordMetricDays(rows, now = Date.now()) {
+  const day = dayKey(new Date(now)), at = new Date(now).toISOString();
+  const tracked = rows.filter((row) => now - Date.parse(row.published_at) <= TRACK_DAYS * 86400000 && Object.values(row.metrics || {}).some((value) => typeof value === 'number'))
+    .map((row) => ({ workspace_id: row.workspace_id, connection_id: row.connection_id, platform: row.platform, external_id: row.external_id, day, metrics: row.metrics, updated_at: at }));
+  for (let index = 0; index < tracked.length; index += 200) {
+    await databaseRequest('post_metric_days?on_conflict=workspace_id,platform,external_id,day', {
+      method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(tracked.slice(index, index + 200))
+    }).catch((error) => console.error('Post history not saved:', error.message));
+  }
+}
+
+// A post's daily numbers, oldest first.
+async function postMetricHistory(workspaceId, networkPostId) {
+  const post = (await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}&id=eq.${encodeURIComponent(networkPostId)}&select=platform,external_id,published_at,metrics,metrics_at`) || [])[0];
+  if (!post) return null;
+  const query = new URLSearchParams({ select: 'day,metrics', workspace_id: `eq.${workspaceId}`, platform: `eq.${post.platform}`, external_id: `eq.${post.external_id}`, order: 'day.asc', limit: '120' });
+  const days = await databaseRequest(`post_metric_days?${query}`).catch(() => []) || [];
+  return { publishedAt: post.published_at, days: days.map((row) => ({ day: row.day, metrics: row.metrics || {} })) };
+}
+
 // Facebook returns empty reach and views when the connection wasn't granted read_insights
 // (connections made before it was added to the login configuration). Reconnecting fixes it.
 function insightsNote(platform, rows) {
@@ -49,6 +71,7 @@ async function syncConnection(row, { encryptionKey, now = Date.now() } = {}) {
       metrics: finishMetrics(post.metrics || {}), metrics_at: at, updated_at: at
     }));
     await upsertPosts(rows);
+    await recordMetricDays(rows, now);
     const account = Object.fromEntries(Object.entries(history.account || {}).filter(([, value]) => value !== null && value !== undefined));
     if (Object.keys(account).length) {
       await databaseRequest('account_stats?on_conflict=connection_id,day', {
@@ -120,4 +143,4 @@ async function audienceSummary(workspaceId, clientId = null, rangeDays = 30) {
   });
 }
 
-module.exports = { insightsNote, syncConnection, syncDueConnections, syncClient, listNetworkPosts, audienceSummary };
+module.exports = { insightsNote, syncConnection, syncDueConnections, syncClient, listNetworkPosts, audienceSummary, recordMetricDays, postMetricHistory };

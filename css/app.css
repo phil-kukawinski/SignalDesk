@@ -1416,3 +1416,11 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .all-posts-panel th:nth-child(n+4),.all-posts-panel td:nth-child(n+4){text-align:right!important}
 .all-posts-filters{justify-content:flex-end}
 .copy-list{margin-top:14px}
+/* A post's growth chart in its details. */
+.post-growth{margin-top:14px}
+.post-growth-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12px}
+.post-growth-head .view-switch{display:flex;gap:4px}
+.post-growth-head .view-toggle{padding:4px 8px;font-size:11px}
+.post-growth-chart{position:relative;height:130px}
+.post-growth-chart svg{position:absolute;inset:0 0 18px;width:100%;height:calc(100% - 18px);overflow:visible}
+.post-growth .option-hint{margin-top:6px}

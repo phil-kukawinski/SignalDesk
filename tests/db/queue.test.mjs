@@ -1216,6 +1216,22 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   const stats = Object.fromEntries((await q(`select platform, metrics from account_stats`)).map((row) => [row.platform, row.metrics]));
   assert.equal(stats.facebook.followers, 1200); assert.deepEqual([stats.instagram.followers, stats.instagram.reach, stats.instagram.views], [2500, 4000, 9000]);
   assert.equal(stats.pinterest.followers, 75);
+  // Each post's numbers are kept once a day; a second sync the same day updates that day's row.
+  const tracked = await q(`select external_id, day, (metrics->>'engagements')::int as eng from post_metric_days where external_id='page1_post1'`);
+  assert.equal(tracked.length, 1); assert.equal(tracked[0].eng, 48);
+  const { recordMetricDays } = require(`${ROOT}/api/_lib/sync.js`);
+  const fbConn = (await q(`select id from social_connections where platform='facebook' and client_id='pk-works'`))[0];
+  const growthRow = { workspace_id: WS, connection_id: fbConn.id, platform: 'facebook', external_id: 'page1_post1', published_at: new Date(Date.now() - 2 * 86400000).toISOString() };
+  await recordMetricDays([{ ...growthRow, metrics: { engagements: 30 } }], Date.now() - 86400000);
+  await recordMetricDays([{ ...growthRow, metrics: { engagements: 55 } }]);
+  await recordMetricDays([{ ...growthRow, published_at: new Date(Date.now() - 200 * 86400000).toISOString(), external_id: 'too-old', metrics: { engagements: 1 } }]);
+  assert.equal((await q(`select count(*)::int as n from post_metric_days where external_id='too-old'`))[0].n, 0, 'only the first 90 days are tracked');
+  const growthPost = (await q(`select id from network_posts where external_id='page1_post1'`))[0];
+  r = await call({ action: 'post-metrics-history', postId: growthPost.id }, 'user');
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.deepEqual(r.payload.days.map((d) => d.metrics.engagements), [30, 55], 'oldest first, the latest numbers for each day');
+  r = await call({ action: 'post-metrics-history', postId: '00000000-0000-4000-8000-000000000000' });
+  assert.equal(r.status, 404);
   // Personal LinkedIn profiles can't be read; the reason is kept for Setup & health and the calendar
   const personal = (await q(`select sync_error from social_connections where platform='linkedin' and client_id='pk-works'`))[0];
   assert.match(personal.sync_error, /personal profile/);

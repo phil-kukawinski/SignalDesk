@@ -43,14 +43,14 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts'
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
@@ -502,6 +502,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'system-status') {
     const state = await getWorkspaceState(workspaceId);
     return send(res, 200, await systemStatus({ workspaceId, origin, clients: state.clients || [] }));
+  }
+
+  if (action === 'post-metrics-history') {
+    if (!validUuid(body.postId)) return send(res, 400, { error: 'Choose a post.' });
+    const { postMetricHistory } = require('./_lib/sync');
+    const history = await postMetricHistory(workspaceId, body.postId);
+    if (!history) return send(res, 404, { error: 'That post isn’t in this workspace.' });
+    return send(res, 200, history);
   }
 
   if (action === 'network-posts') {
