@@ -12,11 +12,15 @@
   },
   "scripts": {
     "bundle": "node scripts/build.mjs",
-    "test": "bash tests/run-all.sh"
+    "test": "bash tests/run-all.sh",
+    "lint": "eslint js api sw.js scripts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
     "acorn": "^8.15.0",
-    "esbuild": "^0.25.10"
+    "axe-core": "^4.10.3",
+    "esbuild": "^0.25.10",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0"
   }
 }

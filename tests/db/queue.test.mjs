@@ -563,6 +563,15 @@ const copy = (await q(`select scheduled_for, evergreen, campaign, content from s
 assert.equal(copy.evergreen, true);
 assert.ok(copy.scheduled_for.getTime() >= future + 14 * 86400000 - 60000, 'rests 14 days');
 assert.equal(copy.content.text, tagged.content.text);
+// Campaign results: the tagged posts, grouped by client and campaign.
+await db.exec(`update publish_jobs set metrics='{"engagements":12,"reach":300}' where post_id='${evergreenId}'`);
+r = await call({ action: 'campaigns', days: 90 }, 'user');
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+const fall = r.payload.campaigns.find((c) => c.campaign === 'Fall Launch');
+assert.ok(fall && fall.posts >= 2 && fall.published >= 1 && fall.upcoming >= 1, JSON.stringify(fall));
+const fallJobs = (await q(`select count(*)::int as n from publish_jobs where post_id='${evergreenId}' and status='published'`))[0].n;
+assert.equal(fall.engagements, 12 * fallJobs, 'every network the post reached counts'); assert.equal(fall.reach, 300 * fallJobs); assert.equal(fall.engagementRate, 4);
+assert.equal(fall.best.postId, evergreenId);
 
 // Copying posts a week later: same local time, approval state kept, comments and options carried over.
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Week one post', platforms: ['facebook'], scheduleDate: new Date(future).toISOString(), options: { firstComment: 'Link in bio' } });
@@ -836,6 +845,26 @@ assert.deepEqual(emails.map((e) => e.to[0]), ['dana@client.com']);
 assert.match(emails[0].subject, /PK Works social report: October 2026/);
 assert.doesNotMatch(emails[0].html, /Open SignalDesk|bell icon/, 'client emails have no internal links');
 assert.deepEqual(await processClientReports({ encryptionKey: key, now: nov3 }), { sent: 0, configured: true }, 'once a month');
+// Review reminders: posts waiting 2 days on a client's review link. Admins are told; the client gets their link by email if allowed.
+await db.exec(`update workspace_state set state = jsonb_set(state, '{clients,0,reports,reviewReminders}', 'true')`);
+r = await call({ action: 'create-review-link', clientId: 'pk-works', label: 'Dana', days: 30 });
+const remindToken = r.payload.token;
+assert.ok((await q(`select token_ciphertext from review_links where id='${r.payload.link.id}'`))[0].token_ciphertext, 'an encrypted copy is kept for reminders');
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Waiting on Dana', platforms: ['facebook'], scheduleDate: new Date(Date.now() + 5 * 86400000).toISOString(), requiresApproval: true });
+const waitingId = r.payload.post.id;
+const { processReviewReminders } = require(`${ROOT}/api/_lib/reminders.js`);
+emails.length = 0;
+assert.equal((await processReviewReminders({ encryptionKey: key })).reminded, 0, 'nothing has waited 2 days yet');
+await db.exec(`update review_links set created_at = now() - interval '3 days'; update scheduled_posts set created_at = now() - interval '3 days' where id = '${waitingId}'`);
+const reminders = await processReviewReminders({ encryptionKey: key });
+assert.ok(reminders.reminded >= 1 && reminders.emailed >= 1, JSON.stringify(reminders));
+const nudge = emails.find((e) => e.html.includes(`review.html#t=${remindToken}`));
+assert.ok(nudge, 'the client gets their own review link');
+assert.deepEqual(nudge.to, ['dana@client.com']);
+assert.match(nudge.text, /Waiting on Dana/);
+assert.ok((await q(`select title from notifications where type='review_overdue'`)).some((n) => /Dana \(PK Works\) hasn’t reviewed/.test(n.title)), 'admins are told in SignalDesk');
+assert.equal((await processReviewReminders({ encryptionKey: key })).reminded, 0, 'at most every 2 days');
+await db.exec(`update scheduled_posts set status = 'canceled' where id = '${waitingId}'`);
 delete process.env.RESEND_API_KEY;
 
 // --- Export leaves secrets out ---

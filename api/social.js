@@ -4,7 +4,7 @@ const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
   getMembership, getWorkspaceState, assertClientInWorkspace,
-  getProfile, getOrCreateProfile, requirePlatforms, decryptSecret,
+  getProfile, getOrCreateProfile, requirePlatforms, decryptSecret, encryptSecret,
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
 } = require('./_lib/core');
@@ -12,11 +12,11 @@ const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lo
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, OVERVIEW_RANGES
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
 const { pushConfigured } = require('./_lib/push');
-const { reportTotals } = require('./_lib/reports');
+const { reportTotals, reportHighlights } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
 const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
@@ -43,14 +43,14 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history'
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
@@ -504,6 +504,13 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, await systemStatus({ workspaceId, origin, clients: state.clients || [] }));
   }
 
+  if (action === 'campaigns') {
+    const days = OVERVIEW_RANGES.includes(Number(body.days)) ? Number(body.days) : 90;
+    const clientId = typeof body.clientId === 'string' && body.clientId ? body.clientId : null;
+    if (clientId) await assertClientInWorkspace(workspaceId, clientId);
+    return send(res, 200, { campaigns: await campaignSummary(workspaceId, { clientId, days }), days });
+  }
+
   if (action === 'post-metrics-history') {
     if (!validUuid(body.postId)) return send(res, 400, { error: 'Choose a post.' });
     const { postMetricHistory } = require('./_lib/sync');
@@ -613,9 +620,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const token = crypto.randomBytes(32).toString('base64url');
     const [link] = await databaseRequest('review_links', {
       method: 'POST', headers: { prefer: 'return=representation' },
-      body: JSON.stringify({ workspace_id: workspaceId, client_id: body.clientId, token_hash: crypto.createHash('sha256').update(token).digest('hex'), label: label || null, created_by: user.id, expires_at: new Date(Date.now() + days * 86400000).toISOString() })
+      body: JSON.stringify({ workspace_id: workspaceId, client_id: body.clientId, token_hash: crypto.createHash('sha256').update(token).digest('hex'), token_ciphertext: encryptSecret(token, encryptionKey), label: label || null, created_by: user.id, expires_at: new Date(Date.now() + days * 86400000).toISOString() })
     });
-    // The secret is only ever shown here; SignalDesk keeps just its hash.
+    // Links are looked up by the secret's hash; the encrypted copy is only used to put the link in reminder emails.
     return send(res, 200, { link: { id: link.id, label: link.label, expires_at: link.expires_at }, token });
   }
 
@@ -639,7 +646,16 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       report.postCount = new Set(report.rows.map((row) => row.providerPostId)).size;
     }
     const posts = await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(client.id)}&scheduled_for=gte.${new Date(start).toISOString()}&scheduled_for=lt.${new Date(end).toISOString()}${campaign ? `&campaign=eq.${encodeURIComponent(campaign)}` : ''}&select=status`) || [];
-    return send(res, 200, { report, campaign, scheduled: posts.filter((post) => ['scheduled', 'pending_approval'].includes(post.status)).length });
+    // The same length of time just before, for "vs. before" and the highlights.
+    let previous = null;
+    try {
+      const length = end - start;
+      previous = await buildTopPostsReport({ profile, workspaceId, encryptionKey, clientId: client.id, clientName: client.name, start: start - length, end: start });
+      if (campaign) { previous.rows = previous.rows.filter((row) => row.campaign === campaign); previous.totals = reportTotals(previous.rows); previous.postCount = new Set(previous.rows.map((row) => row.providerPostId)).size; }
+    } catch (error) { console.error('Previous period unavailable:', error.message); }
+    const state = await getWorkspaceState(workspaceId);
+    const highlights = reportHighlights(report, previous, { timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York' });
+    return send(res, 200, { report, campaign, scheduled: posts.filter((post) => ['scheduled', 'pending_approval'].includes(post.status)).length, previous: previous ? { totals: previous.totals, postCount: previous.postCount } : null, highlights });
   }
 
   if (action === 'job-comments') {

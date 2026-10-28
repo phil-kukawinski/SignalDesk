@@ -98,6 +98,8 @@ create table if not exists public.user_drafts (
   draft jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
+-- Saved drafts (More → Saved drafts in the Publishing Studio), besides the one being edited.
+alter table public.user_drafts add column if not exists saved jsonb not null default '[]'::jsonb;
 
 create table if not exists public.autopilot_feeds (
   id uuid primary key default gen_random_uuid(),
@@ -360,6 +362,8 @@ create table if not exists public.review_links (
   revoked_at timestamptz,
   last_used_at timestamptz
 );
+-- An encrypted copy of the link's secret, so reminder emails can include the link.
+alter table public.review_links add column if not exists token_ciphertext text;
 
 -- Conversation on a post: team notes and client comments or decisions.
 create table if not exists public.post_notes (

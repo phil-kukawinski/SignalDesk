@@ -30,8 +30,8 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('[data-close-post]').click();
  document.querySelector('[data-open-post="p-sched"]').click();await wait(20);
  L('schedDialog','move:'+!!document.querySelector('[data-reschedule-post]')+' cancel:'+document.querySelector('[data-cancel-post]')?.textContent+' custom:'+document.querySelector('#post-dialog .option-hint')?.textContent+' media:'+document.querySelectorAll('.post-dialog-media img').length);
- document.querySelector('[data-cancel-post]').click();await wait(10);L('cancelConfirm',document.querySelector('#confirm-dialog').open+' '+document.querySelector('#confirm-title').textContent);
- document.querySelector('#confirm-dialog [value=yes]').click();await wait(400);L('cancelPayload',JSON.stringify(calls.filter(c=>c.action==='cancel-post').pop())+' closed:'+!document.querySelector('#post-dialog').open);
+ document.querySelector('[data-cancel-post]').click();await wait(10);L('cancelUndo',document.querySelector('#undo-bar .undo-text')?.textContent+' hidden:'+!serverPosts.some(p=>p.id==='p-sched')+' closed:'+!document.querySelector('#post-dialog').open);
+ undoNow();await wait(10);L('cancelUndone','back:'+serverPosts.some(p=>p.id==='p-sched')+' sent:'+calls.filter(c=>c.action==='cancel-post').length);
  document.querySelector('[data-open-post="p-sched"]').click();await wait(20);
  const input=document.querySelector('#post-dialog-time');input.value=input.value.replace(/T\d\d/,'T16');document.querySelector('[data-reschedule-post]').click();await wait(20);
  const move=calls.filter(c=>c.action==='reschedule-post').pop();L('reschedule',move.postId+' hour:'+new Date(move.scheduleDate).getHours());

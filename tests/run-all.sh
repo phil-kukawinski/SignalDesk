@@ -11,6 +11,9 @@ if [ -t 1 ]; then green=$'\033[32m'; red=$'\033[31m'; plain=$'\033[0m'; else gre
 pass() { printf '  %s✓%s %s\n' "$green" "$plain" "$1"; }
 fail() { printf '  %s✕%s %s\n%s\n' "$red" "$plain" "$1" "$2"; failed=1; }
 
+echo "Code check"
+out=$(npx --no-install eslint js api sw.js scripts 2>&1) && pass "eslint" || fail "eslint" "$(echo "$out" | tail -15)"
+
 echo "Server"
 for test in tests/unit/*.test.js; do
   out=$(node "$test" 2>&1) && pass "$(basename "$test")" || fail "$(basename "$test")" "$(echo "$out" | tail -15)"
@@ -30,7 +33,7 @@ for test in tests/ui/ui*.js; do
 done
 
 echo "Browser"
-for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs tests/browser/formats.mjs tests/browser/workflows.mjs; do
+for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs tests/browser/formats.mjs tests/browser/workflows.mjs tests/browser/csp.mjs tests/browser/a11y.mjs; do
   out=$(SHOTS="${TMPDIR:-/tmp}/" node tests/browser/cdp.mjs "$step" 2>&1 | grep -v 'offline in this test')
   if echo "$out" | grep -q '\[exception\]\|\[console.error\]'; then fail "$(basename "$step")" "$(echo "$out" | grep '\[exception\]\|\[console.error\]' | head -5)"
   else pass "$(basename "$step")"; fi

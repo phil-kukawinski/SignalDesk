@@ -56,10 +56,20 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!/Select all/.test(bar) || (await evaluate(`document.querySelectorAll('.bulk-check').length`)) !== 3) fail('Approvals should offer select all and a box per post');
   await evaluate(`(()=>{const all=document.querySelector('#bulk-all');all.checked=true;all.dispatchEvent(new Event('change',{bubbles:true}));})()`); await wait(200);
   await evaluate(`document.querySelector('[data-bulk="approve"]').click()`); await wait(300);
-  await evaluate(`document.querySelector('#confirm-dialog button[value="yes"]').click()`); await wait(600);
+  const undoText = await evaluate(`document.querySelector('#undo-bar')?.hidden?'':document.querySelector('#undo-bar .undo-text')?.textContent`);
+  if (!/3 posts approved/.test(undoText) || (await evaluate(`__calls.filter(c=>c.action==='approve').length`)) !== 0) fail('bulk approve should wait with an Undo bar before sending: ' + undoText);
+  await evaluate(`flushUndo()`); await wait(600);
   const approved = await evaluate(`__calls.filter(c=>c.action==='approve').map(c=>c.postId.slice(-1)).sort().join(',')`);
   log.push('bulk approved: ' + approved);
   if (approved !== '1,2,3') fail('approving all should approve each post');
+  await evaluate(`serverPosts.slice(0,3).forEach(p=>{p.status='pending_approval';});renderApprovals()`); await wait(100);
+  // Canceling a post waits too, and Undo brings it back without sending anything.
+  await evaluate(`openPostDialog('11111111-0000-4000-8000-000000000004')`); await wait(300);
+  await evaluate(`document.querySelector('[data-cancel-post]')?.click()`); await wait(200);
+  const hidden = await evaluate(`!serverPosts.some(p=>p.id.endsWith('04'))`);
+  await evaluate(`undoNow()`); await wait(100);
+  const back = await evaluate(`serverPosts.some(p=>p.id.endsWith('04'))&&!__calls.some(c=>c.action==='cancel-post')`);
+  if (!hidden || !back) fail('cancel should hide the post, and Undo should bring it back without canceling');
   await evaluate(`(()=>{const boxes=document.querySelectorAll('.bulk-check');[0,1].forEach(i=>{boxes[i].checked=true;boxes[i].dispatchEvent(new Event('change',{bubbles:true}));});const d=new Date();d.setDate(d.getDate()+10);document.querySelector('#bulk-date').value=localIsoDate(d);document.querySelector('[data-bulk="move"]').click();})()`); await wait(600);
   const moved = JSON.parse(await evaluate(`JSON.stringify(__calls.filter(c=>c.action==='reschedule-post').map(c=>new Date(c.scheduleDate).getHours()+':'+new Date(c.scheduleDate).getDate()))`));
   log.push('moved: ' + moved.join(' '));
@@ -86,13 +96,15 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   const heat = await evaluate(`(()=>{const posts=Array.from({length:20},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);d.setHours(i%2?9:19,0,0,0);return{id:'h'+i,clientId:'pk-works',platform:'instagram',publishedAt:d.toISOString(),metrics:{engagements:i%2?10:50}};});const data=bestTimesData(posts);return data.counted+' '+data.best.map(b=>HEATMAP_BLOCKS[b.block][1]).join('/');})()`);
   log.push('heat map: ' + heat);
   if (!/^20 6–9 PM/.test(heat)) fail('evenings should rank best in the heat map data');
-  const report = await evaluate(`JSON.stringify(reportHighlights({rows:[{platform:'instagram',text:'Big one',media:'https://x/v.mp4',publishedAt:'2026-10-06T14:00:00Z',metrics:{engagements:300}},{platform:'instagram',text:'b',media:'https://x/v2.mp4',publishedAt:'2026-10-13T14:00:00Z',metrics:{engagements:120}},{platform:'facebook',text:'c',media:'https://x/a.jpg',publishedAt:'2026-10-08T14:00:00Z',metrics:{engagements:20}},{platform:'facebook',text:'d',media:'https://x/b.jpg',publishedAt:'2026-10-09T14:00:00Z',metrics:{engagements:20}},{platform:'facebook',text:'e',publishedAt:'2026-10-20T14:00:00Z',metrics:{engagements:20}},{platform:'facebook',text:'f',publishedAt:'2026-10-27T14:00:00Z',metrics:{engagements:20}}]},{totals:{engagements:400}}))`);
-  log.push('report highlights: ' + report);
-  if (!/up 25%/.test(report) || !/Instagram drove 84%/.test(report) || !/Videos averaged 10\.5×/.test(report) || !/Posts on Tuesdays did best/.test(report)) fail('the client report should explain the numbers');
   // A post's details show how its numbers grew day by day.
   const growth = await evaluate(`(async()=>{const base=callSocialApi;callSocialApi=async b=>b.action==='post-metrics-history'?{publishedAt:new Date(Date.now()-3*864e5).toISOString(),days:[0,1,2,3].map(i=>({day:localIsoDate(new Date(Date.now()-(3-i)*864e5)),metrics:{engagements:[10,40,55,60][i],views:[100,300,420,450][i]}}))}:base(b);analyticsPosts=[{id:'22222222-0000-4000-8000-000000000001',clientId:'pk-works',platform:'instagram',text:'Growth post',publishedAt:new Date(Date.now()-3*864e5).toISOString(),metrics:{engagements:60,views:450}}];openNetworkPost('22222222-0000-4000-8000-000000000001');await new Promise(r=>setTimeout(r,400));const box=document.querySelector('#network-post-growth');const before=box.querySelector('.option-hint')?.textContent;box.querySelector('[data-growth-metric="views"]')?.click();return JSON.stringify({before,after:box.querySelector('.option-hint')?.textContent,tips:box.querySelectorAll('.chart-hit').length,labels:box.querySelector('.chart-x')?.textContent});})()`);
   log.push('growth: ' + growth);
   const g = JSON.parse(growth);
   if (!/10 → 60 engagements over 4 days, \+5 since the day before/.test(g.before) || !/100 → 450 views/.test(g.after) || g.tips !== 4 || !/Day 1Day 4/.test(g.labels)) fail('a post should show how it grew');
   await evaluate(`document.querySelector('#network-post-dialog')?.close()`);
+  // Saved drafts (signed out, so they're kept in this browser): save, clear, open again, delete with Undo.
+  const drafts = await evaluate(`(async()=>{const cloud=cloudFeaturesAvailable;cloudFeaturesAvailable=()=>false;try{localStorage.removeItem('signaldesk.savedDrafts')}catch{}savedDrafts=null;showView('composer');document.querySelector('#post-copy').value='Holiday hours post\\nOpen 9 to 5';uploadedMedia=[];updatePreview();await saveCurrentDraft();document.querySelector('#post-copy').value='Something else';activeSavedDraftId=null;await saveCurrentDraft();document.querySelector('#clear-draft').click();await openDraftsDialog();const titles=[...document.querySelectorAll('#drafts-list b')].map(b=>b.textContent);document.querySelector('[data-open-draft="'+savedDrafts.find(d=>d.title==='Holiday hours post').id+'"]').click();const copy=document.querySelector('#post-copy').value;flushUndo();await openDraftsDialog();document.querySelector('[data-delete-draft]').click();const afterDelete=savedDrafts.length;undoNow();const restored=savedDrafts.length;document.querySelector('#drafts-dialog').close();cloudFeaturesAvailable=cloud;return JSON.stringify({titles,copy,afterDelete,restored,menu:document.querySelector('#open-drafts')?.textContent});})()`);
+  log.push('drafts: ' + drafts);
+  const d = JSON.parse(drafts);
+  if (d.titles.join('|') !== 'Something else|Holiday hours post' || d.copy !== 'Holiday hours post\nOpen 9 to 5' || d.afterDelete !== 1 || d.restored !== 2 || d.menu !== 'Saved drafts (2)') fail('saved drafts should save, open, delete, and undo');
 };

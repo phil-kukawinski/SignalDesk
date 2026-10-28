@@ -101,6 +101,8 @@ module.exports = async function handler(req, res) {
     res.setHeader('content-type', 'text/html; charset=utf-8');
     res.setHeader('cache-control', url.searchParams.get('code') ? 'no-store' : 'public, max-age=300');
     res.setHeader('x-content-type-options', 'nosniff');
+    res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+    res.setHeader('referrer-policy', 'strict-origin-when-cross-origin');
     return res.status(200).send(html);
   } catch (error) {
     console.error('Legal page failed:', error.message);

@@ -38,11 +38,11 @@ async function recordMetricDays(rows, now = Date.now()) {
 
 // A post's daily numbers, oldest first.
 async function postMetricHistory(workspaceId, networkPostId) {
-  const post = (await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}&id=eq.${encodeURIComponent(networkPostId)}&select=platform,external_id,published_at,metrics,metrics_at`) || [])[0];
+  const post = (await databaseRequest(`network_posts?workspace_id=eq.${workspaceId}&id=eq.${encodeURIComponent(networkPostId)}&select=platform,external_id,published_at,metrics,metrics_at,text`) || [])[0];
   if (!post) return null;
   const query = new URLSearchParams({ select: 'day,metrics', workspace_id: `eq.${workspaceId}`, platform: `eq.${post.platform}`, external_id: `eq.${post.external_id}`, order: 'day.asc', limit: '120' });
   const days = await databaseRequest(`post_metric_days?${query}`).catch(() => []) || [];
-  return { publishedAt: post.published_at, days: days.map((row) => ({ day: row.day, metrics: row.metrics || {} })) };
+  return { publishedAt: post.published_at, text: post.text || '', days: days.map((row) => ({ day: row.day, metrics: row.metrics || {} })) };
 }
 
 // Facebook returns empty reach and views when the connection wasn't granted read_insights
@@ -107,6 +107,7 @@ async function syncClient(workspaceId, clientId, { encryptionKey } = {}) {
 }
 
 // Posts for the calendar, from every source, in a date range.
+const LIST_TEXT = 500;
 async function listNetworkPosts(workspaceId, { from, to, clientId, platform } = {}) {
   const query = new URLSearchParams({ select: 'id,client_id,platform,external_id,url,text,media_url,media_type,published_at,job_id,metrics,metrics_at', workspace_id: `eq.${workspaceId}`, order: 'published_at.desc', limit: '1000' });
   query.append('published_at', `gte.${new Date(from).toISOString()}`);
@@ -115,31 +116,32 @@ async function listNetworkPosts(workspaceId, { from, to, clientId, platform } = 
   if (platform) query.set('platform', `eq.${platform}`);
   // The newest 1,000, returned oldest first.
   const rows = (await databaseRequest(`network_posts?${query}`) || []).reverse();
-  return rows.map((row) => ({
-    id: row.id, clientId: row.client_id, platform: row.platform, url: row.url, text: row.text || '', mediaUrl: row.media_url, mediaType: row.media_type,
-    publishedAt: row.published_at, viaSignalDesk: Boolean(row.job_id), jobId: row.job_id, metrics: row.metrics || {}, metricsAt: row.metrics_at
-  }));
+  // Listings carry the start of each caption and only the numbers a network reported; the full
+  // caption comes with a post's details (post-metrics-history).
+  return rows.map((row) => {
+    const text = row.text || '';
+    return {
+      id: row.id, clientId: row.client_id, platform: row.platform, url: row.url, text: text.slice(0, LIST_TEXT), ...(text.length > LIST_TEXT ? { textTruncated: true } : {}),
+      mediaUrl: row.media_url, mediaType: row.media_type, publishedAt: row.published_at, viaSignalDesk: Boolean(row.job_id), jobId: row.job_id,
+      metrics: Object.fromEntries(Object.entries(row.metrics || {}).filter(([, value]) => value !== null && value !== undefined)), metricsAt: row.metrics_at
+    };
+  });
 }
 
-// Audience numbers for Analytics: latest followers per account, and the change over the time frame.
-// Only the oldest and newest days are needed, so those are read separately (a year of daily rows is too many).
+// Audience numbers for Analytics: latest followers per account, the change over the time frame,
+// and the follower count by day (thinned to about 60 points) for a small growth chart.
 async function audienceSummary(workspaceId, clientId = null, rangeDays = 30) {
+  const { allRows } = require('./publishing');
   const since = dayKey(new Date(Date.now() - (rangeDays + 1) * 86400000));
-  const base = `account_stats?workspace_id=eq.${workspaceId}${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics`;
-  const [oldest, newest] = await Promise.all([databaseRequest(`${base}&order=day.asc&limit=1000`), databaseRequest(`${base}&order=day.desc&limit=1000`)]);
+  const rows = await allRows(`account_stats?workspace_id=eq.${workspaceId}${clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : ''}&day=gte.${since}&select=connection_id,client_id,platform,day,metrics&order=day.asc`, { maxRows: 20000 });
   const byConnection = {};
-  const seen = new Set();
-  for (const row of [...(oldest || []), ...(newest || []).reverse()]) {
-    const key = `${row.connection_id}:${row.day}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    (byConnection[row.connection_id] ||= []).push(row);
-  }
-  for (const series of Object.values(byConnection)) series.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  for (const row of rows || []) (byConnection[row.connection_id] ||= []).push(row);
   return Object.values(byConnection).map((series) => {
-    const latest = series[series.length - 1], first = series.find((row) => typeof row.metrics.followers === 'number');
+    const latest = series[series.length - 1], counted = series.filter((row) => typeof row.metrics.followers === 'number'), first = counted[0];
     const followers = latest.metrics.followers ?? null;
-    return { clientId: latest.client_id, platform: latest.platform, followers, change: first && followers !== null && first.day !== latest.day ? followers - first.metrics.followers : null, since: first?.day || null, ...latest.metrics };
+    const every = Math.max(1, Math.ceil(counted.length / 60));
+    const points = counted.filter((row, index) => index % every === 0 || index === counted.length - 1).map((row) => [row.day, row.metrics.followers]);
+    return { clientId: latest.client_id, platform: latest.platform, followers, change: first && followers !== null && first.day !== latest.day ? followers - first.metrics.followers : null, since: first?.day || null, ...latest.metrics, series: points };
   });
 }
 

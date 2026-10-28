@@ -110,6 +110,11 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Analytics extras: the chart shows the previous time frame as a dashed line; very large changes read as “up from” the earlier number; a heat map shows which days and times get the most engagement; and opening a post shows how it compared with that account's average, how its numbers grew day by day (recorded by the account sync for each post's first 90 days, in `post_metric_days`), and a Post again button
 - Client reports include posts made outside SignalDesk, the change from the period before under each number, a bar per network, and a few plain-language highlights worked out from the posts
 - Everyday tools: add several photos at once or drop files on the composer or a calendar day, drag thumbnails to reorder; select posts on Approvals to approve, send back, or move them together; Copy week in the calendar; and per-network photo shape checks with a one-click crop that gives that network its own copy. Thumbnails can load resized copies after a Supabase Pro upgrade (`imageThumbnails` in `js/config.js`)
+- Undo instead of “Are you sure?” for canceling a post, disconnecting an account, bulk approving, removing a library file, deleting a saved draft, and replacing the Studio draft (8 seconds, or Cmd/Ctrl+Z)
+- Saved drafts: Save draft keeps the post under More → Saved drafts (with your account, in `user_drafts.saved`)
+- Analytics → Campaigns: results for each campaign tag (posts, reach, engagement, clicks, best post) with a report per campaign; Audience cards show follower growth; a top post can be turned into AI drafts for the client's other networks
+- Review reminders: when posts wait 2 days on a client's review link, admins are told, and the client can get an email with their link (Brand kit → Monthly report email)
+- Security headers on every page (`vercel.json`, written by `npm run bundle`): a Content-Security-Policy that allows the one inline script by hash, no embedding in other sites, and a strict referrer policy. The OAuth popup and legal pages set their own
 - Trend signals in the Content Library: AI web research on trending hashtags, audio, formats, and standout posts, with source links and client-specific ideas you can drop into a draft
 - **Brand kits** per client (Clients → Brand kit): voice, hashtags to always include, words to avoid, colors, logo, watch terms, a default for link tracking, and a posting queue. The checklist's optional **On brand** item flags avoid-list words and missing hashtags, and AI proofreading checks copy against the voice
 - **Client review links** (Clients → Review link): a private page (`review.html`) where a client sees the next 60 days of posts for each network, approves them, asks for changes, or comments, with no account. Links expire (7–90 days) and can be turned off; only a hash of each link is stored. Approving a post that's waiting for approval schedules it. Clients never see team notes
@@ -187,10 +192,11 @@ Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Uns
 
 ## Testing
 Run `npm install`, then `npm test`. It runs:
+- **Code check** (`npm run lint`, ESLint): names used but never defined, duplicate keys, unreachable code. The app's files share one global scope, so `eslint.config.mjs` treats every top-level name in them as defined.
 - **Server tests** (`tests/unit/`) with simulated network responses.
 - **Database tests** (`tests/db/`) against a real Postgres (PGlite) loaded with `supabase/schema.sql`, behind a small PostgREST stand-in. They cover publishing, retries, short links, Instagram image conversion, link previews, health checks, and upgrading from the original schema.
 - **Interface tests** (`tests/ui/`) inside the real page in headless Google Chrome. The app ships with no sample data, so the interface and browser tests load the sample clients in `tests/fixtures/sample.js`.
-- **Browser checks** (`tests/browser/`): the page loads and every view opens with no errors, plus the composer, sign-in and beta screens, posts from every source, the client picker, and everyday workflows (`workflows.mjs`: several files at once, bulk approvals, copying a week, cropping for one network, and Analytics extras). They block every request to Supabase, so they never touch the real project. `screens.mjs` isn't part of `npm test`; it saves a screenshot of every page for a visual review.
+- **Browser checks** (`tests/browser/`): the page loads and every view opens with no errors, plus the composer, sign-in and beta screens, posts from every source, the client picker, and everyday workflows (`workflows.mjs`: several files at once, bulk approvals, Undo, copying a week, cropping for one network, saved drafts, and Analytics extras). `csp.mjs` serves the site with the security headers from `vercel.json` and fails if anything is blocked; `a11y.mjs` runs axe-core on every view in light and dark mode and fails on serious accessibility problems. They block every request to Supabase, so they never touch the real project. `screens.mjs` isn't part of `npm test`; it saves a screenshot of every page for a visual review.
 
 The interface and browser checks need Google Chrome installed (set `CHROME` to its path if it isn't in the default macOS location). `tests/` isn't deployed (see `.vercelignore`). None of the tests contact the real networks.
 
@@ -227,6 +233,7 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `api/_lib/brandsite.js` — Brand kit → Fill from website
 - `api/_lib/core.js` — shared provider, database, post-option, and RSS helpers
 - `api/_lib/notify.js` — in-app notifications, immediate emails, and digests
+- `api/_lib/reminders.js` — reminders when a client hasn’t reviewed posts
 - `api/_lib/reports.js` — Top Posts metrics and weekly reports
 - `api/_lib/trends.js` — Claude-powered trend research
 - `api/_lib/proofread.js` — Claude-powered proofreading

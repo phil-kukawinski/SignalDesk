@@ -953,6 +953,48 @@ async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 
   return { created, skipped };
 }
 
+// Results per campaign (posts tagged with a campaign name), over a time frame: posts sent and
+// upcoming, reach, engagement, link clicks, and the best post. Numbers come from the networks via
+// the account sync when available, otherwise from the post's own metrics.
+async function campaignSummary(workspaceId, { clientId = null, days = 90 } = {}) {
+  const { finishMetrics } = require('./reports');
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const query = new URLSearchParams({ select: 'id,client_id,campaign,title,status,scheduled_for,publish_jobs(id,platform,status,metrics,published_at,external_url)', workspace_id: `eq.${workspaceId}`, campaign: 'not.is.null', scheduled_for: `gte.${since}`, status: 'neq.canceled', order: 'scheduled_for.asc' });
+  if (clientId) query.set('client_id', `eq.${clientId}`);
+  const posts = (await allRows(`scheduled_posts?${query}`, { maxRows: 5000 })).filter((post) => (post.campaign || '').trim());
+  const jobs = posts.flatMap((post) => (post.publish_jobs || []).filter((job) => job.status === 'published'));
+  const synced = {}, clicks = {};
+  for (let index = 0; index < jobs.length; index += 150) {
+    const ids = jobs.slice(index, index + 150).map((job) => job.id).join(',');
+    for (const row of await databaseRequest(`network_posts?job_id=in.(${ids})&select=job_id,metrics`).catch(() => []) || []) synced[row.job_id] = row.metrics;
+  }
+  for (let index = 0; index < posts.length; index += 150) {
+    const ids = posts.slice(index, index + 150).map((post) => post.id).join(',');
+    for (const row of await databaseRequest(`short_links?post_id=in.(${ids})&select=post_id,clicks`).catch(() => []) || []) clicks[row.post_id] = (clicks[row.post_id] || 0) + (row.clicks || 0);
+  }
+  const groups = new Map();
+  for (const post of posts) {
+    const key = `${post.client_id}\u0000${post.campaign.trim()}`;
+    const group = groups.get(key) || { clientId: post.client_id, campaign: post.campaign.trim(), posts: 0, published: 0, upcoming: 0, reach: 0, views: 0, engagements: 0, clicks: 0, measured: 0, first: post.scheduled_for, last: post.scheduled_for, best: null };
+    group.posts += 1;
+    group.last = post.scheduled_for;
+    group.clicks += clicks[post.id] || 0;
+    if (['scheduled', 'pending_approval', 'publishing'].includes(post.status) && Date.parse(post.scheduled_for) > Date.now()) group.upcoming += 1;
+    let postEngagements = null;
+    for (const job of post.publish_jobs || []) {
+      if (job.status !== 'published') continue;
+      group.published += 1;
+      const metrics = finishMetrics(synced[job.id] || job.metrics || {});
+      if (typeof metrics.engagements === 'number') { group.engagements += metrics.engagements; group.measured += 1; postEngagements = (postEngagements || 0) + metrics.engagements; }
+      group.reach += metrics.reach || 0;
+      group.views += metrics.views || 0;
+    }
+    if (postEngagements !== null && (!group.best || postEngagements > group.best.engagements)) group.best = { postId: post.id, title: post.title || 'Untitled post', engagements: postEngagements };
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({ ...group, engagementRate: group.reach ? Math.round(group.engagements / group.reach * 10000) / 100 : null })).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
+}
+
 // --- Posting queues and evergreen posts ---
 
 // A client's queue: posting days (0 = Sunday) and times, plus how long evergreen posts rest.
@@ -1127,4 +1169,4 @@ module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts };
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

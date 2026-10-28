@@ -100,6 +100,9 @@ function openFeedback(kind='problem'){
 }
 function setFeedbackKind(kind){const dialog=$('#feedback-dialog');if(!dialog)return;dialog.dataset.kind=kind;dialog.querySelectorAll('[data-kind]').forEach(button=>{const on=button.dataset.kind===kind;button.classList.toggle('active',on);button.setAttribute('aria-checked',String(on));});}
 document.addEventListener('click',event=>{if(event.target.closest('[data-open-feedback]')){event.preventDefault();openFeedback();}});
+// Darkens (or lightens) a text color until it reads clearly on its background (WCAG 4.5:1),
+// so client colors picked for looks stay legible. Non-hex colors are left as they are.
+function readableOn(fg,bg){const parse=hex=>/^#[0-9a-f]{6}$/i.test(hex||'')?[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)):null,text=parse(fg),back=parse(bg);if(!text||!back)return fg;const lum=([r,g,b])=>{const c=[r,g,b].map(v=>{v/=255;return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4;});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];},ratio=(a,b)=>{const[x,y]=[lum(a),lum(b)].sort((m,n)=>n-m);return(x+0.05)/(y+0.05);},darker=lum(back)>0.18;let color=text;for(let step=0;step<20&&ratio(color,back)<4.5;step++)color=color.map(v=>Math.round(darker?v*0.9:v+(255-v)*0.12));return '#'+color.map(v=>v.toString(16).padStart(2,'0')).join('');}
 // The change from the previous time frame. Very large jumps (usually an account with little
 // earlier history) read better as the earlier number than as a percentage.
 function periodChangeHtml(total,previous,label){const change=Math.round((total-previous)/previous*1000)/10;if(change>300)return `<span class="trend up">↗ up from ${compactNumber(previous)}</span> the previous ${label}`;return `<span class="trend ${change>=0?'up':'down'}">${change>=0?'↗':'↘'} ${Math.abs(change)}%</span> vs. previous ${label}`;}

@@ -233,7 +233,7 @@ function reportEmails(value) {
 // Emails each client its report for the previous month, on the day of the month set in its brand kit.
 async function processClientReports({ encryptionKey, now = new Date(), limit = 2 } = {}) {
   if (!emailConfigured()) return { sent: 0, configured: false };
-  const { buildTopPostsReport } = require('./reports');
+  const { buildTopPostsReport, reportHighlights, changeText } = require('./reports');
   const { lastWorkerRun, recordWorkerRun } = require('./publishing');
   const rows = await databaseRequest('workspace_state?select=workspace_id,state') || [];
   let sent = 0;
@@ -255,14 +255,18 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
       try {
         const profile = ayrshareConfigured() ? await getProfile(row.workspace_id, client.id, encryptionKey) : null;
         const report = await buildTopPostsReport({ profile, workspaceId: row.workspace_id, encryptionKey, clientId: client.id, clientName: client.name, start, end });
+        const before = previous.month === 1 ? { year: previous.year - 1, month: 12 } : { year: previous.year, month: previous.month - 1 };
+        const prior = await buildTopPostsReport({ profile, workspaceId: row.workspace_id, encryptionKey, clientId: client.id, clientName: client.name, start: zonedToUtc(before.year, before.month, 1, 0, 0, timeZone), end: start - 1 }).catch(() => null);
+        const highlights = reportHighlights(report, prior, { timeZone });
+        const vs = (value, old) => { const text = changeText(value, old); return text ? ` (${text})` : ''; };
         const monthLabel = new Date(Date.UTC(previous.year, previous.month - 1, 15)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
         const totals = report.totals;
         const top = [...report.rows].sort((a, b) => (b.metrics.engagements || 0) - (a.metrics.engagements || 0)).slice(0, 5);
         const content = renderEmail({
           eyebrow: (row.state?.settings?.name || 'Your social media team').toUpperCase(),
           heading: `${client.name} social report: ${monthLabel}`,
-          intro: `${report.postCount} post${report.postCount === 1 ? '' : 's'} published · ${formatNumber(totals.views)} views · ${formatNumber(totals.engagements)} engagements${totals.engagementRate !== null ? ` · ${totals.engagementRate}% engagement rate` : ''}.`,
-          sections: top.length ? [{ title: 'Top posts', items: top.map((item) => ({ title: `${item.platform} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [],
+          intro: `${report.postCount} post${report.postCount === 1 ? '' : 's'} published · ${formatNumber(totals.views)} views${vs(totals.views, prior?.totals?.views)} · ${formatNumber(totals.engagements)} engagements${vs(totals.engagements, prior?.totals?.engagements)}${totals.engagementRate !== null ? ` · ${totals.engagementRate}% engagement rate` : ''}.`,
+          sections: [...(highlights.length ? [{ title: 'Highlights', items: highlights.map((line) => ({ title: line })) }] : []), ...(top.length ? [{ title: 'Top posts', items: top.map((item) => ({ title: `${item.platform} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [])],
           showCta: false,
           footer: 'Metrics come from each network and may change slightly as they update.'
         });

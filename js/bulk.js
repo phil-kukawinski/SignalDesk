@@ -34,7 +34,7 @@ document.addEventListener('click',async event=>{
   const kind=button.dataset.bulk,ids=[...bulkSelected];
   if(kind==='clear'){bulkSelected.clear();renderBulkBar();return;}
   if(!ids.length)return;
-  if(kind==='approve'){if(!await confirmAction({title:`Approve ${ids.length} post${ids.length===1?'':'s'}?`,message:'Each one is scheduled for its own time. Any whose time has passed publish in the next minute.',confirm:'Approve all'}))return;button.disabled=true;const results=await bulkRun(ids,id=>({action:'approve',postId:id}));bulkReport(results,'approved');}
+  if(kind==='approve'){const posts=ids.map(id=>serverPosts.find(post=>post.id===id)).filter(Boolean);posts.forEach(post=>{post.status='scheduled';});bulkSelected.clear();refreshPostViews();showUndo(`${posts.length} post${posts.length===1?'':'s'} approved. Each goes out at its own time.`,{run:async()=>{const results=await bulkRun(ids,id=>({action:'approve',postId:id}));bulkReport(results,'approved');await loadServerPosts(true);},onUndo:()=>{posts.forEach(post=>{post.status='pending_approval';});refreshPostViews();},undoneMessage:'Still waiting for approval.'});return;}
   if(kind==='reject'){const note=prompt(`What should change? This note goes to the author of all ${ids.length} posts. (Optional)`);if(note===null)return;button.disabled=true;const results=await bulkRun(ids,id=>({action:'reject',postId:id,note}));bulkReport(results,'sent back');}
   if(kind==='move'){const day=$('#bulk-date')?.value;if(!day){toast('Choose a date to move the posts to.');$('#bulk-date')?.focus();return;}button.disabled=true;
     // Each post keeps its own time of day.

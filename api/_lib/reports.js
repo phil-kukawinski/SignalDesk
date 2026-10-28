@@ -227,4 +227,61 @@ async function runWeeklyReports({ encryptionKey, limit = 3 } = {}) {
   return { built: count };
 }
 
-module.exports = { METRIC_KEYS, normalizeMetrics, finishMetrics, reportTotals, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };
+
+// A few plain-language takeaways from a report, worked out from the posts themselves.
+// `previous` is the report for the same length of time just before (optional).
+function reportHighlights(report, previous = null, { timeZone = 'America/New_York' } = {}) {
+  const { PLATFORM_LABELS } = require('./publishing');
+  const label = (platform) => PLATFORM_LABELS[platform] || platform;
+  const rows = report.rows.filter((row) => typeof row.metrics?.engagements === 'number');
+  const total = rows.reduce((sum, row) => sum + row.metrics.engagements, 0);
+  const lines = [];
+  const plural = (n, word) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
+  if (!rows.length || !total) return lines;
+  const before = previous?.totals?.engagements;
+  if (typeof before === 'number' && before > 0) {
+    const change = Math.round((total - before) / before * 100);
+    lines.push(change >= 0
+      ? `Engagement was up ${change}% on the period before (${total.toLocaleString('en-US')}, up from ${before.toLocaleString('en-US')}).`
+      : `Engagement was down ${Math.abs(change)}% on the period before (${total.toLocaleString('en-US')}, from ${before.toLocaleString('en-US')}).`);
+  }
+  const networks = {};
+  rows.forEach((row) => { const entry = networks[row.platform] ||= { posts: 0, engagements: 0 }; entry.posts += 1; entry.engagements += row.metrics.engagements; });
+  const ranked = Object.entries(networks).sort((a, b) => b[1].engagements - a[1].engagements);
+  if (ranked.length > 1) {
+    const [platform, entry] = ranked[0];
+    lines.push(`${label(platform)} drove ${Math.round(entry.engagements / total * 100)}% of engagement from ${Math.round(entry.posts / rows.length * 100)}% of posts.`);
+  }
+  const average = total / rows.length;
+  const top = [...rows].sort((a, b) => b.metrics.engagements - a.metrics.engagements)[0];
+  if (rows.length >= 3 && top.metrics.engagements >= average * 1.5) {
+    const caption = (top.text || '').split('\n').find((line) => line.trim()) || '';
+    lines.push(`The top post${caption ? ` (“${caption.slice(0, 60)}${caption.length > 60 ? '…' : ''}”)` : ''} on ${label(top.platform)} earned ${plural(top.metrics.engagements, 'engagement')}, ${(top.metrics.engagements / average).toFixed(1)}× the average post.`);
+  }
+  const isVideo = (row) => /\.(mp4|mov|m4v|webm)(\?|$)/i.test(row.media || '');
+  const videos = rows.filter(isVideo), images = rows.filter((row) => row.media && !isVideo(row));
+  if (videos.length >= 2 && images.length >= 2) {
+    const v = videos.reduce((sum, row) => sum + row.metrics.engagements, 0) / videos.length;
+    const i = images.reduce((sum, row) => sum + row.metrics.engagements, 0) / images.length;
+    if (i && v / i >= 1.3) lines.push(`Videos averaged ${(v / i).toFixed(1)}× the engagement of photo posts.`);
+    else if (v && i / v >= 1.3) lines.push(`Photo posts averaged ${(i / v).toFixed(1)}× the engagement of videos.`);
+  }
+  const days = {};
+  rows.filter((row) => row.publishedAt).forEach((row) => {
+    const day = new Date(row.publishedAt).toLocaleDateString('en-US', { weekday: 'long', timeZone });
+    const entry = days[day] ||= { posts: 0, engagements: 0 }; entry.posts += 1; entry.engagements += row.metrics.engagements;
+  });
+  const bestDay = Object.entries(days).filter(([, entry]) => entry.posts >= 2).sort((a, b) => b[1].engagements / b[1].posts - a[1].engagements / a[1].posts)[0];
+  if (rows.length >= 6 && bestDay) lines.push(`Posts on ${bestDay[0]}s did best, averaging ${plural(Math.round(bestDay[1].engagements / bestDay[1].posts), 'engagement')} each.`);
+  return lines;
+}
+
+// The change from the period before, for a headline number ("+24%", or "up from 120" for very large jumps).
+function changeText(value, before, { points = false } = {}) {
+  if (typeof value !== 'number' || typeof before !== 'number' || !before) return '';
+  if (points) { const diff = Math.round((value - before) * 10) / 10; return `${diff >= 0 ? '+' : ''}${diff} pts vs. before`; }
+  const change = Math.round((value - before) / before * 100);
+  return change > 300 ? `up from ${before.toLocaleString('en-US')}` : `${change >= 0 ? '+' : ''}${change}% vs. before`;
+}
+
+module.exports = { reportHighlights, changeText, METRIC_KEYS, normalizeMetrics, finishMetrics, reportTotals, buildTopPostsReport, weekRange, lastCompletedWeekStart, saveWeeklyReport, runWeeklyReports };
