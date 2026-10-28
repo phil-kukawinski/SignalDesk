@@ -1,16 +1,16 @@
 const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, ayrshareConfigured, getProfile } = require('./core');
 const { sendPush } = require('./push');
 
-const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing'];
+const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing', 'planning'];
 const FREQUENCIES = ['immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'];
-const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, last_digest_at: null };
+const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, planning_leads: [30], planning_scope: 'major', last_digest_at: null };
 const DIGEST_HOUR = 8;
 // Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
 // category is unticked) and left out of digests so they don't arrive twice.
 const URGENT_TYPES = new Set(['publish_failed', 'publish_unknown', 'connection_expired', 'connection_expiring', 'connection_signed_out', 'manual_due', 'worker_stalled', 'comment_failed']);
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing' };
+const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing', planning: 'Planning' };
 
 function emailConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.NOTIFY_FROM_EMAIL);
@@ -195,7 +195,7 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
     if (!schedule.due) continue;
     const since = prefs.last_digest_at && Date.parse(prefs.last_digest_at) > schedule.start ? prefs.last_digest_at : schedule.start.toISOString();
     const short = ['daily', 'weekly'].includes(prefs.email_frequency);
-    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, 'data->>urgent': 'is.null', order: 'created_at.desc', limit: short ? '50' : '1000' });
+    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, 'data->>urgent': 'is.null', type: 'neq.planning_reminder', order: 'created_at.desc', limit: short ? '50' : '1000' });
     const notifications = await databaseRequest(`notifications?${query}`) || [];
     const copy = digestCopy(prefs, schedule, notifications.length);
     const listItem = (item) => ({ title: item.title, body: item.body, meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) });
@@ -211,6 +211,14 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
     if (member.role === 'admin' && prefs.email_categories.includes('reports')) {
       if (prefs.email_frequency === 'weekly') sections.push(...await weeklyReportSection(member.workspace_id, state.clients || []));
       else if (!short) sections.push(...await periodPostsSection(member.workspace_id, state.clients || [], since));
+    }
+    // Planning reminders aren't repeated here (they'd be stale); the dates still ahead are listed instead.
+    // Daily digests list them on Mondays only.
+    if (prefs.email_categories.includes('planning') && (prefs.email_frequency !== 'daily' || new Date(`${localDateKey(now, timeZone)}T00:00:00Z`).getUTCDay() === 1)) {
+      const { comingUpSection, planningNotesSection } = require('./planning');
+      const periodDays = { daily: 7, weekly: 7, monthly: 30, yearly: 90, custom: schedule.customDays }[prefs.email_frequency];
+      sections.push(...comingUpSection(localDateKey(now, timeZone), prefs, periodDays));
+      if (member.role === 'admin') sections.push(...await planningNotesSection(member.workspace_id, state.clients || [], now));
     }
     try {
       if (sections.length) {

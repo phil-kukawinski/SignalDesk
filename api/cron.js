@@ -6,6 +6,7 @@ const { processPublishQueue, maintainConnections, refreshRecentMetrics, recordWo
 const { processEmailDigests, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia } = require('./_lib/media');
+const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
 
 const DAY_MS = 86400000;
 
@@ -16,7 +17,7 @@ function authorized(req) {
 }
 
 // Publishes due posts, then runs Autopilot feeds, due comments, token upkeep, metrics, evergreen reposts, weekly
-// Top Posts reports, email digests, and a daily media cleanup. Call it on a schedule with
+// Top Posts reports, email digests, planning reminders and notes, and a daily media cleanup. Call it on a schedule with
 // `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this header automatically).
 // `?only=publish` runs just the publishing queue, for an every-minute schedule.
 // `?only=health` only checks that publishing is running; Vercel Cron calls it daily as a backstop.
@@ -43,6 +44,9 @@ module.exports = async function handler(req, res) {
     const digests = await processEmailDigests({ limit: 40 });
     const clientReports = await processClientReports({ encryptionKey }).catch((error) => ({ error: error.message }));
     const reviewReminders = await require('./_lib/reminders').processReviewReminders({ encryptionKey }).catch((error) => ({ error: error.message }));
+    const planning = await processPlanningReminders().catch((error) => ({ error: error.message }));
+    // "What to post next" notes take a while to write, so only when this run has time to spare.
+    const planningNotes = Date.now() - started < 120000 ? await processPlanningNotes().catch((error) => ({ error: error.message })) : { skipped: true };
     let media = null;
     const lastCleanup = await lastWorkerRun('media-cleanup');
     if (!lastCleanup || Date.now() - Date.parse(lastCleanup) > DAY_MS) {
@@ -54,7 +58,7 @@ module.exports = async function handler(req, res) {
     const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
     if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { publishing, comments, connections, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, media, health });
+    return send(res, 200, { publishing, comments, connections, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);

@@ -1,6 +1,7 @@
 [
  "js/icons.js",
  "js/base.js",
+ "js/observances.js",
  "js/ui.js",
  "js/undo.js",
  "js/media-viewer.js",
@@ -38,6 +39,8 @@
  "js/media-tray.js",
  "js/bulk.js",
  "js/drafts.js",
+ "js/planning.js",
+ "js/inbox.js",
  "js/tour.js",
  "js/auth.js",
  "js/app.js"

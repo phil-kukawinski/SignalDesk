@@ -1091,23 +1091,89 @@ async function publishedDirectJob(workspaceId, jobId, encryptionKey) {
   return { job, connection, adapter: adapterFor(job.platform) };
 }
 
+async function commentStates(workspaceId, jobIds) {
+  if (!jobIds.length) return new Map();
+  const rows = await databaseRequest(`comment_states?workspace_id=eq.${workspaceId}&job_id=in.(${jobIds.join(',')})&select=job_id,comment_id,state`).catch(() => []) || [];
+  return new Map(rows.map((row) => [`${row.job_id}:${row.comment_id}`, row.state]));
+}
+// A comment needs a reply until this account has answered it (here or on the network) or someone marks it done.
+function withAnswered(jobId, comments, states) {
+  return comments.map((comment) => {
+    const state = states.get(`${jobId}:${comment.id}`) || null;
+    return { ...comment, state, answered: Boolean(comment.mine || state || comment.replies?.some((reply) => reply.mine)) };
+  });
+}
+
 async function listJobComments(workspaceId, jobId, encryptionKey) {
   const { job, connection, adapter } = await publishedDirectJob(workspaceId, jobId, encryptionKey);
   try {
-    return await adapter.listComments({ connection, job });
+    const comments = await adapter.listComments({ connection, job });
+    return withAnswered(job.id, comments, await commentStates(workspaceId, [job.id]));
   } catch (error) {
     throw httpError(error.kind === 'auth' ? 400 : 502, error.message);
   }
 }
 
-async function replyToComment(workspaceId, jobId, commentId, text, encryptionKey) {
+async function setCommentState(workspaceId, jobId, commentId, state, userId = null) {
+  const [job] = await databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&id=eq.${jobId}&select=id`) || [];
+  if (!job) throw httpError(404, 'Post not found.');
+  if (!state) {
+    await databaseRequest(`comment_states?workspace_id=eq.${workspaceId}&job_id=eq.${jobId}&comment_id=eq.${encodeURIComponent(commentId)}`, { method: 'DELETE' });
+    return;
+  }
+  await databaseRequest('comment_states?on_conflict=workspace_id,job_id,comment_id', {
+    method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ workspace_id: workspaceId, job_id: jobId, comment_id: commentId, state, user_id: userId, updated_at: new Date().toISOString() })
+  });
+}
+
+async function replyToComment(workspaceId, jobId, commentId, text, encryptionKey, userId = null) {
   if (typeof commentId !== 'string' || !commentId || commentId.length > 300) throw httpError(400, 'Choose a comment to reply to.');
   const { job, connection, adapter } = await publishedDirectJob(workspaceId, jobId, encryptionKey);
+  let reply;
   try {
-    return await adapter.reply({ connection, job, commentId, text });
+    reply = await adapter.reply({ connection, job, commentId, text });
   } catch (error) {
     throw httpError(error.kind === 'auth' ? 400 : 502, error.message);
   }
+  await setCommentState(workspaceId, job.id, commentId, 'replied', userId).catch((error) => console.error('Could not record reply:', error.message));
+  return reply;
+}
+
+// Comments still waiting for a reply on posts published in the last two weeks (the 12 most recent
+// posts that have comments), for the Social Inbox and Needs your attention.
+const OPEN_COMMENT_DAYS = 14;
+async function openComments(workspaceId, { clientId = '', encryptionKey, now = Date.now() } = {}) {
+  const query = new URLSearchParams({ workspace_id: `eq.${workspaceId}`, status: 'eq.published', provider: 'eq.direct', platform: `in.(${[...COMMENTABLE].join(',')})`, published_at: `gte.${new Date(now - OPEN_COMMENT_DAYS * 86400000).toISOString()}`, select: 'id,post_id,client_id,platform,external_id,connection_id,published_at,metrics,url', order: 'published_at.desc', limit: '60' });
+  if (clientId) query.set('client_id', `eq.${clientId}`);
+  const jobs = (await databaseRequest(`publish_jobs?${query}`) || []).filter((job) => job.external_id && job.metrics?.comments !== 0).slice(0, 12);
+  if (!jobs.length) return { comments: [], counts: {}, checked: 0, failed: 0 };
+  const [states, posts] = await Promise.all([
+    commentStates(workspaceId, jobs.map((job) => job.id)),
+    databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&id=in.(${[...new Set(jobs.map((job) => job.post_id))].join(',')})&select=id,title`).catch(() => [])
+  ]);
+  const titles = new Map((posts || []).map((post) => [post.id, post.title]));
+  const connections = new Map();
+  const connectionFor = (id) => {
+    if (!connections.has(id)) connections.set(id, loadConnection(id, encryptionKey).then((connection) => connection?.status === 'active' ? ensureFreshToken(connection, encryptionKey) : null));
+    return connections.get(id);
+  };
+  const results = await Promise.allSettled(jobs.map(async (job) => {
+    const connection = await connectionFor(job.connection_id);
+    if (!connection) throw new Error('Not connected');
+    return withAnswered(job.id, await adapterFor(job.platform).listComments({ connection, job }), states);
+  }));
+  const comments = [], counts = {};
+  let failed = 0;
+  results.forEach((result, index) => {
+    const job = jobs[index];
+    if (result.status === 'rejected') { failed += 1; return; }
+    const open = result.value.filter((comment) => !comment.answered);
+    counts[job.id] = open.length;
+    open.forEach((comment) => comments.push({ jobId: job.id, postId: job.post_id, clientId: job.client_id, platform: job.platform, postTitle: titles.get(job.post_id) || 'Untitled post', postUrl: job.url || '', id: comment.id, author: comment.author, text: comment.text, at: comment.at }));
+  });
+  comments.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
+  return { comments: comments.slice(0, 100), counts, checked: jobs.length - failed, failed };
 }
 
 // --- Notes and client comments on a post ---
@@ -1179,4 +1245,4 @@ module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

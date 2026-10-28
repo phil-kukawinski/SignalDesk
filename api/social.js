@@ -12,7 +12,8 @@ const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lo
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, OVERVIEW_RANGES
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, OVERVIEW_RANGES,
+  allRows, openComments, setCommentState
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
 const { pushConfigured } = require('./_lib/push');
@@ -26,6 +27,7 @@ const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, r
 const { deletionPlan, deleteAccount } = require('./_lib/account');
 const { brandFromSite } = require('./_lib/brandsite');
 const { listNetworkPosts, syncClient } = require('./_lib/sync');
+const { latestPlanningNote, createPlanningNote, NOTE_MAX_AGE_DAYS } = require('./_lib/planning');
 const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
 const { checkLink, fetchLinkPreview } = require('./_lib/core');
 
@@ -43,14 +45,15 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns'
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns',
+  'planning-note', 'open-comments', 'comment-state'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'planning-note'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
@@ -123,6 +126,15 @@ function validUuid(value) {
 
 async function clientName(workspaceId, clientId) {
   return ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === clientId)?.name || 'a client';
+}
+
+// Counts one AI request against the workspace's daily allowance; false once it's used up.
+async function useAiCredit(workspaceId) {
+  const counter = `ai-usage:${workspaceId}:${new Date().toISOString().slice(0, 10)}`;
+  const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
+  if (used >= AI_DAILY_LIMIT) return false;
+  await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
+  return true;
 }
 
 // Errors from the AI service carry an HTTP status too, but their raw text isn't meant for people.
@@ -368,9 +380,20 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'best-times') {
-    const since = new Date(Date.now() - 84 * 86400000).toISOString().slice(0, 10);
+    // Every post on the client's connected accounts (synced from each network), so the Studio can
+    // suggest times per network; the weekly reports fill in for workspaces that haven't synced yet.
+    const since = new Date(Date.now() - 84 * 86400000);
     const filter = typeof body.clientId === 'string' && body.clientId ? `&client_id=eq.${encodeURIComponent(body.clientId)}` : '';
-    const reports = await databaseRequest(`weekly_reports?${scope}${filter}&week_start=gte.${since}&select=client_id,week_start,data`) || [];
+    const rate = (metrics) => {
+      const audience = metrics?.reach || metrics?.views;
+      return typeof metrics?.engagements === 'number' && audience ? Math.round(metrics.engagements / audience * 10000) / 100 : null;
+    };
+    const synced = await allRows(`network_posts?${scope}${filter}&published_at=gte.${since.toISOString()}&select=client_id,platform,published_at,metrics&order=published_at.desc`, { maxRows: 3000 }).catch(() => []) || [];
+    if (synced.length) {
+      const points = synced.map((row) => ({ t: row.published_at, rate: row.metrics?.engagementRate ?? rate(row.metrics), engagements: row.metrics?.engagements ?? null, platform: row.platform, clientId: row.client_id }));
+      return send(res, 200, { points, weeks: Math.max(1, Math.ceil((Date.now() - Math.min(...synced.map((row) => Date.parse(row.published_at)))) / (7 * 86400000))) });
+    }
+    const reports = await databaseRequest(`weekly_reports?${scope}${filter}&week_start=gte.${since.toISOString().slice(0, 10)}&select=client_id,week_start,data`) || [];
     const seen = new Set();
     const points = [];
     for (const report of reports) {
@@ -381,6 +404,31 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       }
     }
     return send(res, 200, { points, weeks: new Set(reports.map((report) => report.week_start)).size });
+  }
+
+  if (action === 'planning-note') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const state = await getWorkspaceState(workspaceId);
+    const client = (state.clients || []).find((item) => item.id === body.clientId);
+    const latest = await latestPlanningNote(workspaceId, client.id);
+    const usable = latest && !latest.failed ? latest : null;
+    const age = usable ? Date.now() - Date.parse(usable.createdAt) : Infinity;
+    if (!body.refresh) return send(res, 200, { note: usable, stale: age > NOTE_MAX_AGE_DAYS * 86400000 });
+    // Asking again within 10 minutes returns the same note instead of spending another AI call.
+    if (age < 10 * 60000) return send(res, 200, { note: usable, stale: false });
+    if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
+    const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
+    return send(res, 200, { note: await createPlanningNote({ workspaceId, client, timeZone, userId: user.id }) });
+  }
+
+  if (action === 'open-comments') {
+    return send(res, 200, await openComments(workspaceId, { clientId: typeof body.clientId === 'string' ? body.clientId : '', encryptionKey }));
+  }
+
+  if (action === 'comment-state') {
+    if (typeof body.commentId !== 'string' || !body.commentId || body.commentId.length > 300 || !validUuid(body.jobId)) return send(res, 400, { error: 'Choose a comment.' });
+    await setCommentState(workspaceId, body.jobId, body.commentId, body.done === false ? null : 'done', user.id);
+    return send(res, 200, { ok: true });
   }
 
   if (action === 'notification-settings') {
@@ -452,11 +500,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'draft-captions' || action === 'alt-text' || action === 'brand-from-site') {
     // A generous daily cap per workspace keeps an accidental loop from running up the AI bill.
-    const today = new Date().toISOString().slice(0, 10);
-    const counter = `ai-usage:${workspaceId}:${today}`;
-    const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
-    if (used >= AI_DAILY_LIMIT) return send(res, 429, { error: 'This workspace has reached today’s limit for AI writing help. Try again tomorrow.' });
-    await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
+    if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI writing help. Try again tomorrow.' });
     if (action === 'brand-from-site') {
       const client = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
       return send(res, 200, { brand: await brandFromSite({ url: body.url, clientName: client?.name || '' }) });
@@ -665,7 +709,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'reply-comment') {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
     if (!text || text.length > 2000) return send(res, 400, { error: 'Write a reply up to 2,000 characters.' });
-    return send(res, 200, { reply: await replyToComment(workspaceId, body.jobId, body.commentId, text, encryptionKey) });
+    return send(res, 200, { reply: await replyToComment(workspaceId, body.jobId, body.commentId, text, encryptionKey, user.id) });
   }
 
   if (action === 'overview') {

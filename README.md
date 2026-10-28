@@ -114,6 +114,10 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Saved drafts: Save draft keeps the post under More → Saved drafts (with your account, in `user_drafts.saved`)
 - Analytics → Campaigns: results for each campaign tag (posts, reach, engagement, clicks, best post) with a report per campaign; Audience cards show follower growth; a top post can be turned into AI drafts for the client's other networks
 - Review reminders: when posts wait 2 days on a client's review link, admins are told, and the client can get an email with their link (Brand kit → Monthly report email)
+- Plan ahead (Command Center): upcoming holidays and key dates (`js/observances.js`: US holidays, shopping days, season starts and clock changes, awareness months, and optional fun days) with how many posts are planned for each, and **What to post next**: an AI note per client on what's worked, gaps in the schedule, dates that fit the brand, and post ideas with a draft caption (refreshed weekly by the worker, in `planning_notes`). Needs your attention flags a big date within two weeks with nothing planned
+- Planning reminders: “Valentine’s Day is in 2 weeks. Have you started on ideas yet?” under the bell, as far ahead as each person picks (1 week to 3 months, several at once, or never; Settings → Notifications). Wrap-up emails list the dates coming up and each client's latest ideas
+- Studio time suggestions learn from each client's own posts on the networks picked, then all of its posts, then the workspace's
+- Social Inbox: **Needs a reply** lists comments nobody has answered on the last two weeks of posts (answered here or on the network, or marked done, in `comment_states`), with reply templates (`{name}` fills in the commenter's first name) shared with the team. Needs your attention shows the count
 - Security headers on every page (`vercel.json`, written by `npm run bundle`): a Content-Security-Policy that allows the one inline script by hash, no embedding in other sites, and a strict referrer policy. The OAuth popup and legal pages set their own
 - Trend signals in the Content Library: AI web research on trending hashtags, audio, formats, and standout posts, with source links and client-specific ideas you can drop into a draft
 - **Brand kits** per client (Clients → Brand kit): voice, hashtags to always include, words to avoid, colors, logo, watch terms, a default for link tracking, and a posting queue. The checklist's optional **On brand** item flags avoid-list words and missing hashtags, and AI proofreading checks copy against the voice
@@ -124,7 +128,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Campaigns:** label posts and filter the calendar, client reports, and Top Posts rows by campaign
 - **Link tracking:** optional UTM tags (`utm_source` = network, `utm_medium=social`, `utm_campaign` = campaign or client), added when each network's post goes out so saved copy stays clean
 - **Instagram grid preview** (Calendar → Grid) for a client's recent and scheduled Instagram posts
-- **Holiday overlay** on the calendar: US holidays and common marketing days, which you can toggle off
+- **Holiday overlay** on the calendar: US holidays, key dates, and marketing days (hover one for a content idea), which you can toggle off
 - **Comments on your posts** in the Social Inbox: read and reply to comments on posts SignalDesk published to Facebook, Instagram, and LinkedIn
 - **Client reports** (Analytics → Client report): a branded summary for last month, this month, or the last 30 or 90 days, optionally for one campaign. It opens in a new tab, ready to save as a PDF
 - **Client goals and alerts:** set posts per week, an engagement-rate goal, a gap warning (nothing scheduled within N days), and a daily limit in each brand kit. The Command Center shows goal progress, and Needs your attention flags gaps and busy days. The calendar marks busy days too
@@ -176,7 +180,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Monthly report emails go straight to the client's addresses from your sending domain. Check one by sending it to yourself first.
 - The service worker keeps a copy of the app files for spotty connections. Scheduling and loading data still need a connection.
 - Dark mode re-colors the main screens. A few rarely used panels may still look light.
-- The holiday overlay is a fixed list of US dates and common marketing days, not a live calendar feed.
+- Holidays and key dates are a built-in list of US dates, not a live calendar feed. Lunar-calendar dates (Lunar New Year, Ramadan, Eid, Passover, Diwali, Hanukkah) are listed through 2030 and can shift by a day locally.
 - Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Status and next steps

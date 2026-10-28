@@ -228,12 +228,13 @@ const meta = {
 
   async listComments({ connection, job }) {
     if (job.platform === 'instagram') {
-      const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,text,username,timestamp,replies{id,text,username,timestamp}', limit: '50' } });
-      const shape = (item) => ({ id: item.id, author: item.username ? `@${item.username}` : 'Instagram user', text: item.text || '', at: item.timestamp || null });
+      const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,text,username,from{id},timestamp,replies{id,text,username,from{id},timestamp}', limit: '50' } });
+      // `mine`: written by this account, so a comment with a reply of ours counts as answered.
+      const shape = (item) => ({ id: item.id, author: item.username ? `@${item.username}` : 'Instagram user', text: item.text || '', at: item.timestamp || null, mine: item.from?.id === connection.external_id || Boolean(item.username && item.username === connection.username) });
       return (result.data || []).map((item) => ({ ...shape(item), replies: (item.replies?.data || []).map(shape) }));
     }
-    const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,message,from{name},created_time,comments.limit(20){id,message,from{name},created_time}', limit: '50', order: 'reverse_chronological' } });
-    const shape = (item) => ({ id: item.id, author: item.from?.name || 'Facebook user', text: item.message || '', at: item.created_time || null });
+    const result = await graph(`${job.external_id}/comments`, { token: connection.token, params: { fields: 'id,message,from{id,name},created_time,comments.limit(20){id,message,from{id,name},created_time}', limit: '50', order: 'reverse_chronological' } });
+    const shape = (item) => ({ id: item.id, author: item.from?.name || 'Facebook user', text: item.message || '', at: item.created_time || null, mine: item.from?.id === connection.external_id });
     return (result.data || []).map((item) => ({ ...shape(item), replies: (item.comments?.data || []).map(shape) }));
   },
 
@@ -677,7 +678,7 @@ const linkedin = {
     // LinkedIn returns member IDs, not names, without extra profile permissions.
     return (payload.elements || []).map((item) => ({
       id: item.$URN || item.commentUrn || item.id, text: item.message?.text || '',
-      author: item.actor === connection.external_id ? 'You' : 'LinkedIn member', at: item.created?.time ? new Date(item.created.time).toISOString() : null, replies: []
+      author: item.actor === connection.external_id ? 'You' : 'LinkedIn member', at: item.created?.time ? new Date(item.created.time).toISOString() : null, replies: [], mine: item.actor === connection.external_id
     }));
   },
 

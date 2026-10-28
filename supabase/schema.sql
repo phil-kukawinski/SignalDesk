@@ -179,7 +179,7 @@ create table if not exists public.notification_preferences (
   user_id uuid primary key references auth.users (id) on delete cascade,
   workspace_id uuid references public.workspaces (id) on delete cascade,
   email_frequency text not null default 'monthly',
-  email_categories text[] not null default '{approvals,autopilot,reports,team,publishing}',
+  email_categories text[] not null default '{approvals,autopilot,reports,team,publishing,planning}',
   weekly_day int not null default 1 check (weekly_day between 0 and 6),
   last_digest_at timestamptz,
   updated_at timestamptz not null default now()
@@ -193,6 +193,19 @@ alter table public.notification_preferences drop constraint if exists notificati
 alter table public.notification_preferences add constraint notification_preferences_email_frequency_check check (email_frequency in ('immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'));
 alter table public.notification_preferences drop constraint if exists notification_preferences_schedule_check;
 alter table public.notification_preferences add constraint notification_preferences_schedule_check check (monthly_day between 1 and 28 and yearly_month between 1 and 12 and custom_days between 2 and 180);
+-- Planning reminders: how many days ahead to hear about holidays and key dates (none = never), and
+-- whether to cover only the major dates or every date. The first time this runs, everyone gets the new
+-- Planning email category added.
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'notification_preferences' and column_name = 'planning_leads') then
+    alter table public.notification_preferences add column planning_leads int[] not null default '{30}';
+    update public.notification_preferences set email_categories = array_append(email_categories, 'planning') where not ('planning' = any (email_categories));
+  end if;
+end $$;
+alter table public.notification_preferences add column if not exists planning_scope text not null default 'major';
+alter table public.notification_preferences alter column email_categories set default '{approvals,autopilot,reports,team,publishing,planning}';
+alter table public.notification_preferences drop constraint if exists notification_preferences_planning_check;
+alter table public.notification_preferences add constraint notification_preferences_planning_check check (planning_scope in ('major', 'all') and planning_leads <@ array[7, 14, 30, 60, 90]);
 
 -- Who submitted each held post, so the approver's decision can notify them.
 create table if not exists public.post_submissions (
@@ -490,6 +503,26 @@ create table if not exists public.post_metric_days (
   metrics jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now(),
   primary key (workspace_id, platform, external_id, day)
+);
+-- "What to post next" notes: AI suggestions per client from its recent results, schedule gaps, and upcoming dates.
+create table if not exists public.planning_notes (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  data jsonb not null,
+  created_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists planning_notes_client_idx on public.planning_notes (workspace_id, client_id, created_at desc);
+-- Comments on published posts marked done, or answered from SignalDesk, so the inbox knows what still needs a reply.
+create table if not exists public.comment_states (
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  job_id uuid not null references public.publish_jobs (id) on delete cascade,
+  comment_id text not null,
+  state text not null check (state in ('done', 'replied')),
+  user_id uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, job_id, comment_id)
 );
 -- Invite requests from the public landing page. Only the server (service role) reads or writes them.
 create table if not exists public.invite_requests (
@@ -809,6 +842,8 @@ alter table public.short_links enable row level security;
 alter table public.network_posts enable row level security;
 alter table public.account_stats enable row level security;
 alter table public.post_metric_days enable row level security;
+alter table public.planning_notes enable row level security;
+alter table public.comment_states enable row level security;
 alter table public.beta_invites enable row level security;
 alter table public.beta_redemptions enable row level security;
 alter table public.app_settings enable row level security;
@@ -821,14 +856,14 @@ revoke all on public.workspaces, public.workspace_members, public.workspace_invi
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days from anon, authenticated;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days to service_role;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

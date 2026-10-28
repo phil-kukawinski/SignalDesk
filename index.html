@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=6c67468469">
+  <link rel="stylesheet" href="css/app.min.css?v=78488b10d1">
 </head>
 <body class="signed-out">
   <div class="landing" id="landing">
@@ -294,6 +294,12 @@
         <label class="option-toggle"><input type="checkbox" name="email-category" value="autopilot" checked> Autopilot — feed problems</label>
         <label class="option-toggle"><input type="checkbox" name="email-category" value="publishing" checked> Publishing — comments or posts that failed</label>
         <label class="option-toggle"><input type="checkbox" name="email-category" value="team" checked> Team — people joining</label>
+        <label class="option-toggle"><input type="checkbox" name="email-category" value="planning" checked> Planning — dates coming up and ideas for what to post next (in wrap-ups)</label>
+      </fieldset>
+      <fieldset class="pref-group" id="planning-prefs"><legend class="field-label">Remind me about holidays and key dates</legend>
+        <div class="lead-chips" role="group" aria-label="How far ahead"><label class="lead-chip"><input type="checkbox" name="planning-lead" value="90"> 3 months before</label><label class="lead-chip"><input type="checkbox" name="planning-lead" value="60"> 2 months</label><label class="lead-chip"><input type="checkbox" name="planning-lead" value="30" checked> 1 month</label><label class="lead-chip"><input type="checkbox" name="planning-lead" value="14"> 2 weeks</label><label class="lead-chip"><input type="checkbox" name="planning-lead" value="7"> 1 week</label><label class="lead-chip never"><input type="checkbox" id="planning-never"> Never</label></div>
+        <label for="planning-scope" class="sub-label">Which dates</label><select id="planning-scope" class="field"><option value="major">Major dates: holidays, shopping days, seasons</option><option value="all">Everything, including fun days</option></select>
+        <p class="option-hint">Pick as many as you like, e.g. 2 months to start planning and 1 week as a last check. “Everything” adds days like National Coffee Day. Reminders show under the bell (“Valentine’s Day is in 2 weeks. Have you started on ideas yet?”). Clock changes always get a one-week heads-up. Wrap-up emails list the dates coming up.</p>
       </fieldset>
       <fieldset class="pref-group"><legend class="field-label">Push notifications</legend><p class="option-hint" id="push-note"></p><button class="secondary-button" type="button" id="push-toggle" hidden>Turn on for this device</button></fieldset><p class="auth-message" id="notification-message" role="status"></p>
       <div class="auth-actions"><button class="primary-button" id="save-notification-prefs" type="submit" value="save">Save</button><button class="secondary-button" type="button" id="close-notification-prefs">Cancel</button></div>
@@ -478,6 +484,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=b75a5c1f36"></script>
+  <script src="js/app.min.js?v=3237155024"></script>
 </body>
 </html>
