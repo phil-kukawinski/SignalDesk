@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=78488b10d1">
+  <link rel="stylesheet" href="css/app.min.css?v=6224316496">
 </head>
 <body class="signed-out">
   <div class="landing" id="landing">
@@ -247,6 +247,8 @@
           <details class="beta-errors"><summary>Server errors in the last 24 hours <span id="beta-error-count"></span></summary><ul id="beta-errors"></ul></details>
         </div>
         <div class="panel account-panel" id="account-panel" hidden><div class="panel-header"><div><h2>Your account</h2><p id="account-email"></p></div></div>
+          <div class="settings-toggle account-password"><div><b>Password</b><small>Change the password you sign in with. You stay signed in on this device.</small></div><button class="secondary-button" type="button" id="password-change">Change password…</button></div>
+          <form class="password-form" id="password-form" hidden novalidate><label class="field-label" for="password-new">New password</label><input class="field" id="password-new" type="password" autocomplete="new-password" minlength="8" required><label class="field-label" for="password-again">Type it again</label><input class="field" id="password-again" type="password" autocomplete="new-password" minlength="8" required><p class="auth-message" id="password-message" role="status"></p><div class="password-actions"><button class="primary-button" type="submit" id="password-save">Save password</button><button class="text-button" type="button" id="password-cancel">Cancel</button></div></form>
           <div class="settings-toggle account-danger"><div><b>Delete my account</b><small id="account-delete-detail">Removes your sign-in and your data. This can’t be undone.</small></div><button class="secondary-button danger-button" type="button" id="account-delete">Delete account…</button></div>
         </div>
         <div class="panel health-panel" id="health-panel" hidden><div class="panel-header"><div><h2>Setup &amp; health</h2><p id="health-summary">Checks what’s configured, whether the scheduler is running, and what failed recently.</p></div><button class="secondary-button" type="button" id="health-refresh"><i data-icon="refresh"></i>Check again</button></div><div class="health-body" id="health-body"></div></div>
@@ -476,7 +478,7 @@
         <button class="secondary-button" id="auth-back" type="button" data-auth-show="reset">Back to sign in</button>
         <button class="secondary-button" id="auth-sign-out" type="button" data-auth-show="account invite" hidden>Sign out</button>
       </div>
-      <div class="auth-account" data-auth-show="account"><p id="auth-account-email"></p><button class="text-button" type="button" id="auth-account-settings">Account settings and deletion</button></div>
+      <div class="auth-account" data-auth-show="account"><p id="auth-account-email"></p><button class="text-button" type="button" id="auth-account-settings">Change password, account settings, and deletion</button></div>
       <div class="auth-invite-step" data-auth-show="invite"><label for="auth-invite-code">Invite code</label><input id="auth-invite-code" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="e.g. 7KQ2MX4P"></div>
       <p class="auth-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/data-deletion">Data deletion</a></p>
     </form>
@@ -484,6 +486,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=3237155024"></script>
+  <script src="js/app.min.js?v=79f600b96a"></script>
 </body>
 </html>

@@ -1144,7 +1144,7 @@ async function replyToComment(workspaceId, jobId, commentId, text, encryptionKey
 // posts that have comments), for the Social Inbox and Needs your attention.
 const OPEN_COMMENT_DAYS = 14;
 async function openComments(workspaceId, { clientId = '', encryptionKey, now = Date.now() } = {}) {
-  const query = new URLSearchParams({ workspace_id: `eq.${workspaceId}`, status: 'eq.published', provider: 'eq.direct', platform: `in.(${[...COMMENTABLE].join(',')})`, published_at: `gte.${new Date(now - OPEN_COMMENT_DAYS * 86400000).toISOString()}`, select: 'id,post_id,client_id,platform,external_id,connection_id,published_at,metrics,url', order: 'published_at.desc', limit: '60' });
+  const query = new URLSearchParams({ workspace_id: `eq.${workspaceId}`, status: 'eq.published', provider: 'eq.direct', platform: `in.(${[...COMMENTABLE].join(',')})`, published_at: `gte.${new Date(now - OPEN_COMMENT_DAYS * 86400000).toISOString()}`, select: 'id,post_id,client_id,platform,external_id,connection_id,published_at,metrics,external_url', order: 'published_at.desc', limit: '60' });
   if (clientId) query.set('client_id', `eq.${clientId}`);
   const jobs = (await databaseRequest(`publish_jobs?${query}`) || []).filter((job) => job.external_id && job.metrics?.comments !== 0).slice(0, 12);
   if (!jobs.length) return { comments: [], counts: {}, checked: 0, failed: 0 };
@@ -1170,7 +1170,7 @@ async function openComments(workspaceId, { clientId = '', encryptionKey, now = D
     if (result.status === 'rejected') { failed += 1; return; }
     const open = result.value.filter((comment) => !comment.answered);
     counts[job.id] = open.length;
-    open.forEach((comment) => comments.push({ jobId: job.id, postId: job.post_id, clientId: job.client_id, platform: job.platform, postTitle: titles.get(job.post_id) || 'Untitled post', postUrl: job.url || '', id: comment.id, author: comment.author, text: comment.text, at: comment.at }));
+    open.forEach((comment) => comments.push({ jobId: job.id, postId: job.post_id, clientId: job.client_id, platform: job.platform, postTitle: titles.get(job.post_id) || 'Untitled post', postUrl: job.external_url || '', id: comment.id, author: comment.author, text: comment.text, at: comment.at }));
   });
   comments.sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
   return { comments: comments.slice(0, 100), counts, checked: jobs.length - failed, failed };

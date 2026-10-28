@@ -4,6 +4,18 @@ let betaLoaded=false;
 function renderAccountPanel(){const panel=$('#account-panel');if(!panel)return;panel.hidden=!cloudFeaturesAvailable();if(panel.hidden)return;$('#account-email').textContent=`Signed in as ${activeUser?.email||''}`;}
 async function openDeleteDialog(){const dialog=$('#delete-dialog');if(!dialog)return;$('#delete-confirm').value='';$('#delete-go').disabled=true;$('#delete-message').textContent='';$('#delete-detail').textContent='Checking what will be removed…';dialog.showModal();try{const plan=await callSocialApi({action:'account-plan'});if(plan.blocked){$('#delete-detail').textContent=plan.blocked;$('#delete-confirm').disabled=true;return;}$('#delete-confirm').disabled=false;$('#delete-detail').textContent=!plan.workspace?'This deletes your sign-in. You don’t have a workspace yet.':plan.soleMember?'You’re the only member, so this also deletes the whole workspace: clients, brand kits, scheduled posts, connected accounts and their sign-ins, notes, review links, link-in-bio pages, and uploaded files.':`This removes you from the workspace and deletes your sign-in, drafts, and uploads. The workspace and its ${plan.members-1} other member${plan.members===2?'':'s'} stay.`;}catch(error){$('#delete-detail').textContent=error.message;}}
 $('#account-delete')?.addEventListener('click',openDeleteDialog);
+// Change password while signed in: no email needed, the current session is the proof.
+function closePasswordForm(){const form=$('#password-form');if(!form)return;form.hidden=true;form.reset();$('#password-message').textContent='';$('#password-change').hidden=false;}
+$('#password-change')?.addEventListener('click',()=>{$('#password-form').hidden=false;$('#password-change').hidden=true;$('#password-new').focus();});
+$('#password-cancel')?.addEventListener('click',closePasswordForm);
+$('#password-form')?.addEventListener('submit',async event=>{event.preventDefault();const message=$('#password-message'),button=$('#password-save'),password=$('#password-new').value;message.classList.remove('ok');
+  if(password.length<8){message.textContent='Use at least 8 characters.';return;}
+  if(password!==$('#password-again').value){message.textContent='The two passwords don’t match.';return;}
+  button.disabled=true;button.textContent='Saving…';
+  try{const{error}=await supabaseClient.auth.updateUser({password});if(error)throw error;closePasswordForm();toast('Password changed. Use it next time you sign in.');}
+  catch(error){message.textContent=/different from the old/i.test(error.message)?'That’s your current password. Choose a new one.':/weak|pwned|leaked/i.test(error.message)?'That password is too easy to guess. Try a longer one.':/reauthenticat/i.test(error.message)?'For security, sign out, then use “Forgot password?” on the sign-in screen.':error.message;}
+  finally{button.disabled=false;button.textContent='Save password';}
+});
 $('#delete-confirm')?.addEventListener('input',event=>{$('#delete-go').disabled=event.target.value.trim()!=='DELETE';});
 $('#delete-cancel')?.addEventListener('click',()=>$('#delete-dialog').close());
 $('#delete-form')?.addEventListener('submit',async event=>{event.preventDefault();if($('#delete-confirm').value.trim()!=='DELETE')return;const button=$('#delete-go');button.disabled=true;button.textContent='Deleting…';try{await callSocialApi({action:'delete-account',confirm:'DELETE'});try{localStorage.clear();}catch{}await supabaseClient.auth.signOut().catch(()=>{});$('#delete-detail').textContent='Your account has been deleted.';setTimeout(()=>location.replace(location.pathname),1200);}catch(error){$('#delete-message').textContent=error.message;button.disabled=false;button.textContent='Delete everything';}});

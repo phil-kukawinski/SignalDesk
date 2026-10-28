@@ -57,4 +57,19 @@ export default async ({ send, evaluate, wait, log }) => {
   await evaluate(`const i=document.querySelector('#delete-confirm');i.value='DELETE';i.dispatchEvent(new Event('input',{bubbles:true}))`);
   log.push('after typing DELETE, enabled: ' + await evaluate(`!document.querySelector('#delete-go').disabled`));
   await shot('#delete-dialog', 'beta_delete.png');
+  await evaluate(`document.querySelector('#delete-dialog').close()`);
+
+  // Change password while signed in: checks the two match, then saves through the session.
+  await evaluate(`window.__pw=[];supabaseClient.auth.updateUser=async(body)=>{__pw.push(body.password);return{error:null};}`);
+  await evaluate(`document.querySelector('#password-change').click()`); await wait(200);
+  if (await evaluate(`document.querySelector('#password-form').hidden`)) log.push('[exception] Change password should open the form');
+  const typePw = (a, b) => evaluate(`document.querySelector('#password-new').value=${JSON.stringify(a)};document.querySelector('#password-again').value=${JSON.stringify(b)};document.querySelector('#password-form').requestSubmit()`);
+  await typePw('longenough1', 'different22'); await wait(200);
+  const mismatch = await evaluate(`document.querySelector('#password-message').textContent`);
+  if (!/don’t match/.test(mismatch) || await evaluate(`__pw.length`)) log.push('[exception] mismatched passwords should not save: ' + mismatch);
+  await shot('#account-panel', 'account_password.png');
+  await typePw('longenough1', 'longenough1'); await wait(300);
+  const saved = JSON.parse(await evaluate(`JSON.stringify({pw:__pw,hidden:document.querySelector('#password-form').hidden,button:!document.querySelector('#password-change').hidden})`));
+  log.push('password change: ' + JSON.stringify(saved));
+  if (saved.pw.join() !== 'longenough1' || !saved.hidden || !saved.button) log.push('[exception] matching passwords should save and close the form');
 };
