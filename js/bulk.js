@@ -1,6 +1,10 @@
 // Working on several posts at once: approve, send back, or move a selection of posts waiting
 // for approval, and copy a week (or a day) of posts to a later week.
-const bulkSelected=new Set();
+const bulkSelected=new Set(),pendingApproved=new Set();
+// A refresh while an Undo is waiting keeps showing the change: canceled posts stay hidden and
+// approved ones stay approved until the request goes out.
+const loadServerPostsUndoBase=loadServerPosts;
+loadServerPosts=async function(...args){const result=await loadServerPostsUndoBase.apply(this,args);if(hiddenPosts.size||pendingApproved.size){serverPosts=serverPosts.filter(post=>!hiddenPosts.has(post.id));serverPosts.forEach(post=>{if(pendingApproved.has(post.id)&&post.status==='pending_approval')post.status='scheduled';});refreshPostViews();}return result;};
 
 function bulkWaitingPosts(){return serverPosts.filter(post=>post.status==='pending_approval');}
 function renderBulkBar(){
@@ -34,7 +38,7 @@ document.addEventListener('click',async event=>{
   const kind=button.dataset.bulk,ids=[...bulkSelected];
   if(kind==='clear'){bulkSelected.clear();renderBulkBar();return;}
   if(!ids.length)return;
-  if(kind==='approve'){const posts=ids.map(id=>serverPosts.find(post=>post.id===id)).filter(Boolean);posts.forEach(post=>{post.status='scheduled';});bulkSelected.clear();refreshPostViews();showUndo(`${posts.length} post${posts.length===1?'':'s'} approved. Each goes out at its own time.`,{run:async()=>{const results=await bulkRun(ids,id=>({action:'approve',postId:id}));bulkReport(results,'approved');await loadServerPosts(true);},onUndo:()=>{posts.forEach(post=>{post.status='pending_approval';});refreshPostViews();},undoneMessage:'Still waiting for approval.'});return;}
+  if(kind==='approve'){const posts=ids.map(id=>serverPosts.find(post=>post.id===id)).filter(Boolean);posts.forEach(post=>{post.status='scheduled';pendingApproved.add(post.id);});bulkSelected.clear();refreshPostViews();showUndo(`${posts.length} post${posts.length===1?'':'s'} approved. Each goes out at its own time.`,{run:async()=>{const results=await bulkRun(ids,id=>({action:'approve',postId:id}));ids.forEach(id=>pendingApproved.delete(id));bulkReport(results,'approved');await loadServerPosts(true);},onUndo:()=>{posts.forEach(post=>{post.status='pending_approval';pendingApproved.delete(post.id);});refreshPostViews();},undoneMessage:'Still waiting for approval.'});return;}
   if(kind==='reject'){const note=prompt(`What should change? This note goes to the author of all ${ids.length} posts. (Optional)`);if(note===null)return;button.disabled=true;const results=await bulkRun(ids,id=>({action:'reject',postId:id,note}));bulkReport(results,'sent back');}
   if(kind==='move'){const day=$('#bulk-date')?.value;if(!day){toast('Choose a date to move the posts to.');$('#bulk-date')?.focus();return;}button.disabled=true;
     // Each post keeps its own time of day.

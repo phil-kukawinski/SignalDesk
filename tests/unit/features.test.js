@@ -113,6 +113,7 @@ const future = new Date(Date.now() + 86400000).toISOString();
   assert.match(adminWrap, /AT A GLANCE[\s\S]*Approvals: 1 update[\s\S]*YOUR POSTS[\s\S]*1 post published: 900 views · 70 engagements[\s\S]*TOP POSTS/);
   assert.doesNotMatch(userWrap, /YOUR POSTS/, 'only admins get post results');
   assert.match(calls.find((c) => c.url.includes('/notifications?')).url, /created_at=gt\.2026-10-01T13/, 'covers the past month');
+  assert.match(calls.find((c) => c.url.includes('/notifications?')).url, /data-%3E%3Eurgent=is\.null/, 'urgent alerts were already emailed, so wrap-ups skip them');
   // Monthly on another day, yearly on the 1st of its month, custom every N days from when it was chosen.
   const p = (frequency, extra = {}) => [{ user_id: A, email_frequency: frequency, email_categories: ['approvals'], weekly_day: 1, monthly_day: 15, yearly_month: 1, custom_days: 10, last_digest_at: null, updated_at: '2026-10-10T15:00:00Z', ...extra }, { user_id: U, email_frequency: 'off' }];
   prefsRows = p('monthly'); assert.equal((await processEmailDigests({ now: new Date('2026-11-01T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-11-15T13:00:00Z') })).sent, 1);
@@ -121,5 +122,14 @@ const future = new Date(Date.now() + 86400000).toISOString();
   assert.equal(calls.find((c) => c.url === 'https://api.resend.com/emails').body.subject, 'Your SignalDesk year in review');
   prefsRows = p('custom'); assert.equal((await processEmailDigests({ now: new Date('2026-10-19T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-10-20T13:00:00Z') })).sent, 1);
   prefsRows = p('custom', { last_digest_at: '2026-10-20T13:00:00Z' }); assert.equal((await processEmailDigests({ now: new Date('2026-10-29T13:00:00Z') })).sent, 0); assert.equal((await processEmailDigests({ now: new Date('2026-10-30T13:00:00Z') })).sent, 1);
+  // Urgent alerts are emailed right away even on a monthly schedule; everything else waits for the wrap-up.
+  const { notify: notifyNow } = require(R + 'notify.js');
+  prefsRows = [{ user_id: A, email_frequency: 'monthly', email_categories: ['approvals', 'publishing'] }, { user_id: U, email_frequency: 'off', email_categories: ['publishing'] }];
+  calls.length = 0;
+  await notifyNow({ workspaceId: 'ws-1', audience: 'all', type: 'publish_failed', category: 'publishing', title: 'Post failed' });
+  await notifyNow({ workspaceId: 'ws-1', audience: 'all', type: 'approval_requested', category: 'approvals', title: 'Please review' });
+  const sentNow = calls.filter((c) => c.url === 'https://api.resend.com/emails');
+  assert.deepEqual(sentNow.map((c) => [c.body.to[0], c.body.subject]), [['admin@x.com', 'Post failed']], 'only the urgent one, and not to someone with email off');
+  assert.equal(calls.find((c) => c.url.endsWith('/rest/v1/notifications') && c.method === 'POST').body[0].data.urgent, true, 'marked so wrap-ups skip it');
   console.log('feature tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

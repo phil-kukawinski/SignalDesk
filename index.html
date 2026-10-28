@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=a158014678">
+  <link rel="stylesheet" href="css/app.min.css?v=6c67468469">
 </head>
 <body class="signed-out">
   <div class="landing" id="landing">
@@ -286,7 +286,7 @@
         <label class="option-toggle"><input type="radio" name="email-frequency" value="yearly"> Year in review on <select id="yearly-month" class="field inline-select" aria-label="Year in review month"><option value="1">January</option><option value="2">February</option><option value="3">March</option><option value="4">April</option><option value="5">May</option><option value="6">June</option><option value="7">July</option><option value="8">August</option><option value="9">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select> 1</label>
         <label class="option-toggle"><input type="radio" name="email-frequency" value="custom"> Custom: every <input id="custom-days" class="field inline-select inline-number" type="number" min="2" max="180" value="14" aria-label="Days between wrap-ups"> days</label>
         <label class="option-toggle"><input type="radio" name="email-frequency" value="off"> Never</label>
-        <p class="option-hint">Wrap-ups arrive at 8 AM in your workspace’s time zone. Monthly and longer ones give a count of updates, the latest few, and how your posts did.</p>
+        <p class="option-hint">Wrap-ups arrive at 8 AM in your workspace’s time zone. Monthly and longer ones give a count of updates, the latest few, and how your posts did. Urgent alerts (a post that failed, an account that needs reconnecting, a post to publish yourself) are emailed right away whatever you choose here, unless you pick Never or untick Publishing.</p>
       </fieldset>
       <fieldset class="pref-group"><legend class="field-label">Include</legend>
         <label class="option-toggle"><input type="checkbox" name="email-category" value="approvals" checked> Approvals — posts waiting for review and decisions</label>
@@ -478,6 +478,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=a0a85fbced"></script>
+  <script src="js/app.min.js?v=b75a5c1f36"></script>
 </body>
 </html>

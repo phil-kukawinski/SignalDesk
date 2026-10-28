@@ -69,12 +69,22 @@ async function saveConnection({ workspaceId, clientId, userId, candidate, connec
   });
 }
 
-async function markNeedsReauth(connectionId, message) {
+async function markNeedsReauth(connectionId, message, { alert = true } = {}) {
   if (!connectionId) return;
+  // Only an account that was working is announced, so repeated failures don't repeat the alert.
+  const [before] = await databaseRequest(`social_connections?id=eq.${connectionId}&select=workspace_id,client_id,platform,status`).catch(() => []) || [];
   await databaseRequest(`social_connections?id=eq.${connectionId}`, {
     method: 'PATCH', headers: { prefer: 'return=minimal' },
     body: JSON.stringify({ status: 'needs_reauth', last_error: message, updated_at: nowIso() })
   });
+  if (alert && before?.status === 'active') {
+    const client = ((await getWorkspaceState(before.workspace_id).catch(() => ({}))).clients || []).find((item) => item.id === before.client_id);
+    await require('./notify').notify({
+      workspaceId: before.workspace_id, audience: 'admins', type: 'connection_signed_out', category: 'publishing',
+      title: `Reconnect ${label(before.platform)}${client ? ` for ${client.name}` : ''}`,
+      body: `${String(message || 'The network signed SignalDesk out.').slice(0, 200)} Scheduled posts to this account will fail until it’s reconnected.`, view: 'social-accounts'
+    });
+  }
 }
 
 // Refreshes a token that is about to expire, when the network supports it.
@@ -548,7 +558,7 @@ async function maintainConnections({ encryptionKey, limit = 20 } = {}) {
     const client = ((await getWorkspaceState(connection.workspace_id)).clients || []).find((item) => item.id === connection.client_id);
     const name = `${label(connection.platform)}${client ? ` for ${client.name}` : ''}`;
     if (expires <= Date.now()) {
-      await markNeedsReauth(connection.id, `The ${label(connection.platform)} sign-in expired. Reconnect the account.`);
+      await markNeedsReauth(connection.id, `The ${label(connection.platform)} sign-in expired. Reconnect the account.`, { alert: false });
       await notify({ workspaceId: connection.workspace_id, audience: 'admins', type: 'connection_expired', category: 'publishing', title: `Reconnect ${name}`, body: 'The sign-in expired, so scheduled posts to this account will fail until it is reconnected.', view: 'social-accounts' });
       expired += 1;
     } else if (!connection.expiry_notified_at) {

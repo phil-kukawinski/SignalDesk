@@ -5,6 +5,9 @@ const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing'];
 const FREQUENCIES = ['immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'];
 const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, last_digest_at: null };
 const DIGEST_HOUR = 8;
+// Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
+// category is unticked) and left out of digests so they don't arrive twice.
+const URGENT_TYPES = new Set(['publish_failed', 'publish_unknown', 'connection_expired', 'connection_expiring', 'connection_signed_out', 'manual_due', 'worker_stalled', 'comment_failed']);
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing' };
@@ -67,6 +70,8 @@ async function sendEmail(to, subject, content) {
 // Creates in-app notifications and sends immediate emails. Never throws: a failed
 // notification must not undo the action that triggered it.
 async function notify({ workspaceId, audience = 'admins', userIds = [], excludeUserId, type, category, title, body = '', view = null, data = {} }) {
+  const urgent = URGENT_TYPES.has(type);
+  if (urgent) data = { ...data, urgent: true };
   try {
     const members = await databaseRequest(`workspace_members?workspace_id=eq.${workspaceId}&select=user_id,email,role`) || [];
     const recipients = members.filter((member) => member.user_id !== excludeUserId
@@ -82,7 +87,7 @@ async function notify({ workspaceId, audience = 'admins', userIds = [], excludeU
       const preferences = await preferencesFor(recipients.map((member) => member.user_id));
       for (const member of recipients) {
         const prefs = withDefaults(preferences.get(member.user_id));
-        if (prefs.email_frequency !== 'immediate' || !prefs.email_categories.includes(category) || !member.email) continue;
+        if (!(prefs.email_frequency === 'immediate' || (urgent && prefs.email_frequency !== 'off')) || !prefs.email_categories.includes(category) || !member.email) continue;
         await sendEmail(member.email, title, renderEmail({ heading: title, intro: body || 'There is new activity in your SignalDesk workspace.', sections: [] }))
           .catch((error) => console.error('Immediate email failed:', error.message));
       }
@@ -190,7 +195,7 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
     if (!schedule.due) continue;
     const since = prefs.last_digest_at && Date.parse(prefs.last_digest_at) > schedule.start ? prefs.last_digest_at : schedule.start.toISOString();
     const short = ['daily', 'weekly'].includes(prefs.email_frequency);
-    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, order: 'created_at.desc', limit: short ? '50' : '1000' });
+    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, 'data->>urgent': 'is.null', order: 'created_at.desc', limit: short ? '50' : '1000' });
     const notifications = await databaseRequest(`notifications?${query}`) || [];
     const copy = digestCopy(prefs, schedule, notifications.length);
     const listItem = (item) => ({ title: item.title, body: item.body, meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) });
@@ -282,4 +287,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { CATEGORIES, FREQUENCIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { URGENT_TYPES, CATEGORIES, FREQUENCIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

@@ -1466,3 +1466,5 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .audience-card{flex-wrap:wrap}
 .audience-spark{flex-basis:100%;width:100%;height:30px;margin-top:2px}
 .campaign-bar i{margin-left:0}
+@media(max-width:620px){.audience-spark{flex-basis:auto;width:100%;height:28px}}
+.undo-bar{left:16px;right:16px;margin:0 auto;width:fit-content;transform:none}
