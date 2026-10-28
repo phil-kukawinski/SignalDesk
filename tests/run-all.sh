@@ -5,6 +5,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 failed=0
+# The page loads the combined files, so build them from the current sources first.
+node scripts/build.mjs >/dev/null || { echo "Build failed. Run: npm run bundle"; exit 1; }
 if [ -t 1 ]; then green=$'\033[32m'; red=$'\033[31m'; plain=$'\033[0m'; else green=''; red=''; plain=''; fi
 pass() { printf '  %s✓%s %s\n' "$green" "$plain" "$1"; }
 fail() { printf '  %s✕%s %s\n%s\n' "$red" "$plain" "$1" "$2"; failed=1; }
@@ -28,7 +30,7 @@ for test in tests/ui/ui*.js; do
 done
 
 echo "Browser"
-for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs tests/browser/formats.mjs; do
+for step in tests/browser/load.mjs tests/browser/controls.mjs tests/browser/composer.mjs tests/browser/beta.mjs tests/browser/network.mjs tests/browser/home.mjs tests/browser/tour.mjs tests/browser/media.mjs tests/browser/formats.mjs tests/browser/workflows.mjs; do
   out=$(SHOTS="${TMPDIR:-/tmp}/" node tests/browser/cdp.mjs "$step" 2>&1 | grep -v 'offline in this test')
   if echo "$out" | grep -q '\[exception\]\|\[console.error\]'; then fail "$(basename "$step")" "$(echo "$out" | grep '\[exception\]\|\[console.error\]' | head -5)"
   else pass "$(basename "$step")"; fi

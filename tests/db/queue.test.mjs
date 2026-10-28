@@ -564,6 +564,26 @@ assert.equal(copy.evergreen, true);
 assert.ok(copy.scheduled_for.getTime() >= future + 14 * 86400000 - 60000, 'rests 14 days');
 assert.equal(copy.content.text, tagged.content.text);
 
+// Copying posts a week later: same local time, approval state kept, comments and options carried over.
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Week one post', platforms: ['facebook'], scheduleDate: new Date(future).toISOString(), options: { firstComment: 'Link in bio' } });
+const weekOne = r.payload.post.id;
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Week one draft', platforms: ['facebook'], scheduleDate: new Date(future + 3600000).toISOString(), requiresApproval: true });
+const weekOneHeld = r.payload.post.id;
+r = await call({ action: 'copy-posts', postIds: [weekOne, weekOneHeld], offsetDays: 7 }, 'user');
+assert.equal(r.status, 403, 'only admins copy posts');
+r = await call({ action: 'copy-posts', postIds: [weekOne], offsetDays: 0 });
+assert.equal(r.status, 400);
+r = await call({ action: 'copy-posts', postIds: [weekOne, weekOneHeld], offsetDays: 7 });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.equal(r.payload.created.length, 2);
+const copies = await q(`select id, status, scheduled_for, content, options from scheduled_posts where id in ('${r.payload.created.map((c) => c.id).join("','")}') order by scheduled_for`);
+assert.equal(copies[0].scheduled_for.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }), new Date(future).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }), 'same local time');
+assert.ok(Math.abs(copies[0].scheduled_for.getTime() - future - 7 * 86400000) <= 3600000, 'a week later');
+assert.deepEqual(copies.map((c) => c.status), ['scheduled', 'pending_approval']);
+assert.equal(copies[0].content.text, 'Week one post');
+assert.equal(copies[0].options.firstComment.comment, 'Link in bio');
+assert.equal((await q(`select count(*)::int as n from publish_jobs where post_id='${copies[0].id}'`))[0].n, 1);
+
 // --- Notes, review links, and client decisions ---
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Needs client OK', platforms: ['facebook'], scheduleDate: new Date(future).toISOString(), requiresApproval: true });
 const reviewPostId = r.payload.post.id;

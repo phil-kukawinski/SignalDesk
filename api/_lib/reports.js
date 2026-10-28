@@ -131,9 +131,18 @@ async function buildTopPostsReport({ profile, workspaceId, encryptionKey, client
     const direct = await require('./publishing').directPostRows({ workspaceId, clientId, start, end, encryptionKey });
     errors.push(...direct.errors);
     direct.rows.forEach(({ raw, ...row }) => rows.push({ ...row, metrics: finishMetrics(raw) }));
+    // Posts made on the networks themselves (read in by the account sync), so a report covers everything the client published.
+    const outside = new URLSearchParams({ select: 'id,platform,url,text,media_url,published_at,metrics', workspace_id: `eq.${workspaceId}`, client_id: `eq.${clientId}`, job_id: 'is.null', order: 'published_at.desc', limit: '500' });
+    outside.append('published_at', `gte.${new Date(start).toISOString()}`);
+    outside.append('published_at', `lte.${new Date(end).toISOString()}`);
+    const networkRows = await databaseRequest(`network_posts?${outside}`).catch((error) => { errors.push({ postId: null, message: `Couldn't load posts made outside SignalDesk: ${error.message}` }); return []; }) || [];
+    networkRows.forEach((post) => rows.push({
+      id: `net:${post.id}`, providerPostId: `net:${post.id}`, platform: post.platform, text: (post.text || '').slice(0, 500), url: post.url || '', campaign: '',
+      media: post.media_url || null, publishedAt: post.published_at, metrics: finishMetrics(post.metrics || {}), hasData: Boolean(post.metrics && Object.keys(post.metrics).length), outside: true
+    }));
   }
   const totals = reportTotals(rows);
-  const postCount = posts.length + rows.filter((row) => row.id.startsWith('job:')).length;
+  const postCount = posts.length + rows.filter((row) => row.id.startsWith('job:') || row.id.startsWith('net:')).length;
   return { clientId, clientName, start: new Date(start).toISOString(), end: new Date(end).toISOString(), generatedAt: new Date().toISOString(), postCount, rows, totals, errors };
 }
 

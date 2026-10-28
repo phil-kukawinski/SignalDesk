@@ -100,6 +100,9 @@ function openFeedback(kind='problem'){
 }
 function setFeedbackKind(kind){const dialog=$('#feedback-dialog');if(!dialog)return;dialog.dataset.kind=kind;dialog.querySelectorAll('[data-kind]').forEach(button=>{const on=button.dataset.kind===kind;button.classList.toggle('active',on);button.setAttribute('aria-checked',String(on));});}
 document.addEventListener('click',event=>{if(event.target.closest('[data-open-feedback]')){event.preventDefault();openFeedback();}});
+// The change from the previous time frame. Very large jumps (usually an account with little
+// earlier history) read better as the earlier number than as a percentage.
+function periodChangeHtml(total,previous,label){const change=Math.round((total-previous)/previous*1000)/10;if(change>300)return `<span class="trend up">↗ up from ${compactNumber(previous)}</span> the previous ${label}`;return `<span class="trend ${change>=0?'up':'down'}">${change>=0?'↗':'↘'} ${Math.abs(change)}%</span> vs. previous ${label}`;}
 // Explainer bubbles float above the page, so cards that clip their contents can't cut them off.
 // They sit above the icon, flip below when there isn't room, and stay inside the window.
 (function(){let bubble=null,current=null;

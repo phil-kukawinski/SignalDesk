@@ -7,7 +7,7 @@ TEST="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 PAGE="$ROOT/_uitest.html"
 trap 'rm -f "$PAGE"' EXIT
 python3 -I -c "
-import sys;s=open(sys.argv[1],encoding='utf-8').read();t=open(sys.argv[2],encoding='utf-8').read();f=open(sys.argv[4],encoding='utf-8').read()
-open(sys.argv[3],'w',encoding='utf-8').write(s.replace('<script src=\"js/app.js\"></script>','<script src=\"js/app.js\"></script><script>'+f+'</script><script>'+t+'</script>'))" "$ROOT/index.html" "$TEST" "$PAGE" "$ROOT/tests/fixtures/sample.js"
+import sys,re;s=open(sys.argv[1],encoding='utf-8').read();t=open(sys.argv[2],encoding='utf-8').read();f=open(sys.argv[4],encoding='utf-8').read()
+open(sys.argv[3],'w',encoding='utf-8').write(re.sub(r'(<script src=\"js/app\.min\.js[^\"]*\"></script>)',lambda m:m.group(1)+'<script>'+f+'</script><script>'+t+'</script>',s,count=1))" "$ROOT/index.html" "$TEST" "$PAGE" "$ROOT/tests/fixtures/sample.js"
 CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 "$CHROME" --headless=new --disable-gpu --allow-file-access-from-files --virtual-time-budget=10000 --window-size=1400,1000 --dump-dom "file://$PAGE#${2:-}" 2>/dev/null | tr '\n' ' ' | grep -o 'data-\(log\|err\)="[^"]*"' | sed 's/ || /\n/g; s/&quot;/"/g; s/&amp;/\&/g; s/&lt;/</g' || true

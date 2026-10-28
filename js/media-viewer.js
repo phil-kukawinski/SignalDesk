@@ -6,13 +6,21 @@
   const isVideo=url=>VIDEO.test(url);
 
   // Thumbnail strip; every thumbnail opens the viewer at that item.
+  // Small versions of uploaded photos for thumbnails. Needs Supabase image resizing (Pro plan), so it's
+  // off until imageThumbnails is set in js/config.js; a thumbnail that fails falls back to the full photo.
+  window.thumbUrl=function(url,width=240){
+    if(!window.SIGNALDESK_CONFIG?.imageThumbnails||typeof url!=='string'||isVideo(url)||!url.includes('/storage/v1/object/public/'))return url;
+    return `${url.replace('/storage/v1/object/public/','/storage/v1/render/image/public/')}${url.includes('?')?'&':'?'}width=${width}&quality=70`;
+  };
+  window.thumbImgHtml=function(url,width=240,attrs=''){const small=thumbUrl(url,width);return `<img src="${esc(small)}"${small!==url?` data-full="${esc(url)}"`:''} alt="" loading="lazy" decoding="async"${attrs}>`;};
+  document.addEventListener('error',event=>{const img=event.target;if(img?.tagName==='IMG'&&img.dataset.full&&img.src!==img.dataset.full){img.src=img.dataset.full;delete img.dataset.full;}},true);
   window.mediaThumbsHtml=function(urls,{max=6,className=''}={}){
     const list=(urls||[]).filter(url=>typeof url==='string'&&/^https?:\/\//.test(url));
     if(!list.length)return'';
     const shown=list.slice(0,max),extra=list.length-shown.length;
     return `<div class="media-thumbs ${className}" data-media="${esc(JSON.stringify(list))}">${shown.map((url,index)=>{
       const label=isVideo(url)?'Play video':'View image',more=extra&&index===shown.length-1?`<span class="media-thumb-more">+${extra}</span>`:'';
-      const inner=isVideo(url)?`<video src="${esc(url)}#t=0.1" muted playsinline preload="metadata"></video><span class="media-thumb-play" aria-hidden="true">▶</span>`:`<img src="${esc(url)}" alt="" loading="lazy">`;
+      const inner=isVideo(url)?`<video src="${esc(url)}#t=0.1" muted playsinline preload="metadata"></video><span class="media-thumb-play" aria-hidden="true">▶</span>`:thumbImgHtml(url,className==='large'?640:240);
       return `<button type="button" class="media-thumb" data-media-index="${index}" aria-label="${label} ${index+1} of ${list.length}">${inner}${more}</button>`;
     }).join('')}</div>`;
   };
@@ -35,7 +43,7 @@
     if(!items.length)return;
     current=(index+items.length)%items.length;
     const url=items[current];
-    viewer.querySelector('.media-viewer-stage').innerHTML=isVideo(url)?`<video src="${esc(url)}" controls autoplay playsinline></video>`:`<img src="${esc(url)}" alt="">`;
+    viewer.querySelector('.media-viewer-stage').innerHTML=isVideo(url)?`<video src="${esc(url)}" controls autoplay playsinline></video>`:`<img loading="lazy" decoding="async" src="${esc(url)}" alt="">`;
     viewer.querySelector('.media-viewer-count').textContent=items.length>1?`${current+1} of ${items.length}`:'';
     viewer.querySelectorAll('.media-viewer-nav').forEach(button=>{button.hidden=items.length<2;});
   }

@@ -12,7 +12,7 @@ const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lo
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
 const { pushConfigured } = require('./_lib/push');
@@ -43,7 +43,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now'
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
@@ -684,6 +684,19 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'cancel-post') {
     const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' });
     await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.email, detail: { keptPublished: result.keptPublished } });
+    return send(res, 200, result);
+  }
+
+  if (action === 'copy-posts') {
+    const ids = Array.isArray(body.postIds) ? [...new Set(body.postIds.filter((id) => typeof id === 'string' && validUuid(id)))] : [];
+    const offsetDays = parseInt(body.offsetDays, 10);
+    if (!ids.length || ids.length > 50) return send(res, 400, { error: 'Choose between 1 and 50 posts to copy.' });
+    if (!Number.isInteger(offsetDays) || offsetDays < 1 || offsetDays > 365) return send(res, 400, { error: 'Copy posts between 1 and 365 days later.' });
+    const since = new Date(Date.now() - 86400000).toISOString();
+    const recent = await databaseRequest(`scheduled_posts?${scope}&created_at=gte.${since}&select=id&limit=${DAILY_POST_LIMIT}`) || [];
+    if (recent.length + ids.length > DAILY_POST_LIMIT) return send(res, 429, { error: `That would pass the beta limit of ${DAILY_POST_LIMIT} new posts in 24 hours. Copy fewer posts or try again later.` });
+    const state = await getWorkspaceState(workspaceId);
+    const result = await copyPosts(workspaceId, { postIds: ids, offsetDays, userId: user.id, timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', encryptionKey, actorName: membership.email });
     return send(res, 200, result);
   }
 

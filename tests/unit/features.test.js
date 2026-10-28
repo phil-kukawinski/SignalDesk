@@ -44,6 +44,7 @@ global.fetch = async (input, opts = {}) => {
   if (url.includes('/rest/v1/post_submissions?workspace_id=eq.ws-1&provider_post_id=eq.post-1&select')) return ok([{ submitted_by: U, title: 'Fall kits are here', decided_at: null }]);
   if (url.includes('/rest/v1/notifications?') && method === 'GET') return ok([{ title: 'New post awaiting approval', body: 'x', category: 'approvals', created_at: new Date().toISOString() }]);
   if (url.includes('/rest/v1/weekly_reports?') && method === 'GET') return ok([]);
+  if (url.includes('/rest/v1/network_posts?') && method === 'GET' && url.includes('job_id=is.null')) return ok([]);
   if (url.includes('/rest/v1/network_posts?') && method === 'GET') return ok(url.includes('offset=0') || !url.includes('offset=') ? [{ client_id: 'pk-works', platform: 'instagram', text: 'Fall kits', url: 'https://instagram.com/p/9', published_at: '2026-10-20T14:00:00Z', metrics: { views: 900, engagements: 70 } }] : []);
   if (url.includes('/rest/v1/trend_reports?') && method === 'GET') return ok([]);
   if (url.includes('/rest/v1/trend_reports') && method === 'POST') return ok([{ id: 't1', ...body, created_at: new Date().toISOString() }], 201);

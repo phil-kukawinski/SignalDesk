@@ -889,6 +889,7 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
   // Per client, for goals: engagement rate counts only posts that report an audience.
   const byClient = {};
   let total = 0, previous = 0, measured = 0, reach = 0, rated = 0;
+  const previousDaily = Array(points).fill(0);
   for (const row of rows.values()) {
     if (typeof row.engagements !== 'number') continue;
     if (row.at >= rangeStart) {
@@ -900,11 +901,16 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
       if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; reach += row.audience; rated += row.engagements; }
       const key = step === 1 ? dayKey(row.at) : bucketFor(row.at);
       if (key in daily) daily[key] += row.engagements;
-    } else if (row.at >= windowStart) previous += row.engagements;
+    } else if (row.at >= windowStart) {
+      previous += row.engagements;
+      // The same point one time frame earlier, so the chart can show both.
+      const index = points - 1 - Math.floor((rangeStart - row.at) / (step * 86400000));
+      if (index >= 0 && index < points) previousDaily[index] += row.engagements;
+    }
   }
   return {
     clientId, clicks, audience, published, range, step,
-    engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day) => ({ day, engagements: daily[day] })), byPlatform },
+    engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day, index) => ({ day, engagements: daily[day], previous: previousDaily[index] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
       active: connections.filter((item) => item.status === 'active').length,
@@ -914,6 +920,37 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
     },
     worker: { lastRun, stale: !lastRun || now - Date.parse(lastRun) > WORKER_STALE_MS }
   };
+}
+
+// Copies posts a number of days later (for example, a whole week to the next week), keeping each
+// post's local time of day. Posts that were waiting for approval stay that way; the rest are scheduled.
+async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 'America/New_York', encryptionKey, actorName = null }) {
+  const { zonedParts, zonedToUtc } = require('./core');
+  const created = [], skipped = [];
+  for (const id of postIds) {
+    const original = await getPost(workspaceId, id).catch(() => null);
+    if (!original || original.status === 'canceled') { skipped.push({ id, reason: 'not found or canceled' }); continue; }
+    const jobs = (original.publish_jobs || []).filter((job) => job.status !== 'canceled');
+    const platforms = [...new Set(jobs.filter((job) => job.provider !== 'manual').map((job) => job.platform))];
+    const manual = [...new Set(jobs.filter((job) => job.provider === 'manual').map((job) => job.platform))];
+    const parts = zonedParts(new Date(original.scheduled_for), timeZone);
+    const day = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offsetDays));
+    const at = zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), parts.hour, parts.minute, timeZone);
+    if (at < Date.now() + 5 * 60000) { skipped.push({ id, reason: 'the new time has already passed' }); continue; }
+    const { reposts, repostOf, ...options } = original.options || {};
+    const content = original.content || {};
+    try {
+      const post = await createScheduledPost({
+        workspaceId, clientId: original.client_id, userId, title: original.title, platforms, manual, text: content.text || '', mediaUrls: content.media || [],
+        platformContent: content.platformContent || {}, mediaAlt: content.mediaAlt || {}, options, scheduledFor: at, held: original.status === 'pending_approval',
+        campaign: original.campaign || null, encryptionKey, timeZone, actorName
+      });
+      created.push({ id: post.id, from: id, scheduledFor: new Date(at).toISOString() });
+    } catch (error) {
+      skipped.push({ id, reason: error.message });
+    }
+  }
+  return { created, skipped };
 }
 
 // --- Posting queues and evergreen posts ---
@@ -1090,4 +1127,4 @@ module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows };
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts };

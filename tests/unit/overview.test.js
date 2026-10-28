@@ -28,6 +28,8 @@ const { overviewData } = require(ROOT + '/api/_lib/publishing.js');
   networkRows = [post('a', 1, 7), post('b', 10, 5), post('c', 40, 3), post('d', 200, 2), post('e', 500, 1)];
   let range = await overviewData('w1', 'America/New_York', null, 7);
   assert.deepEqual([range.range, range.engagement.total, range.engagement.previous, range.engagement.daily.length, range.published.total], [7, 7, 5, 7, 1]);
+  assert.equal(range.engagement.daily.reduce((sum, point) => sum + point.previous, 0), 5, 'the previous week is charted alongside');
+  assert.equal(range.engagement.daily[3].previous, 5, 'ten days ago lines up with three days ago');
   range = await overviewData('w1', 'America/New_York', null, 90);
   assert.deepEqual([range.engagement.total, range.engagement.previous, range.engagement.daily.length], [15, 0, 90]);
   range = await overviewData('w1', 'America/New_York', null, 365);

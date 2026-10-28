@@ -11,9 +11,12 @@
     "web-push": "3.6.7"
   },
   "scripts": {
+    "bundle": "node scripts/build.mjs",
     "test": "bash tests/run-all.sh"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8"
+    "@electric-sql/pglite": "0.5.8",
+    "acorn": "^8.15.0",
+    "esbuild": "^0.25.10"
   }
 }
