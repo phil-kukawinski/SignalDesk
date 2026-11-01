@@ -16,6 +16,8 @@ function minutesText(seconds){return seconds<120?`${Math.round(seconds)} seconds
 // Problems a network would refuse ("error": it won't post there) or might handle badly ("warn").
 function mediaRuleIssues(platform){const variant=variantFor(platform),items=variant.media.length?variant.media.map(media=>({video:isVideoMedia(media),src:media.url})):variant.preview?[{video:variant.preview.kind==='video',src:variant.preview.src}]:[],videos=items.filter(item=>item.video),images=items.length-videos.length,issues=[],add=(level,message)=>issues.push({level,message});
   if(!items.length)return issues;
+  // Pinterest posting the cover as a still image: the video's own rules don't apply.
+  if(platform==='pinterest'&&postOptions.pinterest?.coverAsImage&&items.some(item=>item.video)){if(!draftCover()?.url)add('error','Choose a cover frame or image for the Pin, or untick “Post the video’s cover as an image Pin”.');return issues;}
   const videoSrc=videos.length?(variant.preview?.kind==='video'?variant.preview.src:videos[0].src):null,info=videoSrc?probeVideo(videoSrc):null,seconds=info?.duration&&isFinite(info.duration)?info.duration:null;
   if(['pinterest','linkedin'].includes(platform)&&videos.length&&(videos.length>1||images))add('error',`${platformLabel(platform)} takes one video, without images.`);
   if(platform==='linkedin'&&seconds>900)add('warn',`The video is ${minutesText(seconds)}. LinkedIn takes videos up to 15 minutes.`);

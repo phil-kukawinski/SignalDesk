@@ -276,6 +276,7 @@ function validatePostOptions(options, platforms) {
     if (title) pin.title = title;
     if (link) pin.link = link;
     if (options.pinterest.boardId) pin.boardId = String(options.pinterest.boardId);
+    if (options.pinterest.coverAsImage === true) pin.coverAsImage = true;
     if (Object.keys(pin).length) clean.pinterest = pin;
   }
   // Video cover: a frame time (milliseconds into the video) and/or an uploaded image.

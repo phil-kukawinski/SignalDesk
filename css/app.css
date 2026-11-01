@@ -427,6 +427,8 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .post-dialog-head small{color:var(--text-muted);font-size:12px}
 .post-dialog-head h2{margin:4px 0}
 .post-dialog-head p{margin:0;color:var(--text-muted);font-size:13px}
+.post-dialog-corner{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.post-dialog-x{font-size:20px;margin:-6px -8px 0 0}
 .post-dialog-copy{margin:14px 0 8px;padding:12px;border-radius:10px;background:var(--bg);white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55;max-height:180px;overflow:auto}
 .job-list{display:grid;gap:8px;margin:14px 0}
 .job-row{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px;border:1px solid var(--border-strong);border-radius:10px}
@@ -1509,7 +1511,7 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .plan-meta{font-size:12px;color:var(--text-muted);margin:10px 0 0}
 @media(max-width:900px){.plan-layout{grid-template-columns:1fr;gap:20px}.plan-note{border-left:0;padding-left:0;border-top:1px solid var(--border);padding-top:18px}}
 @media(max-width:620px){.plan-date{grid-template-columns:40px minmax(0,1fr)}.plan-button{grid-column:2;justify-self:start}.plan-idea{grid-template-columns:1fr}.plan-idea .secondary-button{justify-self:start}}
-.holiday.major{font-weight:700}.holiday:not(.major){font-weight:500;opacity:.85}
+.holiday.major{font-weight:700}.holiday:not(.major){font-weight:500}
 .notification-icon.planning{background:var(--accent-soft);color:var(--accent-text)}
 
 /* Reminder settings */

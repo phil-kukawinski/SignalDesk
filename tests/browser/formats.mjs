@@ -36,6 +36,14 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!cover.cover?.url || !(cover.cover.offsetMs >= 1300 && cover.cover.offsetMs <= 1700) || cover.type !== 'image/jpeg' || cover.size < 500 || cover.dialog || !cover.thumb || !cover.preview) log.push('[exception] the chosen frame should be saved as a JPEG cover and shown');
   if (out) { await evaluate(`document.querySelector('#cover-picker').scrollIntoView({block:'center'})`); await wait(300); const { result } = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(out + 'cover_picker.png', Buffer.from(result.data, 'base64')); }
 
+  // Pinterest can post the cover as a still image instead of the video.
+  if (await evaluate(`document.querySelector('#pin-cover-row').hidden`)) log.push('[exception] the cover-as-image option should show when a video is attached');
+  await evaluate(`(()=>{const box=document.querySelector('#pin-cover-image');box.checked=true;box.dispatchEvent(new Event('change',{bubbles:true}));selectVariant('pinterest');})()`); await wait(400);
+  const still = JSON.parse(await evaluate(`JSON.stringify({option:buildPostOptionsPayload(['pinterest']).pinterest,img:document.querySelector('.pv-pin #preview-media img')?.getAttribute('src'),hint:document.querySelector('#pin-media-hint').textContent,summary:document.querySelector('#pinterest-summary').textContent})`));
+  log.push('pin still: ' + JSON.stringify(still));
+  if (!still.option?.coverAsImage || !/cover-\d+\.jpg/.test(still.img || '') || !/still image/.test(still.hint) || !/Cover as image/.test(still.summary)) log.push('[exception] Pinterest should use the cover as an image Pin');
+  await evaluate(`selectVariant('all')`); await wait(200);
+
   // TikTok gets its own image (TikTok needs video): scheduling asks first, then posts to the others without it.
   await evaluate(`(()=>{document.querySelector('.account-select').insertAdjacentHTML('beforeend','<label><input type="checkbox" value="tiktok" checked>tiktok</label>');platformOverrides.tiktok={media:[{path:'',url:'https://media.test/still.jpg',name:'still.jpg',type:'image/jpeg'}]};updatePreview();})()`); await wait(300);
   await evaluate(`document.querySelector('#schedule-post').click()`); await wait(500);

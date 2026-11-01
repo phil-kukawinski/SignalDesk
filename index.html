@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=6224316496">
+  <link rel="stylesheet" href="css/app.min.css?v=a51124cfed">
 </head>
 <body class="signed-out">
   <div class="landing" id="landing">
@@ -187,7 +187,8 @@
 <label class="field-label" for="pin-board">Board</label><select id="pin-board" class="field"></select>
 <label class="field-label" for="pin-title">Pin title</label><input id="pin-title" class="field" maxlength="100" placeholder="Defaults to the first line of the copy" autocomplete="off">
 <label class="field-label" for="pin-link">Destination link</label><input id="pin-link" class="field" type="url" placeholder="Defaults to the first link in the copy" autocomplete="off">
-<p class="option-hint">Pins need an image. Video Pins aren’t supported yet.</p>
+<label class="option-toggle" id="pin-cover-row" hidden><input type="checkbox" id="pin-cover-image"> Post the video’s cover as an image Pin</label>
+<p class="option-hint" id="pin-media-hint">Pins take up to 5 images or one video.</p>
 </div></details>
 <details class="option-group"><summary><b>Repeat</b><small id="reshare-summary">Off</small></summary><div class="option-body">
 <label class="option-toggle"><input type="checkbox" id="reshare-enabled"> Post this again on a schedule</label><div class="schedule-fields" id="reshare-fields"><div><label class="field-label" for="reshare-every">Repeat</label><select id="reshare-every" class="field"><option value="7">Weekly</option><option value="14">Every 2 weeks</option><option value="month">Monthly</option><option value="custom">Every … days</option></select></div><div><label class="field-label" for="reshare-repeat">More times</label><input type="number" id="reshare-repeat" class="field" min="1" max="26" value="2"></div><div id="reshare-days-field"><label class="field-label" for="reshare-days">Days apart</label><input type="number" id="reshare-days" class="field" min="2" max="365" value="7"></div></div><p class="option-hint">Each repeat is scheduled as its own post at the same local time, with the same copy and media. Comments aren’t repeated.</p>
@@ -486,6 +487,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=79f600b96a"></script>
+  <script src="js/app.min.js?v=1e00b74b4f"></script>
 </body>
 </html>

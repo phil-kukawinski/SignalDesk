@@ -65,6 +65,9 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`serverPosts.slice(0,3).forEach(p=>{p.status='pending_approval';});renderApprovals()`); await wait(100);
   // Canceling a post waits too, and Undo brings it back without sending anything.
   await evaluate(`openPostDialog('11111111-0000-4000-8000-000000000004')`); await wait(300);
+  await evaluate(`document.querySelector('.post-dialog-x').click()`); await wait(200);
+  if (await evaluate(`document.querySelector('#post-dialog').open`)) fail('the × should close the post dialog');
+  await evaluate(`openPostDialog('11111111-0000-4000-8000-000000000004')`); await wait(300);
   await evaluate(`document.querySelector('[data-cancel-post]')?.click()`); await wait(200);
   const hidden = await evaluate(`!serverPosts.some(p=>p.id.endsWith('04'))`);
   await evaluate(`undoNow()`); await wait(100);

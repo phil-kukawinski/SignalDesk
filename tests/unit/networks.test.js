@@ -216,6 +216,14 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   assert.deepEqual(JSON.parse(calls.find((call) => /v5\/pins$/.test(call.url)).body).media_source, { source_type: 'video_id', media_id: 'm-1', cover_image_url: 'https://cdn.test/cover.jpg' });
   assert.equal(calls.filter((call) => /v5\/media$/.test(call.url)).length, 1, 'registered once');
 
+  // --- Cover as an image Pin: the chosen cover is pinned, the video never uploads
+  calls.length = 0;
+  out = await PROVIDERS.pinterest.publish(ctx({ job: { id: 'job-ps', platform: 'pinterest' }, connection: { token: 'pt', meta: { boardId: 'b1' } }, content: { text: 'Fall kits still', media: ['https://cdn.test/clip.mp4'] }, options: { cover: { url: 'https://cdn.test/cover.jpg' }, pinterest: { coverAsImage: true } } }));
+  assert.equal(out.externalId, 'pin-9');
+  assert.deepEqual(JSON.parse(calls.find((call) => /v5\/pins$/.test(call.url)).body).media_source, { source_type: 'image_url', url: 'https://cdn.test/cover.jpg' });
+  assert.ok(!calls.some((call) => /v5\/media|clip\.mp4/.test(call.url)), 'no video upload');
+  await assert.rejects(PROVIDERS.pinterest.publish(ctx({ job: { id: 'job-pn', platform: 'pinterest' }, connection: { token: 'pt', meta: { boardId: 'b1' } }, content: { text: 'x', media: ['https://cdn.test/clip.mp4'] }, options: { pinterest: { coverAsImage: true } } })), /cover frame/);
+
   // --- LinkedIn video: parts uploaded with their ETags, finalized, posted once available
   calls.length = 0;
   let videoStatus = ['PROCESSING', 'AVAILABLE'];

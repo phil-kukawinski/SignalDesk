@@ -754,8 +754,12 @@ const pinterest = {
   },
 
   async publish({ connection, content, options, stage = {}, saveStage = async () => {}, markSent }) {
-    const images = content.media.filter((url) => mediaKind(url) === 'image');
-    const videos = content.media.filter((url) => mediaKind(url) === 'video');
+    // "Post the video's cover as an image Pin": the chosen cover goes up as a still image instead of the video.
+    const still = options.pinterest?.coverAsImage && content.media.some((url) => mediaKind(url) === 'video');
+    if (still && !options.cover?.url) throw new PublishError('invalid', 'Choose a cover frame or image for this Pin, or post the video instead.');
+    const media = still ? [options.cover.url] : content.media;
+    const images = media.filter((url) => mediaKind(url) === 'image');
+    const videos = media.filter((url) => mediaKind(url) === 'video');
     if (videos.length && (videos.length > 1 || images.length)) throw new PublishError('invalid', 'A video Pin takes one video, without images.');
     if (!images.length && !videos.length) throw new PublishError('invalid', 'Pins need an image or video.');
     if (images.length > 5) throw new PublishError('invalid', 'Pins can include up to 5 images.');
