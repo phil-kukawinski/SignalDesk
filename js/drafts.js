@@ -1,6 +1,6 @@
 // Saved drafts: keep several posts in progress. "Save draft" stores the Studio's current post in a
 // list (saved with your account, or in this browser when signed out); More → Saved drafts opens one.
-const MAX_SAVED_DRAFTS=30,DRAFTS_LOCAL_KEY='signaldesk.savedDrafts';
+const MAX_SAVED_DRAFTS=200,DRAFTS_LOCAL_KEY='signaldesk.savedDrafts';
 let savedDrafts=null,savedDraftsLoading=null;
 
 async function loadSavedDrafts(){if(savedDrafts)return savedDrafts;if(savedDraftsLoading)return savedDraftsLoading;savedDraftsLoading=(async()=>{let list=[];if(cloudFeaturesAvailable()&&supabaseClient&&activeUser){const{data,error}=await supabaseClient.from('user_drafts').select('saved').eq('user_id',activeUser.id).maybeSingle();if(error&&!/saved/.test(error.message))throw error;list=Array.isArray(data?.saved)?data.saved:[];}else{try{list=JSON.parse(localStorage.getItem(DRAFTS_LOCAL_KEY)||'[]');}catch{list=[];}}savedDrafts=list.filter(item=>item&&item.id&&item.state);return savedDrafts;})().finally(()=>{savedDraftsLoading=null;});return savedDraftsLoading;}

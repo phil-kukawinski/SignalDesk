@@ -32,7 +32,8 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('#cancel-edit').click();
  document.querySelector('#post-copy').value='My own draft';
  openPostDialog('p1');await wait(40);document.querySelector('[data-duplicate-post]').click();await wait(20);L('dupConfirm',document.querySelector('#confirm-dialog')?.open+' '+document.querySelector('#confirm-title')?.textContent);
- document.querySelector('#confirm-dialog [value=yes]').click();await wait(500);
+ // Duplicate replaces the draft straight away now (with Undo) instead of asking first.
+ if(document.querySelector('#confirm-dialog')?.open)document.querySelector('#confirm-dialog [value=yes]').click();await wait(500);
  L('duplicated',document.querySelector('.page.active').id+' copy:'+document.querySelector('#post-copy').value+' date:'+document.querySelector('#schedule-date').value+' manual:'+selectedManual().join(',')+' alt:'+uploadedMedia[0]?.alt+' checked:'+[...document.querySelectorAll('.account-select input:checked')].map(i=>i.value).join(','));
  // Alt text editor
  L('altEditor',vis(document.querySelector('#alt-editor'))+' value:'+document.querySelector('[data-alt-index]')?.value);
@@ -65,10 +66,19 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('#csv-open').click();await wait(20);
  const csv=`date,time,client,networks,text,media_url,campaign\n${tomorrow},9:30,PK Works,Facebook;LinkedIn,"Hello, ""world""",,Fall\n${tomorrow},10:00,Nobody,Facebook,Hi,,\n2020-01-01,10:00,PK Works,Instagram,Old,,\n`;
  window.addEventListener('unhandledrejection',e=>L('rejection',e.reason?.message));try{const rows=parseCsv(csv);L('csvParse',rows.length+' header:'+rows[0].join('|'));L('csvValidate',rows.slice(1).map(validateCsvRow).map(r=>r.status+':'+r.errors.join('/')).join(' | '));}catch(e){L('csvErr',e.message);}
- const dt=new DataTransfer();dt.items.add(new File([csv],'posts.csv',{type:'text/csv'}));const input=document.querySelector('#csv-file');input.files=dt.files;input.dispatchEvent(new Event('change'));await wait(400);
+ const dt=new DataTransfer();dt.items.add(new File([csv],'posts.csv',{type:'text/csv'}));const input=document.querySelector('#csv-file');input.files=dt.files;input.dispatchEvent(new Event('change'));for(let i=0;i<60&&!csvRows.length;i++)await wait(50);
  L('csvRows',csvRows.map(r=>r.status+(r.errors.length?'('+r.errors.join('/')+')':'')).join(' | ')+' button:'+document.querySelector('#csv-schedule').textContent);
  if(SHOT==='csv'){document.body.setAttribute('data-log',log.join(' || '));return;}
  document.querySelector('#csv-schedule').click();await wait(80);const csvPub=calls.filter(c=>c.action==='publish').pop();L('csvPublish',csvPub.text+' | '+csvPub.platforms.join(',')+' | '+csvPub.campaign+' | hour:'+new Date(csvPub.scheduleDate).getHours()+':'+new Date(csvPub.scheduleDate).getMinutes()+' msg:'+document.querySelector('#csv-message').textContent);
+ document.querySelector('#csv-close').click();
+ // CSV import as drafts: past times and missing media are fine for a draft; nothing is published.
+ savedDrafts=[];storeSavedDrafts=async()=>{};const publishesBefore=calls.filter(c=>c.action==='publish').length;
+ document.querySelector('#csv-open').click();await wait(20);const dt2=new DataTransfer();dt2.items.add(new File([csv],'posts.csv',{type:'text/csv'}));input.files=dt2.files;input.dispatchEvent(new Event('change'));for(let i=0;i<60&&!csvRows.length;i++)await wait(50);
+ const draftButtons=document.querySelector('#csv-drafts').textContent+' / '+document.querySelector('#csv-schedule').textContent;
+ document.querySelector('#csv-drafts').click();await wait(80);
+ const imported=savedDrafts.map(d=>[d.title,d.client,d.platforms.join(','),d.date,d.time,d.state.postOptions.campaign].join('|')).join(' ; ');
+ L('csvDrafts',draftButtons+' -> '+imported+' msg:'+document.querySelector('#csv-message').textContent);
+ if(draftButtons!=='Import 2 as drafts / Schedule 1 post'||savedDrafts.length!==2||savedDrafts[0].title!=='Hello, "world"'||savedDrafts[0].time!=='09:30'||savedDrafts[0].state.postOptions.campaign!=='Fall'||calls.filter(c=>c.action==='publish').length!==publishesBefore)setTimeout(()=>{throw new Error('CSV import as drafts went wrong: '+draftButtons+' -> '+imported);});
  document.querySelector('#csv-close').click();
  // Search
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));await wait(20);const si=document.querySelector('#search-input');si.value='fall';si.dispatchEvent(new Event('input'));
@@ -86,7 +96,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('[data-brand-kit="pk-works"]').click();await wait(20);L('goalFields',document.querySelector('#goal-posts').value+'/'+document.querySelector('#goal-rate').value);document.querySelector('#goal-per-day').value='2';document.querySelector('#report-enabled').checked=true;document.querySelector('#report-emails').value='dana@client.com';document.querySelector('#report-day').value='15';document.querySelector('#brand-form').requestSubmit();await wait(20);
  const pk=clients.find(c=>c.id==='pk-works');L('goalsSaved',JSON.stringify(pk.goals)+' '+JSON.stringify(pk.reports));
  // Calendar print
- showView('calendar');await wait(40);const origOpen=window.open;let printed='';window.open=()=>({document:{write:html=>{printed+=html;},close(){}}});document.querySelector('#print-calendar').click();window.open=origOpen;L('print',printed.includes('Content calendar')+' rows:'+(printed.match(/class="row"/g)||[]).length);
+ showView('calendar');await wait(40);const origOpen=window.open;let printed='';window.open=()=>({document:{write:html=>{printed+=html;},close(){},querySelector:()=>null}});document.querySelector('#print-calendar').click();window.open=origOpen;L('print',printed.includes('Content calendar')+' rows:'+(printed.match(/class="row"/g)||[]).length);
  // Theme
  showView('settings');const theme=document.querySelector('#theme-select');theme.value='dark';theme.dispatchEvent(new Event('change'));L('theme',document.documentElement.dataset.theme+' bg:'+getComputedStyle(document.body).backgroundColor);
  if(SHOT==='dark'){showView('overview');await wait(60);document.body.setAttribute('data-log',log.join(' || '));return;}
@@ -97,4 +107,4 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  const csvText=await created[1]?.text();L('export',created.length+' csv:'+csvText?.split('\n')[1]);
  // Push controls without a service worker
  await renderPushControls();L('push',document.querySelector('#push-toggle').hidden+' '+document.querySelector('#push-note').textContent.slice(0,50));
-}catch(e){L('ERR',e.message+' '+(e.stack||'').split('\n')[1]);}document.body.setAttribute('data-log',log.join(' || '));},300));
+}catch(e){L('ERR',e.message+' '+(e.stack||'').split('\n')[1]);document.body.setAttribute('data-err','test stopped early: '+e.message);}document.body.setAttribute('data-log',log.join(' || '));},300));
