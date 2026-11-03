@@ -1639,7 +1639,9 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   const leavingEmail = (await q(`select email from workspace_members where workspace_id='${WS}' and role='user' limit 1`))[0]?.email;
   if (leavingEmail) await db.query(`update activity_log set actor_name = replace(actor_name, 'user@test.local', $1), detail = replace(detail::text, 'user@test.local', $1)::jsonb`, [leavingEmail]);
   r = await call({ action: 'delete-account', confirm: 'DELETE' }, 'user');
-  assert.deepEqual((await q(`select actor_name, action from activity_log where workspace_id='${WS}' order by id desc limit 2`)).map((row) => [row.actor_name, row.action]), [['Someone', 'settings_changed'], [null, 'settings_changed']], 'the log keeps the event, without the person who left');
+  const kept = await q(`select actor_name, action, detail from activity_log where workspace_id='${WS}' order by id desc limit 3`);
+  assert.deepEqual(kept.map((row) => row.action), ['settings_changed', 'member_invited', 'settings_changed'], 'the log keeps every event when someone leaves');
+  if (leavingEmail) { assert.equal(kept[2].actor_name, leavingEmail, 'the log keeps who made the change'); assert.equal(kept[1].detail.email, leavingEmail, 'the log keeps who was invited'); }
   assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.workspaceDeleted, false);
   assert.ok(deletedFiles.includes(`${USER}/photo.jpg`) && !deletedFiles.includes(`${USER}/in-use.jpg`), JSON.stringify(deletedFiles));
   const leftDrafts = Object.fromEntries((await q(`select id, draft from saved_drafts where id in ('left-1','other-1')`)).map((row) => [row.id, row.draft]));

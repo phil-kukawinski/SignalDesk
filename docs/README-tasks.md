@@ -32,7 +32,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 
 ## Half a day or more, with waiting
 
-- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`.
+- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's.
 - [ ] **16. Complete Meta Business Verification.** It's done for PK Works in Meta's business settings and can take days or longer. Start it before you record anything for App Review.
 - [ ] **17. Complete Meta App Review.** Needs tasks 7, 9, and 16. Use each feature once, record the screencast, and paste the answers from [app-review.md](app-review.md). List Anthropic as a service provider.
 

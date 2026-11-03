@@ -145,7 +145,7 @@ ${providers}
 <li>Your account and workspace content: until you delete them or ask us to.</li>
 <li>Access tokens: deleted right away when you disconnect an account, or when you remove SignalDesk from your Facebook settings.</li>
 <li>Activity log: entries about the team, accounts, clients, feeds, and settings are deleted automatically after a year. A post’s history and notes stay until the post or workspace is deleted.</li>
-<li>If you delete your account but your team’s workspace continues: your name and email are removed from those activity log entries, but your name can remain on the history and notes of posts you worked on.</li>
+<li>If you delete your account but your team’s workspace continues: your name, and your email address where it was recorded, stay on those activity log entries until they’re deleted, and your name stays on the history and notes of posts you worked on. This keeps a record of who did what for the team.</li>
 <li>Uploaded files that no post or draft uses anymore: deleted automatically after 30 days.</li>
 <li>Sign-in attempts with a network: expire after 15 minutes.</li>
 <li>Deletion requests: completed within 30 days. Copies in our database provider’s backups are removed when those backups expire.</li>
@@ -278,7 +278,7 @@ ${status}
 <p>SignalDesk can’t use the access immediately after you revoke it. To also delete the stored connection details, disconnect the account in SignalDesk or email us.</p>
 
 <h2>Delete your account</h2>
-<p>Sign in, open <b>Settings → Your account</b>, and choose <b>Delete account</b>. It happens right away. If you’re the only member of your workspace, the whole workspace goes with it: clients, brand kits, scheduled posts, connected accounts and their access tokens, notes, links, and uploaded files. If others share the workspace, your sign-in and any uploads the team isn’t using are removed. The workspace’s posts and saved drafts stay with the team, without your name or email on saved drafts or in the activity log, though your name can remain on the history and notes of posts you worked on. Uploads they still use are deleted automatically once nothing needs them. If you’d like a copy first, use <b>Settings → Export</b>.</p>
+<p>Sign in, open <b>Settings → Your account</b>, and choose <b>Delete account</b>. It happens right away. If you’re the only member of your workspace, the whole workspace goes with it: clients, brand kits, scheduled posts, connected accounts and their access tokens, notes, links, and uploaded files. If others share the workspace, your sign-in and any uploads the team isn’t using are removed. The workspace’s posts and saved drafts stay with the team, without your name or email on saved drafts. Your name stays on the history and notes of posts you worked on. Your name, and your email address where it was recorded, also stay in the activity log for up to a year, so the team has a record of who did what. Uploads they still use are deleted automatically once nothing needs them. If you’d like a copy first, use <b>Settings → Export</b>.</p>
 <p>Can’t sign in? Email ${s.contact} from the address you signed up with, with the subject <b>“Delete my data,”</b> and we’ll do it within 30 days.</p>
 <p>Posts already published on a social network stay there until you delete them on that network.</p>`
   });
