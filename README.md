@@ -188,13 +188,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 ## Status and next steps
 A day-to-day guide, setup checklist, and troubleshooting table is in [docs/walkthrough.md](docs/walkthrough.md). Inviting beta testers (adding them on each network, the welcome note, and branded sign-in emails) is in [docs/beta-testers.md](docs/beta-testers.md). App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
 
-Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook, Instagram, and Pinterest accounts are connected. Next:
-1. **Meta:** add `read_insights` to the Facebook Login for Business configuration, reconnect Facebook, then complete Business Verification and App Review.
-2. **LinkedIn:** add **Sign In with LinkedIn using OpenID Connect** to the first app. For company Pages, create the second app with the Community Management API and set `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`.
-3. **Pinterest:** apply for Standard access. **Unsplash:** apply for production access.
-4. Schedule a test post to each network, including an image, a carousel, and an Instagram video.
-5. Before inviting other people: Vercel Pro and Supabase Pro, and a lawyer's review of the legal pages.
-6. Later: audit logs.
+Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook, Instagram, and Pinterest accounts are connected. What's left to do by hand, easiest first, is in [docs/README-tasks.md](docs/README-tasks.md). On the code side, audit logs are planned for later.
 
 ## Testing
 Run `npm install`, then `npm test`. It runs:
