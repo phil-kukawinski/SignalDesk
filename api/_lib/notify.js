@@ -2,7 +2,6 @@ const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zon
 const { sendPush } = require('./push');
 
 const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing', 'planning'];
-const FREQUENCIES = ['immediate', 'daily', 'weekly', 'monthly', 'yearly', 'custom', 'off'];
 const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, planning_leads: [30], planning_scope: 'major', last_digest_at: null };
 const DIGEST_HOUR = 8;
 // Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
@@ -296,4 +295,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { URGENT_TYPES, CATEGORIES, FREQUENCIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

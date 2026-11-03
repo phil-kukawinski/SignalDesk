@@ -10,8 +10,6 @@ function placeComposerActions(){
   const visible=[...menu.children].some(item=>!item.hidden);
   $('.action-menu',bar).hidden=!visible;
 }
-const applyRoleBase=applyRole;
-applyRole=function(){applyRoleBase();placeComposerActions();};
 
 function closeMoreActions(){const menu=$('#more-actions-menu');if(menu&&!menu.hidden){menu.hidden=true;$('#more-actions')?.setAttribute('aria-expanded','false');}}
 $('#more-actions')?.addEventListener('click',event=>{event.stopPropagation();const menu=$('#more-actions-menu'),open=menu.hidden;menu.hidden=!open;event.currentTarget.setAttribute('aria-expanded',String(open));if(open)menu.querySelector('button:not([hidden])')?.focus();});

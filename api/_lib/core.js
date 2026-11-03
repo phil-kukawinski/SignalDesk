@@ -326,26 +326,6 @@ function buildPostBody({ text, platforms, mediaUrls, scheduleDate, requiresAppro
   return body;
 }
 
-async function queueFollowUpComments({ workspaceId, clientId, userId, postId, platforms, comments, baseTime }) {
-  const commentPlatforms = platforms.filter((platform) => COMMENT_PLATFORMS.has(platform));
-  if (!postId || !comments?.length || !commentPlatforms.length) return 0;
-  const base = Date.parse(baseTime) || Date.now();
-  await databaseRequest('scheduled_comments', {
-    method: 'POST',
-    headers: { prefer: 'return=minimal' },
-    body: JSON.stringify(comments.map((item) => ({
-      workspace_id: workspaceId,
-      client_id: clientId,
-      provider_post_id: postId,
-      platforms: commentPlatforms,
-      comment: item.comment,
-      run_at: new Date(base + item.delayMinutes * 60000).toISOString(),
-      created_by: userId
-    })))
-  });
-  return comments.length;
-}
-
 async function processDueComments({ workspaceId, encryptionKey, limit = 25 } = {}) {
   const query = new URLSearchParams({
     select: 'id,workspace_id,client_id,provider_post_id,job_id,platforms,comment,attempts,created_by',
@@ -779,6 +759,6 @@ module.exports = {
   encryptSecret: encryptProfileKey, decryptSecret: decryptProfileKey, assertPublicUrl,
   getMembership, getWorkspaceState, validateClientId, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms,
-  validatePostOptions, buildPostBody, queueFollowUpComments, processDueComments,
+  validatePostOptions, buildPostBody, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, checkLink
 };

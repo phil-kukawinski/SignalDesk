@@ -33,5 +33,3 @@ const renderClientsBase=renderClients;
 renderClients=function(){renderClientsBase();renderClientsEmpty();};
 const renderCommandCenterBase=renderCommandCenter;
 renderCommandCenter=function(){renderCommandCenterBase();renderOnboarding();};
-const renderWorkspaceBase=renderWorkspace;
-renderWorkspace=function(){renderWorkspaceBase();renderOnboarding();};

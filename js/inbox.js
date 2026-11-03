@@ -11,12 +11,6 @@ const STARTER_REPLIES=[
 let replyTemplates=[],openCommentsCache={key:null,at:0,data:null,loading:false,error:''};
 
 // Reply templates are shared with the team like snippets (deleted ones are kept as tombstones so merges don't bring them back).
-const collectSharedStateInboxBase=collectSharedState;
-collectSharedState=function(){return{...collectSharedStateInboxBase.apply(this,arguments),replyTemplates};};
-const mergeSharedStateInboxBase=mergeSharedState;
-mergeSharedState=function(remote={},local){return{...mergeSharedStateInboxBase.apply(this,arguments),replyTemplates:mergeStateList(remote.replyTemplates,local.replyTemplates||[])};};
-const applyWorkspaceStateInboxBase=applyWorkspaceState;
-applyWorkspaceState=function(state={}){applyWorkspaceStateInboxBase.apply(this,arguments);replyTemplates=Array.isArray(state.replyTemplates)?state.replyTemplates:[];};
 function activeReplyTemplates(){const saved=replyTemplates.filter(item=>!item.deleted);return saved.length?saved:STARTER_REPLIES;}
 // Without a name, "Thanks, {name}!" becomes "Thanks!" rather than leaving a gap.
 function fillReplyName(text,name){return name?text.replace(/\{name\}/g,name):text.replace(/,\s*\{name\}/g,'').replace(/\s*\{name\}/g,'');}
@@ -68,8 +62,8 @@ const renderCommentsPanelInboxBase=renderCommentsPanel;
 renderCommentsPanel=function(){renderCommentsPanelInboxBase.apply(this,arguments);const counts=openCommentsCache.data?.counts||{};$$('#comment-post-list [data-comment-job]').forEach(button=>{const count=counts[button.dataset.commentJob];if(count)button.insertAdjacentHTML('beforeend',`<span class="count-badge" title="${count} need${count===1?'s':''} a reply">${count}</span>`);});renderNeedsReply();};
 
 // Needs your attention on the Command Center.
-const attentionItemsInboxBase=attentionItems;
-attentionItems=function(){const items=attentionItemsInboxBase.apply(this,arguments),count=openCommentCount();if(count)items.splice(items.findIndex(item=>item.tone==='pending')<0?items.length:items.findIndex(item=>item.tone==='pending'),0,{kind:'view',view:'inbox',title:`${count} comment${count===1?'':'s'} waiting for a reply`,detail:'On posts from the last two weeks',meta:'Answer or mark done in the Social Inbox',tone:'warning'});return items;};
+// Command Center: comments waiting for a reply go ahead of the approval items.
+function addInboxAttention(items){const count=openCommentCount();if(!count)return;const at=items.findIndex(item=>item.tone==='pending');items.splice(at<0?items.length:at,0,{kind:'view',view:'inbox',title:`${count} comment${count===1?'':'s'} waiting for a reply`,detail:'On posts from the last two weeks',meta:'Answer or mark done in the Social Inbox',tone:'warning'});}
 const renderCommandCenterInboxBase=renderCommandCenter;
 renderCommandCenter=function(){renderCommandCenterInboxBase.apply(this,arguments);renderInboxCount();if(cloudFeaturesAvailable()&&currentRole==='admin'&&serverPosts.length&&!document.hidden&&!openCommentsCache.loading&&(openCommentsCache.key!==(homeClientId()||'')||Date.now()-openCommentsCache.at>OPEN_COMMENTS_TTL))loadOpenComments();};
 const showViewInboxBase=showView;

@@ -136,7 +136,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Image descriptions:** add alt text to each image, or get an AI suggestion. It's sent to Facebook, Instagram, LinkedIn, and Pinterest
 - **Manual reminders:** for formats SignalDesk can't publish (Instagram Stories, TikTok, YouTube Shorts, X, Threads), it sends a reminder at the scheduled time with the copy and media. You post it, then select **Mark as posted**
 - **Post now**, **Duplicate** (from post details), and **Repeat** weekly, every 2 weeks, monthly, or every N days, always at the same local time
-- **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled
+- **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled, or import them as Saved drafts to schedule later
 - **Image prep:** crop new images to a network's shape (square, 4:5, 1.91:1, 16:9, 2:3, 9:16) and shrink them to at most 2,048 px before upload
 - **Search everything** (Ctrl+K / ⌘K): posts, clients, templates, snippets, library files, and pages
 - **Post history:** every step (created, edited, approved, moved, published, failed, client decisions) with who did it. Earlier versions can be restored into the editor
@@ -157,7 +157,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Facebook, Instagram, and Pinterest are connected and syncing on the live site. LinkedIn publishing and Pinterest publishing haven't been tried against the live APIs yet, so expect small fixes on the first real posts.
 - Instagram only accepts JPEG images between 4:5 and 1.91:1. When a post publishes, SignalDesk converts other images (PNG, WebP, very tall or wide shapes) with `sharp`: transparent areas become white and the image is padded, not cropped, using its dominant color. The converted copy is stored under `system/instagram/` in the media bucket. The composer preview notes when this will happen.
 - Links get preview cards: Facebook receives the post's first link as the post link, and LinkedIn gets a card built from the page's Open Graph title, description, and image (SignalDesk reads the page, since LinkedIn's API doesn't). If the page can't be read, LinkedIn shows a plain card.
-- Direct publishing supports text, images, and video on Facebook, Instagram (Reels, Stories, and carousels of up to 10 items), LinkedIn, Pinterest (video Pins), Threads, and X, and video on YouTube and TikTok. A chosen video cover is used by Instagram Reels, Facebook, YouTube, TikTok (frame only), Pinterest, and LinkedIn.
+- Direct publishing supports text, images, and video on Facebook, Instagram (Reels, Stories, and carousels of up to 10 items), LinkedIn, Pinterest (video Pins, or the video's cover as an image Pin), Threads, and X, and video on YouTube and TikTok. A chosen video cover is used by Instagram Reels, Facebook, YouTube, TikTok (frame only), Pinterest, and LinkedIn.
 - Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
 - Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live.
 - Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed doesn't cancel posts it already scheduled; cancel them from the calendar.
@@ -224,7 +224,7 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `api/legal.js`, `api/_lib/legal.js` — the privacy policy, terms, and data deletion pages, plus Meta's data deletion and deauthorize callbacks
 - `api/_lib/captions.js` — AI caption drafts and image descriptions
 - `api/_lib/push.js` — browser push notifications
-- `sw.js`, `manifest.webmanifest`, `icons/` — the installable app
+- `sw.js`, `manifest.webmanifest`, `icons/` — the installable app. `icons/logo.svg` is the SD mark and `icons/icon.svg` the app icon; the PNG icons, `img/og.png`, and the landing screenshots are rendered from them
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
 - `api/_lib/platforms.js` — direct Facebook, Instagram (including Stories), LinkedIn, and Pinterest connectors
