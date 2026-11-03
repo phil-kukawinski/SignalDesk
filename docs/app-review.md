@@ -8,10 +8,11 @@ Live site: `https://socialsignaldesk.com` (the old address, `https://signaldesk-
 
 ## Before you submit (all three)
 
-1. **A reviewer login for SignalDesk.** Reviewers sign in to your app, so create an account just for them:
-   - Sign up at the live site with an address like `[review@pkworks.co]` and a strong password. Confirm the email.
+1. **A reviewer login for SignalDesk.** Reviewers sign in to your app, so create an account just for them. Sign-ups are invite-only, so:
+   - In **Settings → Beta invites**, create a one-use invite for an address like `[review@pkworks.co]`, then open its link and create the account with a strong password. Confirm the email.
    - In that account's workspace, open **Clients & Accounts**, and add a client called **App Review Demo** (new workspaces start with no clients).
-   - Keep that login active until every review is finished. Put the email and password in each portal's "test credentials" field, never in the written answers.
+   - Sign in once as the reviewer and close the welcome screen, so it doesn't get in their way.
+   - Keep that login active until every review is finished. Put the email and password in each portal's "test credentials" field, never in the written answers. The reviewer signs in with these, so they don't need an invite.
 2. **Settings → Setup & health shows no ✕** for the network you're submitting.
 3. **The legal pages load:** `/privacy`, `/terms`, `/data-deletion`.
 4. **Record screencasts in one take per permission group** (scripts below). Use a clean browser window at 1280×800 or larger, turn on English UI on Facebook/Instagram/LinkedIn, and narrate or caption each step. Show the network's permission dialog, then the feature that uses the permission, then the result on the network itself.
@@ -19,6 +20,13 @@ Live site: `https://socialsignaldesk.com` (the old address, `https://signaldesk-
 ---
 
 ## Meta (Facebook Pages and Instagram)
+
+### Order of steps
+1. **Reconnect your own Facebook account in SignalDesk first** so it has every permission below, including `read_insights`, then use each feature once (post, first comment, reply to a comment, open Analytics). Meta's dashboard can hold back a permission until the app has actually used it recently.
+2. **Business Verification** for PK Works, in Meta's business settings. Review of these permissions needs it, and it can take days or longer, so start it first.
+3. **Check App settings** (below), including the new app icon.
+4. **Record the screencast** and fill in the answers below under App Review → Requests.
+5. **After approval, switch the app to Live.** Until then, only people with a role on the app can connect, which is why testers see "App not active".
 
 ### Why review is needed
 SignalDesk manages Pages and Instagram accounts for PK Works' clients, not only accounts you own. Accounts that aren't on the app's roles list need **Advanced Access**, which requires App Review and **Business Verification** (Meta Business Settings → Security Center). Start Business Verification first; it can take several days.
@@ -31,7 +39,7 @@ SignalDesk manages Pages and Instagram accounts for PK Works' clients, not only 
 | Privacy Policy URL | `https://socialsignaldesk.com/privacy` |
 | Terms of Service URL | `https://socialsignaldesk.com/terms` |
 | User data deletion | Data deletion callback URL: `https://socialsignaldesk.com/api/legal?event=meta-deletion` |
-| App icon | `icons/icon-1024.png` (1024×1024) |
+| App icon | `icons/icon-1024.png` (1024×1024). The logo changed, so upload it again here and in the other portals. |
 | Category | Business and pages |
 | Facebook Login for Business → Valid OAuth Redirect URIs | `https://socialsignaldesk.com/api/oauth` |
 | Deauthorize callback URL | `https://socialsignaldesk.com/api/legal?event=meta-deauthorize` |
@@ -49,35 +57,35 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 
 **`pages_manage_posts`**
 > SignalDesk publishes the posts a team schedules for a client's Page: text posts, posts with a link (with its preview card), photos, and videos, at the time they chose. This is the app's core feature; without it SignalDesk can't publish to Facebook.
-> **To test:** after connecting a Page, open Publishing Studio, choose the Facebook account, write a post (optionally attach an image), and select Post now. Within about a minute the post appears on the Page. Its details in SignalDesk show "Published" with a View link.
+> **To test:** after connecting a Page, open Publishing Studio, choose the Facebook account, write a post (optionally attach an image), and choose **More → Post now**. Within about a minute the post appears on the Page. Its details in SignalDesk show "Published" with a View link.
 
 **`pages_read_engagement`**
-> SignalDesk reads the Page's basic information and the reactions, comment, and share counts on posts it published, to show results in Analytics, the Command Center, and monthly client reports. It's also required to get the Page access token used to publish. We only read engagement on posts SignalDesk published.
-> **To test:** open a published post's details from the calendar, or Analytics → Top Posts, to see its reactions, comments, and shares. Counts refresh every few hours.
+> SignalDesk reads the Page's name and follower count, and its published posts with their reactions, comments, and share counts, including posts made outside SignalDesk. Teams see everything on the account in one calendar and in Analytics and monthly client reports, not only what they scheduled here. It's also required to get the Page access token used for publishing. Without it, SignalDesk couldn't publish or report results.
+> **To test:** open a published post's details from the calendar, or Analytics → Weekly Top Posts, to see its reactions, comments, and shares. Posts made directly on Facebook also appear on the Content Calendar. Numbers refresh every few hours.
 
 **`pages_manage_engagement`**
 > Teams can add a first comment that SignalDesk posts right after the post publishes (often a link or hashtags), and they can reply to comments on their posts from SignalDesk's Social Inbox. Without it, first comments and replies wouldn't work.
-> **To test:** in Publishing Studio, open Post options → Comments, add a first comment, and select Post now. The comment appears under the post. Then open Social Inbox → Comments on your posts, choose the post, and reply.
+> **To test:** in Publishing Studio, open **More options → Comments**, add a first comment, and choose **More → Post now**. The comment appears under the post. Then open Social Inbox → Comments on your posts, choose the post, and reply.
 
 **`read_insights`**
-> SignalDesk reads reach for posts it published to a Page, so Analytics and client reports can show engagement rate (engagement ÷ reach). We only read insights for posts SignalDesk published.
+> SignalDesk reads views and reach for the Page's recent posts, including posts made outside SignalDesk, so Analytics and client reports can show engagement rate (engagement ÷ reach) across everything on the account. We read this only for Pages the person connected, and use it only to show them their own results.
 > **To test:** open Analytics after a post has been live for a few hours; Reach and Engagement rate are filled in for it.
 
 **`instagram_basic`**
-> SignalDesk reads the connected Instagram professional account's username, name, and profile picture so the person can confirm they connected the right account, and reads each published post's permalink so the team can open it. When someone adds a collaborator or tags an account on a post, SignalDesk looks the username up (Business Discovery) and shows that account's name and picture, so the team tags the right account. It's also required for every other Instagram feature.
-> **To test:** after connecting, Social Accounts shows the Instagram account's username and picture. In Publishing Studio → Post options → Collaborators & tags, type a business account's username to see it confirmed with its name and picture.
+> SignalDesk reads the connected Instagram professional account's username, name, and profile picture so the person can confirm they connected the right account, and reads the account's recent posts (caption, media, permalink, date, and like and comment counts), including posts made outside SignalDesk, so the calendar and Analytics show the whole account. When someone adds a collaborator or tags an account on a post, SignalDesk looks the username up (Business Discovery) and shows that account's name and picture, so the team tags the right account. It's also required for every other Instagram feature.
+> **To test:** after connecting, Social Accounts shows the Instagram account's username and picture. Posts made directly on Instagram appear on the Content Calendar. In Publishing Studio → More options → Collaborators & tags, type a business account's username to see it confirmed with its name and picture.
 
 **`instagram_content_publish`**
-> SignalDesk publishes the posts a team schedules for a client's Instagram account: images and Reels, with captions, collaborators, and photo tags. This is the app's core Instagram feature.
-> **To test:** in Publishing Studio, choose the Instagram account, attach an image, write a caption, and select Post now. Within about a minute the post appears on the Instagram account. Its details in SignalDesk show "Published" with a View link.
+> SignalDesk publishes the posts a team schedules for a client's Instagram account: images, carousels, Reels, and Stories, with captions, collaborators, and photo tags. This is the app's core Instagram feature.
+> **To test:** in Publishing Studio, choose the Instagram account, attach an image, write a caption, and choose **More → Post now**. Within about a minute the post appears on the Instagram account. Its details in SignalDesk show "Published" with a View link.
 
 **`instagram_manage_comments`**
 > SignalDesk posts an optional first comment right after an Instagram post publishes, and lets the team read and reply to comments on posts SignalDesk published, from the Social Inbox.
-> **To test:** add a first comment under Post options → Comments and publish to Instagram; the comment appears under the post. Then open Social Inbox → Comments on your posts and reply to a comment.
+> **To test:** add a first comment under **More options → Comments** and publish to Instagram; the comment appears under the post. Then open Social Inbox → Comments on your posts and reply to a comment.
 
 **`instagram_manage_insights`**
-> SignalDesk reads views, reach, likes, comments, shares, and saves for Instagram posts it published, to show results in Analytics, Top Posts, and monthly client reports.
-> **To test:** open Analytics → Top Posts a few hours after an Instagram post publishes to see its numbers.
+> SignalDesk reads views, reach, likes, comments, shares, and saves for the account's recent posts, including posts made outside SignalDesk, plus the account's follower count and daily reach and views. These show in Analytics, Weekly Top Posts, follower growth, and monthly client reports. We use them only to show the person their own results.
+> **To test:** open Analytics → Weekly Top Posts a few hours after an Instagram post publishes to see its numbers.
 
 **`business_management`**
 > Many of our clients' Pages and Instagram accounts are owned by a Meta Business portfolio rather than a personal profile. This permission lets the person grant SignalDesk access to those business-owned Pages and Instagram accounts during Facebook Login for Business, so they appear in the list of Pages to connect. We don't create, change, or read anything else in the business portfolio.
@@ -88,17 +96,17 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 2. **Social Accounts** → choose **App Review Demo** → **Connect** on Facebook.
 3. Show Facebook's Login for Business dialog listing every permission, choose the Page (and its Instagram account), and finish.
 4. Back in SignalDesk, show the Page and Instagram account connected, with their names and pictures *(pages_show_list, instagram_basic)*.
-5. **Publishing Studio**: choose both accounts, write a caption, attach an image, add a first comment, and add a collaborator by typing a business username so it shows as confirmed *(instagram_basic)*. Select **Post now**.
+5. **Publishing Studio**: choose both accounts, write a caption, attach an image, add a first comment, and add a collaborator by typing a business username so it shows as confirmed *(instagram_basic)*. Choose **More → Post now**.
 6. Open the Page and the Instagram account in new tabs and show the post and the first comment *(pages_manage_posts, instagram_content_publish, pages_manage_engagement, instagram_manage_comments)*.
 7. On Facebook or Instagram, leave a comment on the post. In SignalDesk, open **Social Inbox → Comments on your posts**, show the comment, reply, and show the reply on the network *(pages_manage_engagement, instagram_manage_comments)*.
-8. Open **Analytics** and the post's details to show engagement and reach *(pages_read_engagement, read_insights, instagram_manage_insights)*. If the numbers are still empty, say they refresh every few hours and show a post from earlier.
+8. Open **Analytics** and the post's details to show engagement and reach *(pages_read_engagement, read_insights, instagram_manage_insights)*. If the numbers are still empty, say they refresh every few hours and show a post from earlier. Then open the **Content Calendar** and show a post made directly on Facebook or Instagram, to show why posts from outside SignalDesk are read *(pages_read_engagement, instagram_basic)*.
 9. **Social Accounts → Disconnect** on the Page, to show people can remove access.
 
 ### Common reasons Meta rejects, and how this submission avoids them
 - *Screencast doesn't show the permission in use* → each step above names the permission it demonstrates; consider adding on-screen captions with the permission names.
 - *Reviewer can't sign in* → test credentials work, and the reviewer account has a client ready to connect.
 - *Asking for permissions the app doesn't use* → every permission above maps to a visible feature. If you decide not to use one (for example, the Social Inbox replies), remove it from the Facebook Login for Business configuration instead of explaining it.
-- *Privacy policy doesn't mention Facebook data* → `/privacy` describes the tokens, Page and account details, post metrics, and comments SignalDesk receives, and how to delete them.
+- *Privacy policy doesn't mention Facebook data* → `/privacy` describes the tokens, Page and account details, post metrics, and comments SignalDesk receives, and how to delete them. Check it also covers posts made outside SignalDesk and account-level numbers before submitting, since Meta compares the policy with these answers.
 
 ---
 
@@ -175,7 +183,7 @@ New Pinterest apps start with **Trial access** (Pins visible only to you, low li
 
 **Pinterest demo video (about 90 seconds)**
 1. Sign in to SignalDesk → **Social Accounts** → **Connect** on Pinterest → approve on Pinterest → choose the default board.
-2. **Publishing Studio**: choose Pinterest, attach an image, set the Pin title, link, and board under **Post options → Pinterest**, show the Pinterest preview, and select **Post now**.
+2. **Publishing Studio**: choose Pinterest, attach an image, set the Pin title, link, and board under **More options → Pinterest**, show the Pinterest preview, and select **Post now**.
 3. Open the board on Pinterest and show the new Pin linking to the destination.
 4. Show the Pin's numbers in **Analytics** (or explain they appear within a day).
 
