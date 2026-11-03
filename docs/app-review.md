@@ -140,13 +140,13 @@ Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page*
 **How each permission is used**
 > - `r_organization_admin`: after sign-in, list the Pages the person administers so they can choose which one to connect, and read each Page's name and logo to show which Page is connected.
 > - `w_organization_social`: publish scheduled posts to the connected Page, and reply to comments on those posts from SignalDesk.
-> - `r_organization_social`: read comments, likes, and comment counts on posts SignalDesk published to the Page, for the inbox and client reports.
+> - `r_organization_social`: read the connected Page's recent posts, including ones made outside SignalDesk (text, link, post type, and date), with their like and comment counts and the Page's follower count, for the calendar, analytics, and client reports. It also reads the comments on posts SignalDesk published to the Page, for the inbox.
 
 **Who uses the app**
 > PK Works staff who are admins of the client Pages they manage. It isn't offered to the public.
 
 **Data handling**
-> Access tokens are encrypted at rest and deleted when the person disconnects the account in SignalDesk. We don't store information about LinkedIn members other than the name shown on comments they leave on posts SignalDesk published. See https://socialsignaldesk.com/privacy.
+> Access tokens are encrypted at rest and deleted when the person disconnects the account in SignalDesk. We store the connected Page's posts and their counts. We don't store information about LinkedIn members: comments are read when the inbox opens, without stored copies, and their authors appear only as "LinkedIn member." Post text and counts may go to our AI provider, Anthropic, to write a weekly planning note for the team. See https://socialsignaldesk.com/privacy.
 
 ### LinkedIn screencast script (about 2 minutes, if requested)
 1. Sign in to SignalDesk → **Social Accounts** → choose a client → **Connect** on LinkedIn.
@@ -167,7 +167,7 @@ New Pinterest apps start with **Trial access** (Pins visible only to you, low li
 | `user_accounts:read` | Show which Pinterest account was connected (name and picture) |
 | `boards:read` | List the account's boards so the person can choose a default board, and a board per Pin |
 | `pins:write` | Create the Pins a team schedules |
-| `pins:read` | Read impressions, saves, Pin clicks, and outbound clicks on Pins SignalDesk created, for reports |
+| `pins:read` | Read the account's recent Pins, including ones made outside SignalDesk, with their impressions, saves, Pin clicks, and outbound clicks, for the calendar, analytics, and reports |
 
 **App settings:** Redirect URI `https://socialsignaldesk.com/api/oauth`; Privacy policy `https://socialsignaldesk.com/privacy`.
 

@@ -101,6 +101,29 @@ create table if not exists public.user_drafts (
 -- Saved drafts (More → Saved drafts in the Publishing Studio), besides the one being edited.
 alter table public.user_drafts add column if not exists saved jsonb not null default '[]'::jsonb;
 
+-- Saved drafts the whole workspace shares. Replaces user_drafts.saved, which belonged to one person;
+-- anything still there moves here, and the emptied column means re-running this can't bring back deleted drafts.
+create table if not exists public.saved_drafts (
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  id text not null,
+  draft jsonb not null,
+  updated_by uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, id)
+);
+with moving as (
+  select u.user_id, coalesce(u.workspace_id, m.workspace_id) as workspace_id, u.saved
+  from public.user_drafts u left join public.workspace_members m on m.user_id = u.user_id
+  where jsonb_typeof(u.saved) = 'array' and jsonb_array_length(u.saved) > 0 and coalesce(u.workspace_id, m.workspace_id) is not null
+), copied as (
+  insert into public.saved_drafts (workspace_id, id, draft, updated_by, updated_at)
+  select moving.workspace_id, item ->> 'id', item, moving.user_id, coalesce((item ->> 'savedAt')::timestamptz, now())
+  from moving cross join lateral jsonb_array_elements(moving.saved) as item
+  where item ->> 'id' is not null
+  on conflict (workspace_id, id) do nothing
+)
+update public.user_drafts set saved = '[]'::jsonb where user_id in (select user_id from moving);
+
 create table if not exists public.autopilot_feeds (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces (id) on delete cascade,
@@ -919,6 +942,17 @@ create policy "Users can manage their own draft"
 
 revoke all on public.user_drafts from anon;
 grant select, insert, update on public.user_drafts to authenticated;
+
+alter table public.saved_drafts enable row level security;
+drop policy if exists "Workspace members can manage saved drafts" on public.saved_drafts;
+create policy "Workspace members can manage saved drafts"
+  on public.saved_drafts for all
+  to authenticated
+  using (public.workspace_role(workspace_id) is not null)
+  with check (public.workspace_role(workspace_id) is not null);
+revoke all on public.saved_drafts from anon;
+grant select, insert, update, delete on public.saved_drafts to authenticated;
+grant all on public.saved_drafts to service_role;
 
 insert into storage.buckets (id, name, public)
 values ('social-media', 'social-media', true)

@@ -42,14 +42,16 @@ function collectPaths(value, into) {
 
 async function referencedPaths(keepSince) {
   const used = new Set();
-  const [posts, drafts, states] = await Promise.all([
+  const [posts, drafts, sharedDrafts, states] = await Promise.all([
     databaseRequest(`scheduled_posts?or=(status.in.(pending_approval,scheduled,publishing),updated_at.gte.${keepSince})&select=content`),
-    databaseRequest('user_drafts?select=draft'),
+    databaseRequest('user_drafts?select=draft,saved'),
+    databaseRequest('saved_drafts?select=draft'),
     databaseRequest('workspace_state?select=state')
   ]);
-  if (!Array.isArray(posts) || !Array.isArray(drafts) || !Array.isArray(states)) throw new Error('Could not read media references.');
+  if (!Array.isArray(posts) || !Array.isArray(drafts) || !Array.isArray(sharedDrafts) || !Array.isArray(states)) throw new Error('Could not read media references.');
   posts.forEach((row) => collectPaths(row.content, used));
-  drafts.forEach((row) => collectPaths(row.draft, used));
+  drafts.forEach((row) => { collectPaths(row.draft, used); collectPaths(row.saved, used); });
+  sharedDrafts.forEach((row) => collectPaths(row.draft, used));
   states.forEach((row) => collectPaths(row.state, used));
   return used;
 }

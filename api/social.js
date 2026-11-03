@@ -53,7 +53,7 @@ const WORKSPACE_ACTIONS = new Set([
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'planning-note'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;

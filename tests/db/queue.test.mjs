@@ -515,6 +515,8 @@ assert.equal((await q(`select metrics from publish_jobs where external_id='video
 // --- Media cleanup deletes only old, unreferenced uploads ---
 const STORE = 'https://sb.test/storage/v1/object/public/social-media/';
 await db.exec(`insert into user_drafts (user_id, workspace_id, draft) values ('${ADMIN}','${WS}','{"uploadedMedia":[{"path":"u1/kept%20draft.jpg","url":"${STORE}u1/kept%20draft.jpg"}]}')`);
+await db.exec(`update user_drafts set saved = '[{"id":"s1","state":{"uploadedMedia":[{"url":"${STORE}u1/in-saved.jpg"}]}}]' where user_id='${ADMIN}'`);
+await db.exec(`insert into saved_drafts (workspace_id, id, draft) values ('${WS}','s2','{"id":"s2","state":{"uploadedMedia":[{"url":"${STORE}u1/in-shared.jpg"}]}}')`);
 await db.exec(`update scheduled_posts set content = jsonb_set(content, '{media}', '["${STORE}u1/scheduled.jpg"]') where id='${editedId}'`);
 const old = new Date(Date.now() - 40 * 86400000).toISOString(), fresh = new Date(Date.now() - 86400000).toISOString();
 let deleted = null;
@@ -524,6 +526,7 @@ networkHandler = (c) => {
     if (prefix === '') return reply([{ name: 'u1', id: null }]);
     if (prefix === 'u1') return reply([
       { name: 'unused.jpg', id: 'a', created_at: old }, { name: 'kept draft.jpg', id: 'b', created_at: old },
+      { name: 'in-saved.jpg', id: 'e', created_at: old }, { name: 'in-shared.jpg', id: 'f', created_at: old },
       { name: 'scheduled.jpg', id: 'c', created_at: old }, { name: 'new.jpg', id: 'd', created_at: fresh }
     ]);
   }
@@ -1390,12 +1393,16 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     const { recordWorkerRun } = require(`${ROOT}/api/_lib/publishing.js`);
     await db.exec(`delete from app_errors; update social_connections set status='active'; delete from publish_jobs where status in ('failed','unknown')`);
     await recordWorkerRun('publish'); await recordWorkerRun('worker');
-    let siteStatus = 200, domainStatus = 'verified';
+    let siteStatus = 200, domainStatus = 'verified', recoverStatus = 200, testAccounts = 0;
+    const authSettings = { external: { email: true }, mailer_autoconfirm: false };
     const checkMails = [];
     networkHandler = (c) => {
       if (c.url === 'https://api.resend.com/emails') { checkMails.push(body(c)); return reply({ id: 'w' }); }
       if (c.url === 'https://api.resend.com/domains') return reply({ data: [{ name: 'signaldesk.test', status: domainStatus }] });
       if (c.url === 'https://sb.test/auth/v1/health') return reply({});
+      if (c.url === 'https://sb.test/auth/v1/settings') return reply(authSettings);
+      if (c.url === 'https://sb.test/auth/v1/admin/users') { assert.equal(body(c).email, 'delivered@resend.dev'); testAccounts += 1; return new Response('{"msg":"exists"}', { status: testAccounts === 1 ? 200 : 422 }); }
+      if (c.url === 'https://sb.test/auth/v1/recover') { assert.equal(body(c).email, 'delivered@resend.dev'); return new Response(recoverStatus === 200 ? '{}' : '{"msg":"Error sending recovery email"}', { status: recoverStatus }); }
       if (c.url === 'https://signaldesk.test/') return new Response('<script src="js/app.min.js?v=abc123"></script>', { status: siteStatus });
       if (c.url === 'https://signaldesk.test/js/app.min.js?v=abc123') return new Response('x');
       throw new Error('unexpected ' + c.url);
@@ -1404,6 +1411,17 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     assert.equal(check.problems, 0, JSON.stringify(check.results.filter((item) => !item.ok)));
     assert.equal(checkMails.length, 1);
     assert.equal(checkMails[0].subject, 'SignalDesk weekly check: all good');
+    assert.ok(/test password email/.test(checkMails[0].text));
+    // Supabase failing to send, or its confirmation emails being off, is a problem. An existing test account isn't.
+    recoverStatus = 500;
+    check = await runWeeklyCheck();
+    assert.deepEqual(check.results.filter((item) => !item.ok).map((item) => item.title), ['Sign-up emails'], JSON.stringify(check.results));
+    assert.ok(/Error sending recovery email/.test(checkMails[1].text) && /Authentication → SMTP/.test(checkMails[1].text));
+    recoverStatus = 200; authSettings.mailer_autoconfirm = true;
+    check = await runWeeklyCheck();
+    assert.ok(check.results.some((item) => !item.ok && /Confirm email/.test(item.body)), JSON.stringify(check.results));
+    authSettings.mailer_autoconfirm = false;
+    checkMails.length = 1;
     // A blocked site, a stale domain, and an out-of-date database are each reported, in one email.
     siteStatus = 403; domainStatus = 'failed';
     await db.exec(`alter table notification_preferences rename column planning_leads to planning_leads_old`);

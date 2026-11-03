@@ -112,5 +112,20 @@ for (const table of ['social_connections', 'oauth_sessions', 'scheduled_posts', 
   await assert.rejects(rls(A, `select * from ${table}`), /permission denied/, table);
 }
 await assert.rejects(rls(A, `select * from claim_publish_jobs(5, gen_random_uuid())`), /permission denied/);
+// Saved drafts move from one person's list to the shared table, once, and only the workspace can see them.
+await db.exec(`update user_drafts set saved = '[{"id":"moved-1","title":"Mine","savedAt":"2026-11-01T10:00:00Z","state":{"draft":"Mine"}}]'::jsonb where user_id='${A}'`);
+if (!(await q(`select 1 from user_drafts where user_id='${A}'`)).length) await db.exec(`insert into user_drafts (user_id, workspace_id, saved) values ('${A}','${ws.id}','[{"id":"moved-1","title":"Mine","savedAt":"2026-11-01T10:00:00Z","state":{"draft":"Mine"}}]'::jsonb)`);
+await db.exec(schema);
+assert.deepEqual((await q(`select id, updated_by from saved_drafts where workspace_id='${ws.id}'`)).map((row) => [row.id, row.updated_by]), [['moved-1', A]]);
+assert.deepEqual((await q(`select saved from user_drafts where user_id='${A}'`))[0].saved, []);
+await db.exec(`delete from saved_drafts where id='moved-1'`);
+await db.exec(schema);
+assert.equal((await q(`select 1 from saved_drafts where id='moved-1'`)).length, 0, 'a deleted draft must stay deleted when the schema runs again');
+await rls(B, `insert into saved_drafts (workspace_id, id, draft) values ('${ws.id}','shared-1','{"id":"shared-1"}')`);
+assert.equal((await rls(A, `select id from saved_drafts`)).length, 1, 'a teammate sees the draft');
+assert.equal((await rls(D, `select id from saved_drafts`)).length, 0, 'someone outside the workspace does not');
+await assert.rejects(rls(D, `insert into saved_drafts (workspace_id, id, draft) values ('${ws.id}','nope','{}')`), /row-level security/);
+await rls(A, `delete from saved_drafts where id='shared-1'`);
+assert.equal((await q(`select 1 from saved_drafts`)).length, 0);
 console.log('sql tests passed');
 

@@ -1,5 +1,6 @@
 const { databaseRequest } = require('./core');
 const { lastWorkerRun, recordWorkerRun } = require('./publishing');
+const crypto = require('crypto');
 const { emailConfigured, sendEmail, renderEmail, appUrl } = require('./notify');
 const { platformAdmins } = require('./platform');
 const { missingFromDatabase } = require('./health');
@@ -12,6 +13,8 @@ const CHECK_DAY = 1; // Monday
 const CHECK_HOUR_UTC = 13;
 const PUBLISH_STALE_MS = 30 * 60000;
 const WORKER_STALE_MS = 60 * 60000;
+// Resend's test address: mail to it is accepted and thrown away, so the check reaches no one's inbox.
+const AUTH_EMAIL_TEST_ADDRESS = 'delivered@resend.dev';
 
 const pass = (title, body) => ({ ok: true, title, body });
 const fail = (title, body) => ({ ok: false, title, body });
@@ -56,6 +59,26 @@ async function signInCheck() {
   }
 }
 
+// Sign-up and password emails go out through Supabase's own email settings, not the key this app uses.
+// Sends one real password email to a throwaway account, which fails if those settings have broken.
+async function authEmailCheck() {
+  const base = process.env.SUPABASE_URL, anon = process.env.SUPABASE_ANON_KEY || '', service = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const reason = async (response) => { const text = await response.text(); try { const body = JSON.parse(text); return body.msg || body.message || body.error_description || text; } catch { return text || `HTTP ${response.status}`; } };
+  const settings = await fetch(`${base}/auth/v1/settings`, { headers: { apikey: anon }, signal: AbortSignal.timeout(10000) });
+  if (!settings.ok) return fail('Sign-up emails', `Couldn’t read Supabase’s sign-in settings (HTTP ${settings.status}).`);
+  const { external, mailer_autoconfirm: autoconfirm } = await settings.json();
+  if (external?.email === false) return fail('Sign-up emails', 'Email sign-in is turned off in Supabase, so people can’t sign up or reset a password.');
+  if (autoconfirm) return fail('Sign-up emails', 'Supabase has “Confirm email” turned off, so new accounts aren’t asked to confirm their address.');
+  const created = await fetch(`${base}/auth/v1/admin/users`, {
+    method: 'POST', headers: { apikey: service, authorization: `Bearer ${service}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ email: AUTH_EMAIL_TEST_ADDRESS, password: crypto.randomBytes(32).toString('base64url'), email_confirm: true })
+  });
+  if (!created.ok && created.status !== 422) return fail('Sign-up emails', `Couldn’t prepare the test account: ${await reason(created)}`);
+  const sent = await fetch(`${base}/auth/v1/recover`, { method: 'POST', headers: { apikey: anon, 'content-type': 'application/json' }, signal: AbortSignal.timeout(20000), body: JSON.stringify({ email: AUTH_EMAIL_TEST_ADDRESS }) });
+  if (!sent.ok) return fail('Sign-up emails', `Supabase couldn’t send a test password email: ${await reason(sent)}. New sign-ups are probably failing too. Check Authentication → SMTP in Supabase.`);
+  return pass('Sign-up emails', 'Supabase sent a test password email without an error.');
+}
+
 // Whether the address emails come from is still verified. A send-only key can't read domains, and
 // this email arriving shows sending works anyway.
 async function emailCheck() {
@@ -98,6 +121,7 @@ async function runWeeklyCheck({ now = Date.now() } = {}) {
     await guard('Live site', siteCheck),
     await guard('Sign-in', signInCheck),
     await guard('Email', emailCheck),
+    await guard('Sign-up emails', authEmailCheck),
     ...week.results
   ];
   const problems = results.filter((item) => !item.ok), working = results.filter((item) => item.ok);
@@ -108,7 +132,7 @@ async function runWeeklyCheck({ now = Date.now() } = {}) {
     intro: problems.length ? 'The weekly check found problems. Everything it looked at is below.' : 'Everything the weekly check looks at is working.',
     sections: [...(problems.length ? [{ title: 'Needs a look', items: problems.map(toItem) }] : []), { title: 'Working', items: working.map(toItem) }],
     ctaLabel: 'Open Setup & health', ctaUrl: `${appUrl().replace(/\/+$/, '')}/#view=settings`,
-    footer: 'You get this because your email is in PLATFORM_ADMIN_EMAILS. It doesn’t test sign-up and password emails, which Supabase sends itself.'
+    footer: 'You get this because your email is in PLATFORM_ADMIN_EMAILS.'
   });
   let sent = 0;
   if (emailConfigured()) for (const admin of platformAdmins()) if (await sendEmail(admin, subject, content).catch(() => false)) sent += 1;
@@ -125,4 +149,4 @@ async function maybeRunWeeklyCheck({ now = Date.now() } = {}) {
   return runWeeklyCheck({ now });
 }
 
-module.exports = { runWeeklyCheck, maybeRunWeeklyCheck };
+module.exports = { runWeeklyCheck, maybeRunWeeklyCheck, authEmailCheck };

@@ -14,7 +14,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
     const later=days=>{const at=new Date(Date.now()+days*86400000);return localIsoDate(at);};
     window.__calls=[];window.__day=later;
     cloudFeaturesAvailable=()=>true;activeUser={id:'u1',email:'owner@studio.test'};activeWorkspace={id:'w1',name:'Studio'};currentRole='admin';
-    storeSavedDrafts=async()=>{};scheduleWorkspaceSave=()=>{};
+    const realFrom=supabaseClient.from.bind(supabaseClient),offline=name=>name==='saved_drafts'&&{select:()=>({eq:()=>({order:async()=>({error:{code:'X',message:'offline'}})})})};window.__from=(handler)=>{supabaseClient.from=name=>handler(name)||realFrom(name);};__from(offline);window.__offline=offline;window.__realStore=storeSavedDrafts;storeSavedDrafts=async()=>{};scheduleWorkspaceSave=()=>{};saveWorkspaceState=async()=>{};
     const draft=(id,title,days)=>({id,title,client:'PK Works',platforms:['facebook'],manual:[],date:later(days),time:'09:30',state:{uploadedMedia:[],draft:title,draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()});
     savedDrafts=[draft('d1','First draft',3),draft('d2','Second draft',4)];
     window.__post={id:'11111111-0000-4000-8000-0000000000aa',clientId:'pk-works',title:'Scheduled one',status:'scheduled',source:'composer',scheduledFor:new Date(Date.now()+5*86400000).toISOString(),createdBy:'u1',campaign:'Launch',evergreen:false,clientStatus:'approved',text:'Scheduled one',media:[],platformContent:{},mediaAlt:{},options:{},jobs:[{id:'j1',platform:'facebook',provider:'direct',status:'queued'}],results:{reach:0,engagements:0,clicks:0,measured:false}};
@@ -114,6 +114,48 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!/Draft/.test(chip) || !/Calendar draft/.test(chip)) fail('dated drafts should show on the calendar');
   await evaluate(`document.querySelector('.calendar-event.is-draft').click()`); await wait(300);
   if (await evaluate(`document.querySelector('#post-copy').value`) !== 'Calendar draft') fail('clicking a draft on the calendar should open it in the Studio');
+
+  // Shared drafts: a save writes only what changed, so a teammate's edits to other drafts survive.
+  const shared = await json(`(async()=>{const calls=[],draft=id=>({id,state:{}}),same=draft('same'),edited=draft('edited');__from(name=>name==='saved_drafts'&&({upsert:async(rows,options)=>{calls.push(['upsert',rows.map(row=>row.id),options.onConflict,rows[0].workspace_id,rows[0].draft.savedBy]);return{};},delete:()=>({eq:()=>({in:async(column,ids)=>{calls.push(['delete',ids]);return{};}})})}));draftsInTable=true;storedDrafts.clear();storedDrafts.set('same',JSON.stringify(same));storedDrafts.set('edited','{"old":true}');storedDrafts.set('gone','{}');savedDrafts=[same,edited];await __realStore();
+    const again=calls.length;await __realStore();const secondSave=calls.length-again;
+    // A failed refresh keeps the list; a missing table falls back to the person's own list until the database update runs.
+    __from(__offline);savedDrafts=[same];const kept=(await loadSavedDrafts({fresh:true})).map(item=>item.id);
+    __from(name=>name==='saved_drafts'?({select:()=>({eq:()=>({order:async()=>({error:{code:'PGRST205',message:'Could not find the table'}})})})}):name==='user_drafts'&&({upsert:async()=>({}),select:()=>({eq:()=>({maybeSingle:async()=>({data:{saved:[{id:'old-list',state:{}}]}})})})}));const legacy=(await loadSavedDrafts({fresh:true})).map(item=>item.id),usesTable=draftsInTable;__from(__offline);return{calls,secondSave,kept,legacy,usesTable};})()`);
+  log.push('shared drafts: ' + JSON.stringify(shared));
+  if (JSON.stringify(shared.calls) !== JSON.stringify([['upsert', ['edited'], 'workspace_id,id', 'w1', 'owner@studio.test'], ['delete', ['gone']]]) || shared.secondSave !== 0) fail('a save should write only the drafts that changed');
+  if (shared.kept[0] !== 'same' || shared.legacy[0] !== 'old-list' || shared.usesTable) fail('drafts should survive a failed refresh and fall back before the database update');
+
+  // Duplicate a campaign: new drafts at new dates, spacing kept, nothing scheduled, missing files dropped.
+  await evaluate(`(()=>{const later=window.__day;__post.status='scheduled';__post.media=['https://media.test/ok.jpg','https://media.test/gone.jpg'];savedDrafts=[{id:'d9',title:'Draft to copy',client:'PK Works',platforms:['facebook'],manual:[],date:later(3),time:'09:30',state:{uploadedMedia:[],draft:'Draft to copy',draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()}];window.__realFetch=window.fetch;window.fetch=async(url,options)=>options?.method==='HEAD'?new Response(null,{status:/gone/.test(url)?404:200}):__realFetch(url,options);__calls.length=0;})()`);
+  await evaluate(`showView('campaigns')`); await wait(300);
+  await evaluate(`openBoardCampaign('pk-works','Launch')`); await wait(300);
+  await evaluate(`document.querySelector('[data-board-dup]').click()`); await wait(100);
+  await shot('campaign_duplicate.png');
+  await evaluate(`(()=>{const name=document.querySelector('#board-copy-name');name.value='launch';name.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-board-dup-go]').click();})()`); await wait(150);
+  if (!/already has a campaign/.test(await evaluate(`document.querySelector('.board-copy .auth-message')?.textContent||''`))) fail('duplicating should refuse a name the client already uses');
+  const startDay = await evaluate(`window.__day(30)`);
+  await evaluate(`(()=>{const name=document.querySelector('#board-copy-name'),start=document.querySelector('#board-copy-start');name.value='  Launch   again ';name.dispatchEvent(new Event('input',{bubbles:true}));start.value=${JSON.stringify(startDay)};start.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-board-dup-go]').click();})()`); await wait(400);
+  const copied = await json(`{drafts:savedDrafts.filter(d=>d.state.postOptions.campaign==='Launch again').map(d=>({title:d.title,date:d.date,time:d.time,platforms:d.platforms,media:d.state.uploadedMedia.map(m=>m.url),id:d.id})),original:savedDrafts.filter(d=>d.state.postOptions.campaign==='Launch').length,open:boardOpen.name,changed:__calls.filter(c=>['publish','update-post'].includes(c.action)).length,gap:Math.round((Date.parse(window.__day(5))-Date.parse(window.__day(3)))/86400000),shifted:boardShiftDay(${JSON.stringify(startDay)},Math.round((Date.parse(window.__day(5))-Date.parse(window.__day(3)))/86400000))}`);
+  log.push('duplicate: ' + JSON.stringify(copied));
+  const copyOf = (title) => copied.drafts.find((item) => item.title === title);
+  if (copied.drafts.length !== 2 || copied.original !== 1 || copied.open !== 'Launch again' || copied.changed !== 0) fail('duplicating should make drafts in a new campaign and schedule nothing');
+  if (copyOf('Draft to copy')?.date !== startDay || copyOf('Draft to copy')?.time !== '09:30' || copyOf('Scheduled one')?.date !== copied.shifted) fail('the copies should keep their spacing from the new first date');
+  if (copyOf('Scheduled one')?.platforms.join() !== 'facebook' || copyOf('Scheduled one')?.media.join() !== 'https://media.test/ok.jpg') fail('a copied post should keep its networks and only the files that still exist');
+  if (copied.drafts[0].id === 'd9' || copied.drafts[1].id === 'd9') fail('copies need their own ids');
+
+  // Results report: the campaign's published dates, listing every post.
+  await evaluate(`(()=>{window.fetch=__realFetch;__post.status='published';window.__earlier={...__post,id:'p-old',scheduledFor:new Date(Date.now()-200*86400000).toISOString()};callSocialApi=(real=>async body=>body.action==='campaign-posts'?{posts:[__post,__earlier]}:real(body))(callSocialApi);window.__report=null;openClientReport=args=>{window.__report=args;};})()`);
+  await evaluate(`openBoardCampaign('pk-works','Launch')`); await wait(300);
+  await evaluate(`document.querySelector('[data-board-report]').click()`); await wait(100);
+  const report = await json(`{campaign:__report?.campaign,client:__report?.client?.id,days:__report?(__report.period.end-__report.period.start)/86400000:0,label:__report?.period.label}`);
+  log.push('report: ' + JSON.stringify(report));
+  if (report.campaign !== 'Launch' || report.client !== 'pk-works' || !report.label || report.days > 93 || report.days < 90) fail('the results report should cover this campaign, within the 3-month limit');
+  const reportPage = await json(`(()=>{const rows=Array.from({length:7},(_,i)=>({platform:'facebook',text:'Post '+i,metrics:{views:i,engagements:i},publishedAt:new Date().toISOString(),url:''})),build=campaign=>reportHtml({client:clients[0],period:{label:'Nov'},campaign,data:{report:{rows,totals:{},postCount:7,errors:[]}}});return{campaign:build('Launch'),plain:build('')};})()`);
+  if (!/campaign report/.test(reportPage.campaign) || !/Post 0/.test(reportPage.campaign) || /Top posts/.test(reportPage.campaign)) fail('a campaign report should list every post');
+  if (!/social report/.test(reportPage.plain) || /Post 0/.test(reportPage.plain) || !/Top posts/.test(reportPage.plain)) fail('the regular report should stay at its top five');
+  await evaluate(`__post.status='scheduled';currentRole='user';openBoardCampaign('pk-works','Launch')`); await wait(300);
+  if (await evaluate(`Boolean(document.querySelector('[data-board-report]'))`)) fail('the results report is for admins');
+  await evaluate(`currentRole='admin'`);
 
   // Review page: approve a whole campaign, in chunks, with one notification at the end.
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__review=[];window.fetch=async(url,init)=>{const body=JSON.parse(init.body);window.__review.push(body);const posts=Array.from({length:30},(_,i)=>({id:String(i).padStart(36,'0'),title:'Post '+i,scheduledFor:new Date(Date.now()+864e5*(i+1)).toISOString(),status:'waiting',clientStatus:i===0?'changes_requested':null,campaign:'Launch',versions:[{platform:'facebook',label:'Facebook',text:'Hello '+i,media:[]}],notes:[]}));const result=body.action==='load'?{client:{name:'PK Works',initials:'PK',color:'#336699',logo:''},workspace:'Studio',expiresAt:new Date(Date.now()+864e6).toISOString(),campaign:body.campaign,posts}:{ok:true,approved:body.postIds?.length||1,released:body.postIds?.length||0};return{ok:true,json:async()=>result};};` });
