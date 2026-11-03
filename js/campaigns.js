@@ -12,5 +12,3 @@ function renderCampaigns(){
 }
 // A client report for one campaign, covering its first to last post (up to 3 months).
 document.addEventListener('click',event=>{const button=event.target.closest('[data-campaign-report]');if(!button)return;const key=`${homeClientId()||''}:${analyticsDays}`,row=campaignCache.key===key?campaignCache.rows[Number(button.dataset.campaignReport)]:null,client=row&&clients.find(item=>item.id===row.clientId);if(!client)return;const end=new Date(Math.min(Date.now(),Date.parse(row.last)+86400000)),start=new Date(Math.max(Date.parse(row.first)-3600000,end-92*86400000));openClientReport({client,period:{start,end,label:`${row.campaign} · ${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`},campaign:row.campaign});});
-const renderAllPostsCampaignBase=renderAllPosts;
-renderAllPosts=function(){renderAllPostsCampaignBase.apply(this,arguments);loadCampaigns();};

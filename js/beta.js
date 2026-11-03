@@ -26,5 +26,3 @@ document.addEventListener('click',async event=>{const copy=event.target.closest(
 $('#beta-invite-only')?.addEventListener('change',async event=>{const want=event.target.checked;try{await callSocialApi({action:'set-invite-only',inviteOnly:want});toast(want?'Sign-ups are invite-only.':'Sign-ups are open: anyone can create a workspace.');}catch(error){event.target.checked=!want;toast(error.message);}});
 // Settings sidebar links for these two sections.
 $('.settings-nav')?.addEventListener('click',event=>{const link=event.target.closest('[data-settings-go="account"],[data-settings-go="beta"]');if(!link)return;event.preventDefault();event.stopImmediatePropagation();$$('.settings-nav [data-settings-go]').forEach(item=>item.classList.toggle('selected',item===link));(link.dataset.settingsGo==='account'?$('#account-panel'):$('#beta-panel'))?.scrollIntoView({behavior:'smooth',block:'start'});},true);
-const loadHealthBase=loadHealth;
-loadHealth=function(force){renderAccountPanel();loadBeta();return loadHealthBase(force);};

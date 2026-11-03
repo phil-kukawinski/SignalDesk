@@ -58,16 +58,12 @@ document.addEventListener('click',event=>{
 });
 
 // Unanswered-comment counts on each post in the list.
-const renderCommentsPanelInboxBase=renderCommentsPanel;
-renderCommentsPanel=function(){renderCommentsPanelInboxBase.apply(this,arguments);const counts=openCommentsCache.data?.counts||{};$$('#comment-post-list [data-comment-job]').forEach(button=>{const count=counts[button.dataset.commentJob];if(count)button.insertAdjacentHTML('beforeend',`<span class="count-badge" title="${count} need${count===1?'s':''} a reply">${count}</span>`);});renderNeedsReply();};
+function markOpenCommentCounts(){const counts=openCommentsCache.data?.counts||{};$$('#comment-post-list [data-comment-job]').forEach(button=>{const count=counts[button.dataset.commentJob];if(count)button.insertAdjacentHTML('beforeend',`<span class="count-badge" title="${count} need${count===1?'s':''} a reply">${count}</span>`);});renderNeedsReply();}
 
 // Needs your attention on the Command Center.
 // Command Center: comments waiting for a reply go ahead of the approval items.
 function addInboxAttention(items){const count=openCommentCount();if(!count)return;const at=items.findIndex(item=>item.tone==='pending');items.splice(at<0?items.length:at,0,{kind:'view',view:'inbox',title:`${count} comment${count===1?'':'s'} waiting for a reply`,detail:'On posts from the last two weeks',meta:'Answer or mark done in the Social Inbox',tone:'warning'});}
-const renderCommandCenterInboxBase=renderCommandCenter;
-renderCommandCenter=function(){renderCommandCenterInboxBase.apply(this,arguments);renderInboxCount();if(cloudFeaturesAvailable()&&currentRole==='admin'&&serverPosts.length&&!document.hidden&&!openCommentsCache.loading&&(openCommentsCache.key!==(homeClientId()||'')||Date.now()-openCommentsCache.at>OPEN_COMMENTS_TTL))loadOpenComments();};
-const showViewInboxBase=showView;
-showView=function(name){showViewInboxBase.apply(this,arguments);if(name==='inbox'){renderNeedsReply();loadOpenComments();}};
+function refreshInboxOnHome(){renderInboxCount();if(cloudFeaturesAvailable()&&currentRole==='admin'&&serverPosts.length&&!document.hidden&&!openCommentsCache.loading&&(openCommentsCache.key!==(homeClientId()||'')||Date.now()-openCommentsCache.at>OPEN_COMMENTS_TTL))loadOpenComments();}
 
 // --- Reply templates menu ---
 function closeReplyTemplates(){const menu=$('#reply-template-menu');if(menu)menu.hidden=true;}

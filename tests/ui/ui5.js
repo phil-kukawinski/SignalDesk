@@ -47,7 +47,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  // Social accounts
  showView('social-accounts');await wait(60);
  L('accountCards',[...document.querySelectorAll('.social-account-card')].map(c=>c.querySelector('b').textContent+':'+c.querySelector('.social-account-state').textContent+':'+[...c.querySelectorAll('.social-account-buttons button')].map(b=>b.textContent).join('+')).join(' | '));
- L('pinDetail',[...document.querySelectorAll('.social-account-card')].find(c=>c.querySelector('b').textContent==='Pinterest').querySelector('small').textContent);
+ L('pinDetail',[...document.querySelectorAll('.social-account-card')].find(c=>c.querySelector('b').textContent==='Pinterest').textContent.replace(/\s+/g,' '));
  L('ayrshareHidden',document.querySelector('#connect-social-accounts').hidden+' note:'+document.querySelector('.integration-note').textContent.slice(0,60));
  if(SHOT==='accounts'){document.body.setAttribute('data-log',log.join(' || '));return;}
  openConnectChooser('sess-1',{clientId:'pk-works',candidates:[{key:'facebook:page1',platform:'facebook',displayName:'PK Works Page'},{key:'instagram:ig1',platform:'instagram',displayName:'pkworks',note:'Linked to the PK Works Page'},{key:'facebook:page2',platform:'facebook',displayName:'Other Page'},{key:'pinterest:pk',platform:'pinterest',displayName:'pkworks',boards:[{id:'b1',name:'Ideas'},{id:'b2',name:'Kits'}]}]});
@@ -70,7 +70,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  set('#pin-link','https://pkworks.com/fall');
  L('pinPayload',JSON.stringify(buildPostOptionsPayload(selectedPlatforms()).pinterest)+' summary:'+document.querySelector('#pinterest-summary').textContent);
  set('#post-copy','Fall kits are here!');const d=new Date(Date.now()+3*86400000);document.querySelector('#schedule-date').value=localIsoDate(d);document.querySelector('#schedule-time').value='10:00';
- const toastEl=document.querySelector('#toast');await publishSocialPost(false);await wait(30);
+ uploadedMedia=[{path:'',url:'https://media.test/kit.jpg',name:'kit.jpg',type:'image/jpeg'}];updatePreview();const toastEl=document.querySelector('#toast');await publishSocialPost(false);await wait(30);
  const pub=calls.filter(c=>c.action==='publish').pop();L('publish',pub.platforms.join(',')+' pin:'+JSON.stringify(pub.options.pinterest)+' toast:'+toastEl.textContent);
  L('savedPostsUnchanged',savedPosts.filter(p=>p.status==='Scheduled').length);
  // Personal mode

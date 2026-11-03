@@ -44,8 +44,6 @@ function renderMediaTray(){
   if(label&&list.length&&!pending)label.innerHTML=list.some(trayIsVideo)?'Video attached · <u>replace</u>':`${list.length} attached · <u>add more</u> or drop files`;
   if(label&&pending)label.textContent=`Uploading ${pending} file${pending===1?'':'s'}…`;
 }
-const updatePreviewTrayBase=updatePreview;
-updatePreview=function(){updatePreviewTrayBase.apply(this,arguments);renderMediaTray();};
 
 // Reordering and removing.
 let trayDragIndex=null;

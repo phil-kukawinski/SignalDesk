@@ -132,7 +132,6 @@ function celebrate(){
 // The first post someone schedules gets a celebration.
 const FIRST_POST_KEY='signaldesk.firstPost';
 function celebrateFirstPost(){try{const key=`${FIRST_POST_KEY}:${activeWorkspace?.id||''}`;if(localStorage.getItem(key))return;localStorage.setItem(key,'1');}catch{return;}celebrate();}
-if(typeof showScheduledConfirmation==='function'){const showScheduledConfirmationBase=showScheduledConfirmation;showScheduledConfirmation=function(...args){const result=showScheduledConfirmationBase(...args);celebrateFirstPost();return result;};}
 
 // Numbers on the Command Center count up the first time they appear.
 let countedUp=false;
@@ -149,7 +148,5 @@ function countUpStats(){
     (function tick(now){const p=Math.min(1,(now-start)/duration),eased=1-Math.pow(1-p,3);node.textContent=(target*eased).toFixed(decimals)+suffix;if(p<1)requestAnimationFrame(tick);else node.textContent=match[1]+suffix;})(start);
   });
 }
-const renderCommandCenterTourBase=renderCommandCenter;
-renderCommandCenter=function(){renderCommandCenterTourBase();requestAnimationFrame(countUpStats);};
 
 document.addEventListener('click',event=>{if(event.target.closest('[data-start-tour]')){event.preventDefault();startTour();}});

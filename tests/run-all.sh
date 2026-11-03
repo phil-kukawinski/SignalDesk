@@ -29,6 +29,7 @@ for test in tests/ui/ui*.js; do
   out=$(bash tests/ui/run.sh "$test" 2>&1)
   if [ -z "$out" ]; then fail "$(basename "$test")" "  No output. Is Chrome installed?"
   elif echo "$out" | grep -q 'data-err='; then fail "$(basename "$test")" "$(echo "$out" | grep 'data-err=' | head -5)"
+  elif echo "$out" | grep -q '^ERR='; then fail "$(basename "$test")" "$(echo "$out" | grep '^ERR=' | head -5)"
   else pass "$(basename "$test")"; fi
 done
 

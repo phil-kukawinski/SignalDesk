@@ -29,7 +29,3 @@ function renderOnboarding(){const view=$('#view-overview');if(!view)return;let p
 document.addEventListener('click',event=>{const go=event.target.closest('[data-onboarding]');if(go){onboardingSteps().find(step=>step.key===go.dataset.onboarding)?.go();return;}if(event.target.closest('#onboarding-toggle')){onboardingOpen=!onboardingOpen;renderOnboarding();return;}if(event.target.closest('#onboarding-hide')){try{localStorage.setItem(`${ONBOARDING_KEY}:${activeWorkspace?.id||''}`,'1');}catch{}renderOnboarding();toast('Hidden. Everything is still in the sidebar.');}if(event.target.closest('[data-empty-add-client]'))openClientDialog();});
 // Empty Clients page for a brand-new workspace.
 function renderClientsEmpty(){const grid=$('#client-grid');if(!grid||clients.length||!cloudFeaturesAvailable())return;grid.innerHTML=`<div class="empty-card"><div class="empty-icon" aria-hidden="true">${icon('users')}</div><h3>Add your first client</h3><p>Set up a client to give them a brand kit, connect their social accounts, and start scheduling.</p>${currentRole==='admin'?'<button class="primary-button" type="button" data-empty-add-client>Add a client</button>':'<p class="option-hint">Ask an admin to add clients.</p>'}</div>`;}
-const renderClientsBase=renderClients;
-renderClients=function(){renderClientsBase();renderClientsEmpty();};
-const renderCommandCenterBase=renderCommandCenter;
-renderCommandCenter=function(){renderCommandCenterBase();renderOnboarding();};

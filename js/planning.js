@@ -66,5 +66,4 @@ document.addEventListener('change',event=>{if(event.target.id==='plan-client'){p
 // Needs your attention: a major date within two weeks with nothing planned around it.
 function addPlanningAttention(items){if(!cloudFeaturesAvailable()||!serverPostsLoadedAt)return;const scope=homeClientId();upcomingObservances(localIsoDate(new Date()),14,{scope:'major'}).filter(item=>!item.lead&&item.kind!=='month'&&item.daysAway>=2).forEach(item=>{if(!plannedFor(item.date,scope))items.push({kind:'view',view:'calendar',title:`Nothing planned for ${item.name}`,detail:`${planDayParts(item.date).label} · ${leadPhrase(item.daysAway)}`,meta:item.tip,tone:'pending'});});}
 
-const renderCommandCenterPlanBase=renderCommandCenter;
-renderCommandCenter=function(){renderCommandCenterPlanBase.apply(this,arguments);renderPlanPanel();if(!planningPrefs&&cloudFeaturesAvailable())loadPlanningPrefs().then(renderPlanPanel);};
+function refreshPlanPanel(){renderPlanPanel();if(!planningPrefs&&cloudFeaturesAvailable())loadPlanningPrefs().then(renderPlanPanel);}

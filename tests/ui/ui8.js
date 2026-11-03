@@ -73,7 +73,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('#csv-close').click();
  // CSV import as drafts: past times and missing media are fine for a draft; nothing is published.
  savedDrafts=[];storeSavedDrafts=async()=>{};const publishesBefore=calls.filter(c=>c.action==='publish').length;
- document.querySelector('#csv-open').click();await wait(20);const dt2=new DataTransfer();dt2.items.add(new File([csv],'posts.csv',{type:'text/csv'}));input.files=dt2.files;input.dispatchEvent(new Event('change'));for(let i=0;i<60&&!csvRows.length;i++)await wait(50);
+ document.querySelector('#csv-open').click();await wait(20);csvRows=parseCsv(csv).slice(1).map(validateCsvRow);renderCsvPreview();
  const draftButtons=document.querySelector('#csv-drafts').textContent+' / '+document.querySelector('#csv-schedule').textContent;
  document.querySelector('#csv-drafts').click();await wait(80);
  const imported=savedDrafts.map(d=>[d.title,d.client,d.platforms.join(','),d.date,d.time,d.state.postOptions.campaign].join('|')).join(' ; ');

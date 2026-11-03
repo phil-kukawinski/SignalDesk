@@ -59,6 +59,4 @@ $('#suggested-times')?.addEventListener('click',event=>{
   [date,time].forEach(field=>{field.dispatchEvent(new Event('input',{bubbles:true}));field.dispatchEvent(new Event('change',{bubbles:true}));});
   $$('#suggested-times .time-chip').forEach(item=>item.classList.toggle('active',item===chip));
 });
-const showViewStudioBase=showView;
-showView=function(name){showViewStudioBase(name);if(name==='composer'){renderSuggestedTimes();loadStudioTimes();placeComposerActions();}};
 placeComposerActions();renderSuggestedTimes();

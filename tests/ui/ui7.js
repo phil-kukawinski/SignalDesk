@@ -66,7 +66,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  if(SHOT==='dialog'){document.body.setAttribute('data-log',log.join(' || '));return;}
  document.querySelector('#post-note-input').value='Nice work';document.querySelector('#post-note-form').requestSubmit();await wait(30);L('notePayload',JSON.stringify(calls.filter(c=>c.action==='add-note').pop()));
  document.querySelector('[data-job-comments="j2"]').click();await wait(60);
- L('inbox',document.querySelector('.page.active').id+' panel:'+vis(document.querySelector('#post-comments-panel'))+' sampleHidden:'+document.querySelector('#view-inbox .inbox-panel').hidden+' posts:'+document.querySelectorAll('.comment-post').length+' comment:'+document.querySelector('.comment-item p')?.textContent+' reply:'+document.querySelector('.comment-reply b')?.textContent);
+ L('inbox',document.querySelector('.page.active').id+' panel:'+vis(document.querySelector('#post-comments-panel'))+' posts:'+document.querySelectorAll('.comment-post').length+' comment:'+document.querySelector('.comment-item p')?.textContent+' reply:'+document.querySelector('.comment-reply b')?.textContent);
  const form=document.querySelector('.comment-reply-form');form.querySelector('input').value='Thank you!';form.requestSubmit();await wait(40);L('replyPayload',JSON.stringify(calls.filter(c=>c.action==='reply-comment').pop()));
  if(SHOT==='inbox'){document.body.setAttribute('data-log',log.join(' || '));return;}
  // Approvals show client verdicts

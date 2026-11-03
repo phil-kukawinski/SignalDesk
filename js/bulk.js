@@ -3,8 +3,7 @@
 const bulkSelected=new Set(),pendingApproved=new Set();
 // A refresh while an Undo is waiting keeps showing the change: canceled posts stay hidden and
 // approved ones stay approved until the request goes out.
-const loadServerPostsUndoBase=loadServerPosts;
-loadServerPosts=async function(...args){const result=await loadServerPostsUndoBase.apply(this,args);if(hiddenPosts.size||pendingApproved.size){serverPosts=serverPosts.filter(post=>!hiddenPosts.has(post.id));serverPosts.forEach(post=>{if(pendingApproved.has(post.id)&&post.status==='pending_approval')post.status='scheduled';});refreshPostViews();}return result;};
+function applyPendingPostChanges(){if(hiddenPosts.size||pendingApproved.size){serverPosts=serverPosts.filter(post=>!hiddenPosts.has(post.id));serverPosts.forEach(post=>{if(pendingApproved.has(post.id)&&post.status==='pending_approval')post.status='scheduled';});refreshPostViews();}}
 
 function bulkWaitingPosts(){return serverPosts.filter(post=>post.status==='pending_approval');}
 function renderBulkBar(){
@@ -21,8 +20,6 @@ function renderBulkBar(){
 }
 // Rows are rendered from serverApprovalRows() in the same order, so the index maps back to the post.
 function bulkRowPost(row){const rows=serverApprovalRows(),item=rows[Number(row.dataset.approval)];return item?.serverId?serverPosts.find(post=>post.id===item.serverId):null;}
-const renderApprovalsBulkBase=renderApprovals;
-renderApprovals=function(){renderApprovalsBulkBase.apply(this,arguments);renderBulkBar();};
 
 document.addEventListener('change',event=>{
   if(event.target.id==='bulk-all'){const on=event.target.checked;bulkWaitingPosts().forEach(post=>on?bulkSelected.add(post.id):bulkSelected.delete(post.id));renderBulkBar();return;}
@@ -51,8 +48,6 @@ document.addEventListener('click',async event=>{
 function calendarRange(){const start=startOfDay(calCursor);if(calView==='day')return{start,end:addDays(start,1),label:'day'};const first=addDays(start,-start.getDay());return{start:first,end:addDays(first,7),label:'week'};}
 function copyablePosts(){const{start,end}=calendarRange();return serverPosts.filter(post=>post.status!=='canceled'&&post.source!=='autopilot'&&Date.parse(post.scheduledFor)>=start&&Date.parse(post.scheduledFor)<end).sort((a,b)=>Date.parse(a.scheduledFor)-Date.parse(b.scheduledFor));}
 function renderCopyWeekButton(){const print=$('#print-calendar');if(!print)return;let button=$('#copy-week');const show=currentRole==='admin'&&cloudFeaturesAvailable()&&['week','day'].includes(calView);if(!show){if(button)button.hidden=true;return;}if(!button){button=document.createElement('button');button.type='button';button.id='copy-week';button.className='secondary-button';print.insertAdjacentElement('beforebegin',button);button.addEventListener('click',openCopyWeek);}button.hidden=false;const{label}=calendarRange();button.innerHTML=`${icon('copy')}Copy ${label}`;button.title=`Copy this ${label}’s posts to a later date`;}
-const renderCalendarCopyBase=renderCalendar;
-renderCalendar=function(){renderCalendarCopyBase.apply(this,arguments);renderCopyWeekButton();};
 
 function openCopyWeek(){
   const posts=copyablePosts(),{start,label}=calendarRange();
