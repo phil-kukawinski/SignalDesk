@@ -41,7 +41,7 @@ async function boardShareLink(){try{const data=await callSocialApi({action:'crea
 
 // The client report, limited to this campaign, from its first published post to its last. Reports cover 3 months at most.
 const boardPublished=()=>boardPosts.filter(post=>post.status==='published'||post.status==='partial');
-function boardReport(){const client=clients.find(item=>item.id===boardOpen.clientId),times=boardPublished().map(post=>Date.parse(post.scheduledFor));if(!client||!times.length)return;const end=addDays(startOfDay(new Date(Math.max(...times))),1),start=new Date(Math.max(startOfDay(new Date(Math.min(...times))).getTime(),addDays(end,-92).getTime()));openClientReport({client,period:{start,end,label:`${boardDate(start)} to ${boardDate(addDays(end,-1))}`},campaign:boardOpen.name});}
+function boardReport(){const client=clients.find(item=>item.id===boardOpen.clientId),times=boardPublished().map(post=>Date.parse(post.scheduledFor));if(!client||!times.length)return;const end=addDays(startOfDay(new Date(Math.max(...times))),1),start=new Date(Math.max(startOfDay(new Date(Math.min(...times))).getTime(),addDays(end,-92).getTime()));openClientReport({client,period:{start,end,label:`${boardDate(start)} to ${boardDate(addDays(end,-1))}${start>startOfDay(new Date(Math.min(...times)))?' (the latest 3 months of this campaign)':''}`},campaign:boardOpen.name});}
 
 // Duplicating makes new drafts and schedules nothing. Dates keep their spacing from the chosen first day.
 const boardDayNumber=date=>{const[year,month,day]=date.split('-').map(Number);return Date.UTC(year,month-1,day)/86400000;};

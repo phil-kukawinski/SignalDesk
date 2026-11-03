@@ -1505,6 +1505,13 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     assert.equal(edited.status, 200, JSON.stringify(edited.payload));
     const moved = await call({ action: 'update-post', postId: edited.payload.post.id, clientId: 'pk-works', text: 'Reworded', platforms: ['facebook'], scheduleDate: at(1) });
     assert.equal(moved.status, 409, 'editing a post onto a taken time is refused');
+    // Automatic posts move to the next free minute instead of failing, or stay put with the setting off.
+    const { firstFreeTime } = require(`${ROOT}/api/_lib/publishing.js`);
+    assert.equal(await firstFreeTime(WS, 'pk-works', ['facebook'], slot), slot + 2 * 60000, 'minutes 0 and 1 are taken');
+    assert.equal(await firstFreeTime(WS, 'pk-works', ['pinterest'], slot), slot, 'free on this network');
+    await setting(false);
+    assert.equal(await firstFreeTime(WS, 'pk-works', ['facebook'], slot), slot);
+    await setting(true);
     // Posting right now has no time to clash over.
     assert.equal((await call({ action: 'publish', clientId: 'pk-works', text: 'Right now', platforms: ['linkedin'] })).status, 200);
     await setting(false);
@@ -1550,7 +1557,7 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   assert.equal(r.status, 400);
   // Account deletion: blocked for the only admin while others remain
   networkHandler = (c) => {
-    if (c.url.startsWith('https://sb.test/storage/v1/object/list/')) { const prefix = body(c).prefix; return reply(prefix === `${USER}/` ? [{ id: 'f1', name: 'photo.jpg' }] : prefix === `${ADMIN}/` ? [{ id: 'f2', name: 'kit.png' }] : prefix === 'system/instagram/' ? [{ id: 'f3', name: 'other-0.jpg' }] : []); }
+    if (c.url.startsWith('https://sb.test/storage/v1/object/list/')) { const prefix = body(c).prefix; return reply(prefix === `${USER}/` ? [{ id: 'f1', name: 'photo.jpg' }, { id: 'f3', name: 'in-use.jpg' }] : prefix === `${ADMIN}/` ? [{ id: 'f2', name: 'kit.png' }] : prefix === 'system/instagram/' ? [{ id: 'f3', name: 'other-0.jpg' }] : []); }
     if (c.url === 'https://sb.test/storage/v1/object/social-media' && c.method === 'DELETE') { deletedFiles.push(...body(c).prefixes); return reply([]); }
     if (c.url.startsWith('https://sb.test/auth/v1/admin/users/') && c.method === 'DELETE') { deletedUsers.push(c.url.split('/').pop()); return reply({}); }
     throw new Error('unexpected ' + c.method + ' ' + c.url);
@@ -1563,8 +1570,16 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   r = await call({ action: 'delete-account' }, 'user');
   assert.equal(r.status, 400, 'needs the typed confirmation');
   // A member leaves: their membership, files, and sign-in go; the workspace stays
+  // ...except a file a teammate's draft still uses, and their name comes off the shared drafts they saved.
+  await db.exec(`insert into saved_drafts (workspace_id, id, draft) values ('${WS}','left-1','{"id":"left-1","savedBy":"member@x.com","savedByName":"Member","title":"Kept","state":{"uploadedMedia":[{"url":"https://sb.test/storage/v1/object/public/social-media/${USER}/in-use.jpg"}]}}'),('${WS}','other-1','{"id":"other-1","savedBy":"owner@x.com","state":{}}')`);
   r = await call({ action: 'delete-account', confirm: 'DELETE' }, 'user');
   assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.workspaceDeleted, false);
+  assert.ok(deletedFiles.includes(`${USER}/photo.jpg`) && !deletedFiles.includes(`${USER}/in-use.jpg`), JSON.stringify(deletedFiles));
+  const leftDrafts = Object.fromEntries((await q(`select id, draft from saved_drafts where id in ('left-1','other-1')`)).map((row) => [row.id, row.draft]));
+  assert.equal(leftDrafts['left-1'].title, 'Kept');
+  assert.ok(!('savedBy' in leftDrafts['left-1']) && !('savedByName' in leftDrafts['left-1']), 'the person who left comes off their drafts');
+  assert.equal(leftDrafts['other-1'].savedBy, 'owner@x.com');
+  await db.exec(`delete from saved_drafts where id in ('left-1','other-1')`);
   assert.deepEqual(deletedFiles, [`${USER}/photo.jpg`]); assert.deepEqual(deletedUsers, [USER]);
   assert.equal((await q(`select count(*)::int as n from workspace_members where user_id='${USER}'`))[0].n, 0);
   assert.equal((await q(`select count(*)::int as n from workspaces where id='11111111-1111-1111-1111-111111111111'`))[0].n, 1);

@@ -768,6 +768,19 @@ async function assertTimeFree(workspaceId, clientId, { platforms, times, origina
   }
 }
 
+// Automatic posts have no one to ask, so a taken time moves them to the next free minute instead.
+async function firstFreeTime(workspaceId, clientId, platforms, at) {
+  for (let minutes = 0; minutes < 60; minutes += 1) {
+    try {
+      await assertTimeFree(workspaceId, clientId, { platforms, times: [at + minutes * 60000] });
+      return at + minutes * 60000;
+    } catch (error) {
+      if (error.status !== 409) throw error;
+    }
+  }
+  return at;
+}
+
 async function reschedulePost(workspaceId, postId, when) {
   const post = await getPost(workspaceId, postId);
   if (!['pending_approval', 'scheduled'].includes(post.status) || post.publish_jobs.some((job) => ['publishing', 'published'].includes(job.status))) {
@@ -1187,6 +1200,7 @@ async function recycleEvergreen({ encryptionKey, limit = 10 } = {}) {
       const { followUpComments, reposts, repostOf, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
       const platforms = [...new Set(post.publish_jobs.filter((job) => job.status === 'published').map((job) => job.platform))];
       if (!platforms.length) continue;
+      at = await firstFreeTime(post.workspace_id, post.client_id, platforms, at);
       await createScheduledPost({
         workspaceId: post.workspace_id, clientId: post.client_id, userId: post.created_by, title: post.title, platforms,
         text: post.content?.text || '', mediaUrls: post.content?.media || [], platformContent: post.content?.platformContent || {},
@@ -1364,7 +1378,7 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 }
 
 module.exports = {
-  assertTimeFree, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
+  assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

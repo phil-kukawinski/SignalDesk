@@ -4,6 +4,8 @@ const { databaseRequest, httpError } = require('./core');
 // If the person is the only member, their whole workspace goes too: clients, posts, connected
 // accounts and their tokens, notes, links, and uploaded files. Otherwise only their own
 // membership, drafts, and files are removed, and the workspace stays with the rest of the team.
+// Files the team's posts or shared drafts still use stay until nothing needs them, so a teammate
+// leaving can't make a scheduled post fail. Media cleanup removes them after that.
 
 const BUCKET = 'social-media';
 
@@ -49,7 +51,7 @@ async function deletionPlan(userId) {
 async function deleteAccount(user) {
   const plan = await deletionPlan(user.id);
   if (plan.blocked) throw httpError(409, plan.blocked);
-  let files = 0;
+  let files = 0, stillUsed = new Set();
   if (plan.workspace && plan.soleMember) {
     // Converted Instagram images are named after their jobs; collect them before the jobs go.
     const jobs = (await databaseRequest(`publish_jobs?workspace_id=eq.${plan.workspace}&select=id`) || []).map((job) => job.id);
@@ -59,9 +61,17 @@ async function deleteAccount(user) {
     }
     await databaseRequest(`workspaces?id=eq.${plan.workspace}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
   } else if (plan.workspace) {
+    const { referencedPaths, KEEP_DAYS } = require('./media');
+    stillUsed = await referencedPaths(new Date(Date.now() - KEEP_DAYS * 86400000).toISOString());
+    // Shared drafts stay with the team, without this person's name or email on them.
+    for (const row of await databaseRequest(`saved_drafts?workspace_id=eq.${plan.workspace}&select=id,draft`) || []) {
+      if (row.draft?.savedBy !== user.email) continue;
+      const { savedBy, savedByName, ...draft } = row.draft; // eslint-disable-line no-unused-vars
+      await databaseRequest(`saved_drafts?workspace_id=eq.${plan.workspace}&id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ draft }) });
+    }
     await databaseRequest(`workspace_members?user_id=eq.${user.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
   }
-  files += await removeFiles(await listNames(`${user.id}/`));
+  files += await removeFiles((await listNames(`${user.id}/`)).filter((name) => !stillUsed.has(name)));
   await databaseRequest(`user_drafts?user_id=eq.${user.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } }).catch(() => {});
   await databaseRequest(`push_subscriptions?user_id=eq.${user.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } }).catch(() => {});
   const response = await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {

@@ -76,4 +76,4 @@ async function cleanupMedia({ limit = 200, now = Date.now() } = {}) {
   return { deleted: stale.length, referenced: used.size };
 }
 
-module.exports = { cleanupMedia, collectPaths };
+module.exports = { cleanupMedia, collectPaths, referencedPaths, KEEP_DAYS };

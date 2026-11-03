@@ -94,7 +94,7 @@ function privacyPage() {
 
 <h2>What we collect</h2>
 <h3>Your account</h3>
-<p>Your email address and, if you add it, your name. Your password is handled by our sign-in provider and stored only in hashed form; we never see it.</p>
+<p>Your email address and, if you add them, your name and profile photo. Your password is handled by our sign-in provider and stored only in hashed form; we never see it.</p>
 <h3>What you put into SignalDesk</h3>
 <p>Clients, posts and captions, images and videos you upload, image descriptions, notes, templates, brand kits, campaigns, goals, link-in-bio pages, and settings. Team members you invite to your workspace can see this content.</p>
 <h3>Social accounts you connect</h3>
@@ -274,7 +274,7 @@ ${status}
 <p>SignalDesk can’t use the access immediately after you revoke it. To also delete the stored connection details, disconnect the account in SignalDesk or email us.</p>
 
 <h2>Delete your account</h2>
-<p>Sign in, open <b>Settings → Your account</b>, and choose <b>Delete account</b>. It happens right away. If you’re the only member of your workspace, the whole workspace goes with it: clients, brand kits, scheduled posts, connected accounts and their access tokens, notes, links, and uploaded files. If others share the workspace, only your sign-in, drafts, and uploads are removed. If you’d like a copy first, use <b>Settings → Export</b>.</p>
+<p>Sign in, open <b>Settings → Your account</b>, and choose <b>Delete account</b>. It happens right away. If you’re the only member of your workspace, the whole workspace goes with it: clients, brand kits, scheduled posts, connected accounts and their access tokens, notes, links, and uploaded files. If others share the workspace, your sign-in and any uploads the team isn’t using are removed. The workspace’s posts and saved drafts stay with the team, without your name or email on saved drafts, and uploads they still use are deleted automatically once nothing needs them. If you’d like a copy first, use <b>Settings → Export</b>.</p>
 <p>Can’t sign in? Email ${s.contact} from the address you signed up with, with the subject <b>“Delete my data,”</b> and we’ll do it within 30 days.</p>
 <p>Posts already published on a social network stay there until you delete them on that network.</p>`
   });

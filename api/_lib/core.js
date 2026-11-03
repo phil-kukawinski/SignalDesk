@@ -693,17 +693,17 @@ async function runFeed(feed, { encryptionKey, timeZone }) {
       await patchFeed({ last_error: null, feed_title: parsed.title || feed.feed_title });
       return { created: 0 };
     }
-    const { createScheduledPost, resolveDestinations } = require('./publishing');
+    const { createScheduledPost, resolveDestinations, firstFreeTime } = require('./publishing');
     // Fail the whole run early with a clear message if an account isn't connected.
     await resolveDestinations(feed.workspace_id, feed.client_id, feed.platforms, encryptionKey);
     const taken = new Set(seen.filter((row) => row.scheduled_for).map((row) => Date.parse(row.scheduled_for)));
     const slots = upcomingSlots(feed, timeZone, taken, queue.length);
     let created = 0;
     for (const [index, item] of queue.entries()) {
-      const slot = slots[index];
-      if (!slot) break; // Leave the rest unseen so the next run can place them in later slots.
+      if (!slots[index]) break; // Leave the rest unseen so the next run can place them in later slots.
       const media = feed.include_image && item.image ? [item.image] : [];
       const platforms = feed.platforms.filter((platform) => media.length || !MEDIA_REQUIRED_PLATFORMS.has(platform));
+      const slot = platforms.length ? await firstFreeTime(feed.workspace_id, feed.client_id, platforms, slots[index]) : slots[index];
       const row = {
         feed_id: feed.id, workspace_id: feed.workspace_id, guid: item.guid, title: item.title, link: item.link,
         image_url: item.image || null, published_at: item.publishedAt, scheduled_for: new Date(slot).toISOString(), platforms
