@@ -26,11 +26,11 @@ document.addEventListener('keydown',event=>{if(undoPending&&(event.metaKey||even
 
 // Hides a scheduled post everywhere while its cancel waits, and brings it back on Undo.
 const hiddenPosts=new Map();
-function refreshPostViews(){['renderUpcoming','renderCalendar','renderApprovals','renderCommandCenter'].forEach(name=>{if(typeof window[name]==='function')window[name]();});}
+function refreshPostViews(){['renderUpcoming','renderCalendar','renderApprovals','renderCommandCenter','renderStudioUpcoming'].forEach(name=>{if(typeof window[name]==='function')window[name]();});}
 function hidePostLocally(id){const index=serverPosts.findIndex(post=>post.id===id);if(index<0)return;hiddenPosts.set(id,{post:serverPosts[index],index});serverPosts.splice(index,1);refreshPostViews();}
 function restorePostLocally(id){const saved=hiddenPosts.get(id);if(!saved)return;hiddenPosts.delete(id);if(!serverPosts.some(post=>post.id===id))serverPosts.splice(Math.min(saved.index,serverPosts.length),0,saved.post);refreshPostViews();}
 
 // Replacing the Studio draft (duplicating or posting again) can be undone too.
 function snapshotDraft(){return{state:JSON.parse(JSON.stringify(collectDraftStateRaw())),client:$('#client-select')?.value,date:$('#schedule-date')?.value,time:$('#schedule-time')?.value};}
-function restoreDraft(snapshot){applyDraftState(snapshot.state);if(snapshot.client&&$('#client-select'))$('#client-select').value=snapshot.client;if($('#schedule-date'))$('#schedule-date').value=snapshot.date||'';if($('#schedule-time'))$('#schedule-time').value=snapshot.time||'';editingDuplicatePlatforms=null;updatePreview();scheduleDraftSave();}
+function restoreDraft(snapshot){applyDraftState(snapshot.state);if(snapshot.client&&$('#client-select'))$('#client-select').value=snapshot.client;if($('#schedule-date'))$('#schedule-date').value=snapshot.date||'';if($('#schedule-time'))$('#schedule-time').value=snapshot.time||'';editingDuplicatePlatforms=null;updatePreview();scheduleDraftSave();renderStudioUpcoming();}
 function offerDraftUndo(snapshot,message){if(!snapshot.state.draft.trim()&&!snapshot.state.uploadedMedia.length)return;showUndo(message,{onUndo:()=>restoreDraft(snapshot),undoneMessage:'Your earlier draft is back.'});}

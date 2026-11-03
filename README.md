@@ -30,7 +30,7 @@ Cloud sync uses team workspaces. The first person to sign in becomes the workspa
 
 Running SignalDesk on your own? Turn on **Settings → Personal mode** to hide the Social Inbox and team members.
 
-**Settings → Activity** shows admins who changed what across the workspace: posts, teammates, social accounts, clients, and settings, kept for one year. It records the names of the settings changed, not their values. When someone deletes their account, their name and email come out of this list.
+**Settings → Activity** shows admins who changed what across the workspace: posts, teammates, social accounts, clients, and settings, kept for one year. It records the names of the settings changed, not their values. When someone deletes their account, their entries stay, with their name and any recorded email, until the year is up. Post history and notes keep their name too.
 
 Roles are enforced server-side: `/api/social` rejects admin-only actions for Users and always holds their posts for approval, and a database trigger blocks Users from changing clients, settings, or approval status in shared workspace state. Each person's in-progress draft is stored separately in `user_drafts`. A person can belong to one workspace at a time.
 
@@ -102,6 +102,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
 - Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
 - Post details from the calendar or Command Center: status and links for each network, retry, move, cancel, approve, or request changes
+- **Upcoming posts** in the Publishing Studio: the next scheduled posts beside the draft, for the client you're writing for or all clients, with a note about what's already on the date you picked. Select a post to open it.
 - **Edit in Studio** for scheduled posts: opens the post in the Publishing Studio, sets your own draft aside, and puts it back when you save or cancel. Admins can edit any post until 2 minutes before it goes out. Users can edit their own posts while they await approval, and the edit goes back for approval
 - Publishing checklist with optional checks: proofreading (instant quick checks plus AI suggestions you can apply), platform fit (character limits, required media, hashtag counts, unclickable caption links), and link validation
 - Post options: Instagram collaborators and photo tags, LinkedIn/YouTube/TikTok privacy, a first comment, scheduled follow-up comments, Pinterest board, title, and link, and automatic reposts (each scheduled as its own post)

@@ -110,4 +110,31 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('drafts: ' + drafts);
   const d = JSON.parse(drafts);
   if (d.titles.join('|') !== 'Something else|Holiday hours post' || d.copy !== 'Holiday hours post\nOpen 9 to 5' || d.afterDelete !== 1 || d.restored !== 2 || d.menu !== 'Saved drafts (2)') fail('saved drafts should save, open, delete, and undo');
+  // Upcoming posts beside the draft: follows the client, can show everyone, notes the chosen date, and opens a post.
+  const upcoming = JSON.parse(await evaluate(`(async()=>{
+    const when=(days,hour)=>{const d=new Date();d.setDate(d.getDate()+days);d.setHours(hour,0,0,0);return d.toISOString();};
+    const other=clients.find(c=>c.id!=='pk-works'),make=(id,clientId,status,days,hour,title)=>({id,clientId,title,text:title,status,scheduledFor:when(days,hour),createdBy:'u',media:[],mediaAlt:{},platformContent:{},options:{},jobs:[{id:id+'j',platform:'facebook',provider:'direct',status:'queued',runAt:when(days,hour)}]});
+    try{localStorage.removeItem('signaldesk-studio-upcoming')}catch{}
+    serverPosts=[make('22222222-0000-4000-8000-000000000001','pk-works','scheduled',3,10,'Later <post>'),make('22222222-0000-4000-8000-000000000002','pk-works','pending_approval',2,9,'Sooner post'),make('22222222-0000-4000-8000-000000000003','pk-works','published',-1,9,'Old post'),make('22222222-0000-4000-8000-000000000004','pk-works','canceled',4,9,'Canceled post'),make('22222222-0000-4000-8000-000000000005',other.id,'scheduled',2,11,'Other client post')];
+    serverPostsLoadedAt=Date.now();window.__fresh=fetchServerPosts;fetchServerPosts=async()=>{};
+    showView('composer');const select=document.querySelector('#client-select');select.value=clients.find(c=>c.id==='pk-works').name;select.dispatchEvent(new Event('change',{bubbles:true}));
+    const titles=()=>[...document.querySelectorAll('.studio-upcoming-row b')].map(el=>el.textContent);
+    const date=document.querySelector('#schedule-date'),iso=localIsoDate(new Date(when(2,12))),free=localIsoDate(new Date(when(5,12)));
+    const panel=document.querySelector('#studio-upcoming'),result={hidden:panel.hidden,mine:titles(),count:document.querySelector('#studio-upcoming-count').textContent,tag:document.querySelector('.studio-upcoming-row .status')?.textContent};
+    date.value=iso;date.dispatchEvent(new Event('change',{bubbles:true}));result.day=document.querySelector('#studio-upcoming-day').textContent;result.chosen=document.querySelector('.studio-upcoming-heading.chosen')?.nextElementSibling?.querySelector('b')?.textContent;
+    date.value=free;date.dispatchEvent(new Event('change',{bubbles:true}));result.freeDay=document.querySelector('#studio-upcoming-day').textContent;
+    const scope=document.querySelector('#studio-upcoming-scope');scope.value='all';scope.dispatchEvent(new Event('change',{bubbles:true}));result.all=titles();
+    result.remembered=JSON.parse(localStorage.getItem('signaldesk-studio-upcoming')).all;
+    scope.value='client';scope.dispatchEvent(new Event('change',{bubbles:true}));
+    document.querySelector('.studio-upcoming-row').click();await new Promise(r=>setTimeout(r,100));result.opened=openPostId;const dialog=document.querySelector('#post-dialog');result.dialog=dialog.open;dialog.close();
+    fetchServerPosts=window.__fresh;return JSON.stringify(result);
+  })()`));
+  log.push('studio upcoming: ' + JSON.stringify(upcoming));
+  if (upcoming.hidden || upcoming.mine.join('|') !== 'Sooner post|Later <post>' || upcoming.count !== '2 coming up' || upcoming.tag !== 'In Review') fail('Studio upcoming should list this client\'s waiting posts, soonest first');
+  if (!/^1 post already on /.test(upcoming.day) || upcoming.chosen !== 'Sooner post' || !/^Nothing else on /.test(upcoming.freeDay)) fail('Studio upcoming should say what is on the chosen date');
+  if (upcoming.all.join('|') !== 'Sooner post|Other client post|Later <post>' || upcoming.remembered !== true) fail('Studio upcoming should show and remember all clients');
+  if (upcoming.opened !== '22222222-0000-4000-8000-000000000002' || !upcoming.dialog) fail('Selecting an upcoming post should open it');
+  // The logo goes back to the Command Center.
+  const logo = await evaluate(`(()=>{showView('composer');const away=document.querySelector('#view-composer').classList.contains('active');document.querySelector('.sidebar .brand').click();return away&&document.querySelector('#view-overview').classList.contains('active');})()`);
+  if (logo !== true) fail('The logo should open the Command Center');
 };

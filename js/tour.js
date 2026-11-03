@@ -15,7 +15,7 @@ const TOUR_STEPS=[
   {view:'overview',target:'.approval-panel',title:'Needs your attention',body:'Approvals, failed posts, and accounts to reconnect land here, so nothing slips.',admin:true},
   {view:'composer',target:'.account-select',title:'Write once, post everywhere',body:'Pick the client and tap the accounts this post goes to: Facebook, Instagram (posts and Stories), Threads, LinkedIn, Pinterest, X, YouTube, and TikTok.'},
   {view:'composer',target:'#ai-draft-button',title:'A head start from AI',body:'Describe the post and get a draft for each network in the client’s voice. Then adjust it to taste.'},
-  {view:'composer',target:'.preview-column',title:'See it before it goes out',body:'The preview matches each network’s layout, and the checklist catches problems like missing images or broken links.'},
+  {view:'composer',target:'.preview-panel',title:'See it before it goes out',body:'The preview matches each network’s layout, and the checklist catches problems like missing images or broken links.'},
   {view:'composer',target:'#suggested-times',title:'Post at the right moment',body:'One tap picks a good time. As results come in, SignalDesk learns this client’s best times.',optional:true},
   {view:'composer',target:'#composer-actions',title:'Schedule it',body:'Schedule the post, save a draft, or send it for approval. It goes out on time, even with SignalDesk closed.'},
   {view:'calendar',target:'.calendar-panel',title:'Plan the month',body:'Everything planned and already published, in one calendar. Drag a post to move it; use Filter to focus.'},

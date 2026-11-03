@@ -60,3 +60,39 @@ $('#suggested-times')?.addEventListener('click',event=>{
   $$('#suggested-times .time-chip').forEach(item=>item.classList.toggle('active',item===chip));
 });
 placeComposerActions();renderSuggestedTimes();
+
+// Upcoming posts beside the draft, so the schedule stays in view while writing: the client being
+// written for, or every client. Picking a date also says what's already on that day.
+const STUDIO_UPCOMING_KEY='signaldesk-studio-upcoming',STUDIO_UPCOMING_MAX=30,STUDIO_UPCOMING_DAYS=60;
+function studioUpcomingPrefs(){try{return JSON.parse(localStorage.getItem(STUDIO_UPCOMING_KEY))||{};}catch{return{};}}
+function saveStudioUpcomingPrefs(patch){try{localStorage.setItem(STUDIO_UPCOMING_KEY,JSON.stringify({...studioUpcomingPrefs(),...patch}));}catch{}}
+function studioUpcomingPosts(client){
+  const waiting=new Set(serverPosts.filter(post=>['pending_approval','scheduled','publishing'].includes(post.status)).map(post=>post.id)),now=Date.now();
+  return serverCalendarPosts().filter(post=>waiting.has(post.serverId)&&(post.at>=now||post.status==='Publishing')&&(!client||post.client===client.name)).sort((a,b)=>a.at-b.at);
+}
+function studioUpcomingDayNote(posts,chosen){
+  const days=Math.round((startOfDay(new Date(`${chosen}T12:00:00`))-startOfDay(new Date()))/86400000);
+  if(!chosen||days<0||days>STUDIO_UPCOMING_DAYS)return '';
+  const name=dayHeading(chosen),when=['Today','Tomorrow'].includes(name)?name.toLowerCase():`on ${name}`,count=posts.filter(post=>post.date===chosen&&post.serverId!==editingPost?.id).length;
+  return count?`${count} post${count===1?'':'s'} already ${when}`:`Nothing else ${when}`;
+}
+function renderStudioUpcoming(){
+  const panel=$('#studio-upcoming'),list=$('#studio-upcoming-list'),scope=$('#studio-upcoming-scope'),count=$('#studio-upcoming-count'),day=$('#studio-upcoming-day');if(!panel||!list||!scope)return;
+  panel.hidden=!cloudFeaturesAvailable();if(panel.hidden)return;
+  const client=selectedClient('#client-select'),name=client?.name||'';
+  if(scope.dataset.client!==name||!scope.options.length){scope.dataset.client=name;scope.innerHTML=`${client?`<option value="client">${escapeHtml(name)}</option>`:''}<option value="all">All clients</option>`;}
+  const everyone=!client||studioUpcomingPrefs().all===true;scope.value=everyone?'all':'client';
+  if(!serverPostsLoadedAt){count.textContent='';day.hidden=true;list.innerHTML=serverPostsError?errorHtml(serverPostsError,'posts'):skeletonRows(3);return;}
+  const posts=studioUpcomingPosts(everyone?null:client),chosen=$('#schedule-date')?.value||'',note=studioUpcomingDayNote(posts,chosen),top=list.scrollTop;
+  count.textContent=posts.length?`${posts.length} coming up`:'';day.textContent=note;day.hidden=!note;
+  let lastDay='';
+  list.innerHTML=posts.length?posts.slice(0,STUDIO_UPCOMING_MAX).map(post=>{
+    const heading=post.date!==lastDay?`<div class="studio-upcoming-heading${post.date===chosen?' chosen':''}">${escapeHtml(dayHeading(post.date))}</div>`:'';lastDay=post.date;
+    const meta=[everyone?post.client:'',post.channel].filter(Boolean).join(' · '),tag=post.serverId===editingPost?.id?'<span class="status">Editing</span>':post.status==='Scheduled'?'':`<span class="status ${statusClass(post.status)}">${escapeHtml(post.status)}</span>`;
+    return `${heading}<button type="button" class="studio-upcoming-row" data-open-post="${post.serverId}"><span class="studio-upcoming-time">${escapeHtml(post.time)}</span><span class="studio-upcoming-text"><b>${escapeHtml(post.title)}</b><small>${escapeHtml(meta)}</small>${tag}</span></button>`;
+  }).join('')+(posts.length>STUDIO_UPCOMING_MAX?`<button type="button" class="text-button studio-upcoming-more" data-view="calendar">See all ${posts.length} on the calendar</button>`:''):`<p class="option-hint">Nothing coming up${everyone?'':` for ${escapeHtml(name)}`}.</p>`;
+  list.scrollTop=top;
+}
+$('#view-composer')?.addEventListener('change',event=>{if(event.target.id==='studio-upcoming-scope')saveStudioUpcomingPrefs({all:event.target.value==='all'});if(['client-select','schedule-date','studio-upcoming-scope'].includes(event.target.id))renderStudioUpcoming();});
+$('#studio-upcoming')?.addEventListener('toggle',event=>saveStudioUpcomingPrefs({closed:!event.currentTarget.open}));
+if(studioUpcomingPrefs().closed&&$('#studio-upcoming'))$('#studio-upcoming').open=false;
