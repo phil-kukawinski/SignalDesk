@@ -1023,7 +1023,7 @@ async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 
 async function campaignSummary(workspaceId, { clientId = null, days = 90 } = {}) {
   const { finishMetrics } = require('./reports');
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const query = new URLSearchParams({ select: 'id,client_id,campaign,title,status,scheduled_for,publish_jobs(id,platform,status,metrics,published_at,external_url)', workspace_id: `eq.${workspaceId}`, campaign: 'not.is.null', scheduled_for: `gte.${since}`, status: 'neq.canceled', order: 'scheduled_for.asc' });
+  const query = new URLSearchParams({ select: 'id,client_id,campaign,title,status,client_status,scheduled_for,publish_jobs(id,platform,status,metrics,published_at,external_url)', workspace_id: `eq.${workspaceId}`, campaign: 'not.is.null', scheduled_for: `gte.${since}`, status: 'neq.canceled', order: 'scheduled_for.asc' });
   if (clientId) query.set('client_id', `eq.${clientId}`);
   const posts = (await allRows(`scheduled_posts?${query}`, { maxRows: 5000 })).filter((post) => (post.campaign || '').trim());
   const jobs = posts.flatMap((post) => (post.publish_jobs || []).filter((job) => job.status === 'published'));
@@ -1039,10 +1039,13 @@ async function campaignSummary(workspaceId, { clientId = null, days = 90 } = {})
   const groups = new Map();
   for (const post of posts) {
     const key = `${post.client_id}\u0000${post.campaign.trim()}`;
-    const group = groups.get(key) || { clientId: post.client_id, campaign: post.campaign.trim(), posts: 0, published: 0, upcoming: 0, reach: 0, views: 0, engagements: 0, clicks: 0, measured: 0, first: post.scheduled_for, last: post.scheduled_for, best: null };
+    const group = groups.get(key) || { clientId: post.client_id, campaign: post.campaign.trim(), posts: 0, published: 0, out: 0, upcoming: 0, waiting: 0, changes: 0, reach: 0, views: 0, engagements: 0, clicks: 0, measured: 0, first: post.scheduled_for, last: post.scheduled_for, best: null };
     group.posts += 1;
     group.last = post.scheduled_for;
     group.clicks += clicks[post.id] || 0;
+    if (post.status === 'pending_approval') group.waiting += 1;
+    if (['published', 'partial'].includes(post.status)) group.out += 1;
+    if (post.client_status === 'changes_requested' && ['scheduled', 'pending_approval'].includes(post.status)) group.changes += 1;
     if (['scheduled', 'pending_approval', 'publishing'].includes(post.status) && Date.parse(post.scheduled_for) > Date.now()) group.upcoming += 1;
     let postEngagements = null;
     for (const job of post.publish_jobs || []) {
@@ -1057,6 +1060,39 @@ async function campaignSummary(workspaceId, { clientId = null, days = 90 } = {})
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => ({ ...group, engagementRate: group.reach ? Math.round(group.engagements / group.reach * 10000) / 100 : null })).sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
+}
+
+// Every post in one campaign, whatever its date, with each post's results so far.
+async function campaignPosts(workspaceId, { clientId, campaign }) {
+  const { finishMetrics } = require('./reports');
+  const query = new URLSearchParams({ select: `*,publish_jobs(${JOB_FIELDS},metrics)`, workspace_id: `eq.${workspaceId}`, client_id: `eq.${clientId}`, campaign: `eq.${campaign}`, status: 'neq.canceled', order: 'scheduled_for.asc', limit: '500' });
+  const rows = await databaseRequest(`scheduled_posts?${query}`) || [];
+  const jobs = rows.flatMap((row) => (row.publish_jobs || []).filter((job) => job.status === 'published'));
+  const synced = {};
+  for (let index = 0; index < jobs.length; index += 150) {
+    const ids = jobs.slice(index, index + 150).map((job) => job.id).join(',');
+    for (const row of await databaseRequest(`network_posts?job_id=in.(${ids})&select=job_id,metrics`).catch(() => []) || []) synced[row.job_id] = row.metrics;
+  }
+  const posts = await attachClicks(rows);
+  return posts.map((post, index) => {
+    const results = { reach: 0, engagements: 0, clicks: 0, measured: false };
+    for (const job of rows[index].publish_jobs || []) {
+      if (job.status !== 'published') continue;
+      const metrics = finishMetrics(synced[job.id] || job.metrics || {});
+      if (typeof metrics.engagements === 'number') { results.engagements += metrics.engagements; results.measured = true; }
+      results.reach += metrics.reach || 0;
+    }
+    results.clicks = post.jobs.reduce((sum, job) => sum + (job.clicks || 0), 0);
+    return { ...post, results };
+  });
+}
+
+// Posts by ID, for a spreadsheet that updates posts it was exported with.
+async function postsById(workspaceId, ids) {
+  const clean = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+  if (!clean.length) return [];
+  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&id=in.(${clean.join(',')})&select=*,publish_jobs(${JOB_FIELDS})`) || [];
+  return rows.map((row) => publicPost(row));
 }
 
 // --- Posting queues and evergreen posts ---
@@ -1297,6 +1333,6 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 
 module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
-  processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
+  processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

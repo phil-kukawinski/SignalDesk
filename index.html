@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=eeafc71b39">
+  <link rel="stylesheet" href="css/app.min.css?v=19e70dbd77">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -88,6 +88,7 @@
         <button class="nav-item active" data-view="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></span> Command Center <span class="nav-count" hidden></span></button>
         <button class="nav-item" data-view="calendar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span> Content Calendar</button>
         <button class="nav-item" data-view="composer"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span> Publishing Studio</button>
+        <button class="nav-item" data-view="campaigns"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 22V4"/><path d="M4 4h13l-2.5 4 2.5 4H4"/></svg></span> Campaigns</button>
         <button class="nav-item" data-view="library"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></span> Content Library</button>
         <button class="nav-item" data-view="inbox"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1Z"/></svg></span> Social Inbox <span class="nav-count muted" hidden></span></button>
         <button class="nav-item" data-view="analytics"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3v18h18"/><path d="M7 15v2M12 10v7M17 6v11"/></svg></span> Analytics & Reports</button>
@@ -198,6 +199,10 @@
 <div class="divider"></div><div class="composer-step"><span class="step-number">4</span><div><h2>When to post</h2><p>Pick a time, or send it for approval first.</p></div></div><div class="schedule-fields"><div><label class="field-label" for="schedule-date">Date</label><input type="date" id="schedule-date" class="field"></div><div><label class="field-label" for="schedule-time">Time</label><input type="time" id="schedule-time" class="field" value="10:00"></div></div><div class="suggested-times" id="suggested-times"></div><details class="more-options"><summary>More options <small>Campaign, link tracking, reuse</small></summary><div class="publish-extras"><div><label class="field-label" for="post-campaign">Campaign <small>(optional)</small></label><input id="post-campaign" class="field" list="campaign-list" maxlength="60" placeholder="e.g. Fall launch" autocomplete="off"><datalist id="campaign-list"></datalist></div><div class="publish-toggles"><label class="option-toggle"><input type="checkbox" id="post-utm"> Tag links for Google Analytics (UTM) <i data-tip-key="utm"></i></label><label class="option-toggle" title="Links become short SignalDesk links that count clicks per network. Instagram captions keep their links."><input type="checkbox" id="post-shortlinks"> Count clicks with short links <i data-tip-key="shortlinks"></i></label><label class="option-toggle"><input type="checkbox" id="post-evergreen"> Reuse it: put it back in the queue after it publishes <i data-tip-key="reuse"></i></label></div></div></details><div class="composer-actions" id="composer-actions"><button class="secondary-button" id="save-draft">Save draft</button><div class="action-menu"><button class="secondary-button" type="button" id="more-actions" aria-haspopup="menu" aria-expanded="false">More <i data-icon="chevronDown"></i></button><div class="menu" id="more-actions-menu" role="menu" hidden><button class="menu-item" id="submit-review" role="menuitem">Send for approval</button><button class="menu-item" id="post-now" type="button" role="menuitem">Post now</button></div></div><span class="push"></span><button class="secondary-button" id="queue-post" type="button" hidden>Add to queue</button><button class="primary-button" id="schedule-post">Schedule post</button></div></div><div class="preview-column"><div class="panel preview-panel"><div class="panel-header"><div><h2>Post preview</h2><p id="preview-platform">Approximate platform preview</p></div><span class="live-label">LIVE PREVIEW</span></div><div id="preview-chooser"></div><div class="social-preview"><div class="preview-profile"><div class="preview-logo">PK</div><div><b id="preview-account">PK Works</b><small>Just now · 🌐</small></div><span>•••</span></div><div id="preview-copy" class="preview-copy">Your post copy will appear here as you write.</div><div class="preview-media" id="preview-media"><div class="media-placeholder"><i data-icon="image"></i><small>Your image or video will appear here</small></div></div><p class="preview-note" id="preview-note" hidden></p><div class="preview-reactions"><span>👍 ❤️ 👏</span><span>0 comments · 0 shares</span></div><div class="preview-actions"><span>♡ Like</span><span>▢ Comment</span><span>↗ Share</span></div></div></div><div class="panel tips-panel"><h3>Quick checklist</h3><div class="checklist" id="checklist" aria-live="polite"></div></div></div></div>
         </section>
 
+        <section class="page" id="view-campaigns">
+          <div class="page-heading"><div><div class="eyebrow">PLAN THE WHOLE PUSH</div><h1>Campaigns</h1><p class="subheading">Every post in a campaign in one place, from draft to results.</p></div><button class="secondary-button" id="board-import" type="button">Import spreadsheet</button></div>
+          <div id="board-body"></div>
+        </section>
         <section class="page" id="view-library">
           <div class="page-heading"><div><div class="eyebrow">YOUR CREATIVE HUB</div><h1>Content library</h1><p class="subheading">Keep brand files, reusable copy, and trend ideas in one place.</p></div><button class="primary-button" id="add-asset"><i data-icon="plus"></i>Add asset</button></div>
           <div class="panel trends-panel" id="trends-panel"><div class="panel-header"><div><h2>Trend signals</h2><p>AI research on what’s moving right now: hashtags, audio, formats, and standout posts, with sources.</p></div><span class="live-label" id="trends-updated">NOT LOADED</span></div>
@@ -416,12 +421,12 @@
   <dialog id="csv-dialog" class="auth-dialog csv-dialog">
     <div class="auth-form">
       <h2>Import posts from a spreadsheet</h2>
-      <p>Save a spreadsheet as CSV with these columns: <code>date</code> (YYYY-MM-DD), <code>time</code> (24-hour, HH:MM, your local time), <code>client</code>, <code>networks</code> (separated by semicolons, e.g. Facebook;LinkedIn), <code>text</code>, <code>media_url</code> (optional), <code>campaign</code> (optional).</p>
-      <p class="option-hint">Schedule them right away, or import them as drafts. Drafts wait in More → Saved drafts until you open and schedule each one.</p>
+      <p>Save a spreadsheet as CSV with these columns: <code>date</code> (2026-11-03 or 11/3/2026), <code>time</code> (14:30 or 2:30 PM, your local time), <code>client</code>, <code>networks</code> (separated by semicolons, e.g. Facebook;LinkedIn), <code>text</code>, and optionally <code>media_url</code> (separate several with spaces) and <code>campaign</code>. Other columns are ignored.</p>
+      <p class="option-hint">Schedule them right away, or import them as drafts, which wait in Campaigns and Saved drafts. A file exported from a campaign has an <code>id</code> column, so importing it again updates those posts instead of adding new ones.</p>
       <div class="auth-actions"><label class="secondary-button file-button">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label><button class="text-button" type="button" id="csv-template">Download a template</button></div>
       <p class="auth-message" id="csv-message" role="status"></p>
       <div class="table-scroll" id="csv-preview"></div>
-      <div class="auth-actions"><button class="primary-button" type="button" id="csv-schedule" disabled>Schedule posts</button><button class="secondary-button" type="button" id="csv-drafts" disabled>Import as drafts</button><button class="secondary-button" type="button" id="csv-close">Close</button></div>
+      <div class="auth-actions"><button class="primary-button" type="button" id="csv-schedule" disabled>Schedule posts</button><button class="secondary-button" type="button" id="csv-drafts" disabled>Import as drafts</button><button class="primary-button" type="button" id="csv-update" hidden>Save changes</button><button class="secondary-button" type="button" id="csv-close">Close</button></div>
     </div>
   </dialog>
   <dialog id="search-dialog" class="auth-dialog search-dialog" aria-label="Search">
@@ -489,6 +494,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=e16f15b4a6"></script>
+  <script src="js/app.min.js?v=6a7feba09a"></script>
 </body>
 </html>

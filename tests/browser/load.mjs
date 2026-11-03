@@ -15,7 +15,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!join.open || join.mode !== 'signup' || join.email !== 'teammate@studio.test' || !join.clean) log.push('[exception] a ?join= link should open sign-up with the email filled in');
   await evaluate(`sessionStorage.clear();document.querySelector('#auth-dialog').close()`);
   await sampleData();
-  for (const view of ['calendar', 'composer', 'library', 'inbox', 'analytics', 'clients', 'accounts', 'team', 'settings', 'overview']) {
+  for (const view of ['calendar', 'composer', 'campaigns', 'library', 'inbox', 'analytics', 'clients', 'accounts', 'team', 'settings', 'overview']) {
     await evaluate(`document.querySelector('[data-view="${view}"]')?.click()`); await wait(400);
   }
   log.push('done local load');

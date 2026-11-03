@@ -653,6 +653,44 @@ assert.deepEqual([afterReview.client_status, afterReview.status], ['approved', '
 assert.equal((await q(`select count(*)::int n from notifications where type='client_review'`))[0].n, 2);
 r = await reviewCall({ token: reviewToken, action: 'decide', postId: postId, decision: 'approved', name: 'Dana' });
 assert.equal(r.status, 404, 'published posts are not reviewable');
+// --- Campaigns: the board's numbers, a campaign's posts, and a client approving them all at once ---
+const launchIds = [];
+for (const text of ['Launch one', 'Launch two', 'Launch three']) {
+  r = await call({ action: 'publish', clientId: 'pk-works', text, platforms: ['facebook'], scheduleDate: new Date(future).toISOString(), campaign: 'Launch', requiresApproval: true });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  launchIds.push(r.payload.post.id);
+}
+r = await call({ action: 'campaigns', all: true });
+const launch = r.payload.campaigns.find((row) => row.campaign === 'Launch');
+assert.deepEqual([launch.posts, launch.waiting, launch.upcoming, launch.out], [3, 3, 3, 0]);
+r = await call({ action: 'campaign-posts', clientId: 'pk-works', campaign: 'Launch' });
+assert.deepEqual(r.payload.posts.map((post) => post.text).sort(), ['Launch one', 'Launch three', 'Launch two']);
+assert.ok(r.payload.posts.every((post) => post.results && post.results.measured === false));
+r = await call({ action: 'campaign-posts', clientId: 'somebody-else', campaign: 'Launch' });
+assert.ok(r.status >= 400, 'other clients are refused');
+r = await call({ action: 'posts-by-id', ids: [launchIds[0], 'not-an-id'] });
+assert.deepEqual(r.payload.posts.map((post) => post.id), [launchIds[0]]);
+r = await reviewCall({ token: reviewToken, action: 'load', campaign: 'Launch' });
+assert.equal(r.payload.campaign, 'Launch');
+assert.deepEqual(r.payload.posts.map((post) => post.campaign), ['Launch', 'Launch', 'Launch'], 'a campaign link shows only that campaign');
+r = await reviewCall({ token: reviewToken, action: 'approve-many', postIds: launchIds, comment: '' });
+assert.equal(r.status, 400, 'needs a name');
+r = await reviewCall({ token: reviewToken, action: 'approve-many', postIds: Array(26).fill(launchIds[0]), name: 'Dana' });
+assert.equal(r.status, 400, 'caps each request');
+const reviewNotes = async () => (await q(`select count(*)::int n from notifications where type='client_review'`))[0].n;
+const notesBefore = await reviewNotes();
+r = await reviewCall({ token: reviewToken, action: 'approve-many', postIds: launchIds.slice(0, 2), name: 'Dana', notify: false, total: 3 });
+assert.deepEqual([r.payload.approved, r.payload.released], [2, 2]);
+assert.equal(await reviewNotes(), notesBefore, 'no notification until the last batch');
+r = await reviewCall({ token: reviewToken, action: 'approve-many', postIds: launchIds.slice(2), name: 'Dana', notify: true, total: 3 });
+assert.equal(r.payload.approved, 1);
+assert.equal(await reviewNotes(), notesBefore + 1, 'one notification for the whole batch');
+assert.ok(/approved 3 posts/.test((await q(`select title from notifications where type='client_review' order by created_at desc limit 1`))[0].title));
+assert.deepEqual((await q(`select distinct client_status, status from scheduled_posts where campaign='Launch'`)).map((row) => [row.client_status, row.status]), [['approved', 'scheduled']]);
+r = await reviewCall({ token: reviewToken, action: 'approve-many', postIds: launchIds, name: 'Dana' });
+assert.equal(r.payload.approved, 0, 'approving again changes nothing');
+await db.exec(`delete from scheduled_posts where campaign='Launch'`);
+
 r = await call({ action: 'post-notes', postId: reviewPostId });
 assert.deepEqual(r.payload.notes.map((n) => `${n.kind}:${n.decision || ''}`), ['team:', 'client:changes_requested', 'client:approved']);
 // Editing keeps the conversation but clears the client's decision

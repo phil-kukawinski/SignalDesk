@@ -8,6 +8,9 @@ const { notify } = require('./_lib/notify');
 // the request body and only its hash is stored.
 
 const LOOKAHEAD_DAYS = 60;
+// A link opened on one campaign shows all of it, however far ahead it runs.
+const CAMPAIGN_LOOKAHEAD_DAYS = 365;
+const MAX_BATCH = 25;
 const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'X', threads: 'Threads', bluesky: 'Bluesky', gmb: 'Google Business Profile', reddit: 'Reddit', telegram: 'Telegram', snapchat: 'Snapchat', whatsapp: 'WhatsApp' };
 
 async function findLink(token) {
@@ -30,7 +33,7 @@ function publicPost(row, notes) {
 
 async function reviewablePost(link, postId) {
   if (typeof postId !== 'string' || !/^[0-9a-f-]{36}$/i.test(postId)) return null;
-  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${link.workspace_id}&client_id=eq.${encodeURIComponent(link.client_id)}&id=eq.${postId}&status=in.(pending_approval,scheduled)&select=id,title,status,scheduled_for,created_by`);
+  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${link.workspace_id}&client_id=eq.${encodeURIComponent(link.client_id)}&id=eq.${postId}&status=in.(pending_approval,scheduled)&select=id,title,status,client_status,scheduled_for,created_by`);
   return rows?.[0] || null;
 }
 
@@ -89,10 +92,12 @@ module.exports = async function handler(req, res) {
       const now = Date.now();
       const query = new URLSearchParams({
         select: 'id,title,status,scheduled_for,client_status,campaign,content,publish_jobs(platform,status)',
-        workspace_id: `eq.${link.workspace_id}`, client_id: `eq.${link.client_id}`, status: 'in.(pending_approval,scheduled)', order: 'scheduled_for.asc', limit: '100'
+        workspace_id: `eq.${link.workspace_id}`, client_id: `eq.${link.client_id}`, status: 'in.(pending_approval,scheduled)', order: 'scheduled_for.asc', limit: '200'
       });
+      const campaign = typeof body.campaign === 'string' ? body.campaign.trim().slice(0, 60) : '';
+      if (campaign) query.set('campaign', `eq.${campaign}`);
       query.append('scheduled_for', `gte.${new Date(now - 86400000).toISOString()}`);
-      query.append('scheduled_for', `lte.${new Date(now + LOOKAHEAD_DAYS * 86400000).toISOString()}`);
+      query.append('scheduled_for', `lte.${new Date(now + (campaign ? CAMPAIGN_LOOKAHEAD_DAYS : LOOKAHEAD_DAYS) * 86400000).toISOString()}`);
       const rows = await databaseRequest(`scheduled_posts?${query}`) || [];
       // Clients see their own comments, never the team's internal notes.
       const notes = rows.length ? await listNotes(link.workspace_id, rows.map((row) => row.id), { clientOnly: true }) : [];
@@ -100,6 +105,7 @@ module.exports = async function handler(req, res) {
         client: { name: client.name, initials: client.initials, color: client.brand?.colors?.[0] || client.text || '#5b8db8', logo: /^https:\/\//.test(client.brand?.logo || '') ? client.brand.logo : '' },
         workspace: state.settings?.name || 'SignalDesk',
         expiresAt: link.expires_at,
+        campaign,
         posts: rows.map((row) => publicPost(row, notes))
       });
     }
@@ -108,6 +114,32 @@ module.exports = async function handler(req, res) {
     const comment = typeof body.comment === 'string' ? body.comment.trim() : '';
     if (!name) return send(res, 400, { error: 'Add your name so the team knows who reviewed this.' });
     if (comment.length > 2000) return send(res, 400, { error: 'Comments can be up to 2,000 characters.' });
+
+    // Approve several at once. The team gets one notification with the total, not one per post.
+    if (body.action === 'approve-many') {
+      if (!Array.isArray(body.postIds) || !body.postIds.length || body.postIds.length > MAX_BATCH) return send(res, 400, { error: `Approve up to ${MAX_BATCH} posts at a time.` });
+      let approved = 0, released = 0;
+      for (const postId of body.postIds) {
+        const item = await reviewablePost(link, postId);
+        if (!item || item.client_status === 'approved') continue;
+        await addNote({ workspaceId: link.workspace_id, postId: item.id, authorName: name, kind: 'client', body: comment, decision: 'approved' });
+        await databaseRequest(`scheduled_posts?id=eq.${item.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ client_status: 'approved' }) });
+        await addHistory(link.workspace_id, item.id, 'client_approved', { actorName: `${name} (client)`, detail: { comment } });
+        if (item.status === 'pending_approval') { await approvePost(link.workspace_id, item.id, null); released += 1; }
+        approved += 1;
+      }
+      // A long list arrives in several requests; only the last one (notify isn't false) tells the team.
+      if (approved && body.notify !== false) {
+        const total = Number.isInteger(body.total) && body.total > approved ? Math.min(body.total, 500) : approved;
+        await notify({
+          workspaceId: link.workspace_id, audience: 'admins', type: 'client_review', category: 'approvals',
+          title: `${client.name} approved ${total} post${total === 1 ? '' : 's'}`,
+          body: `${name}${comment ? `: ${comment.slice(0, 200)}` : ''}`, view: 'campaigns'
+        });
+      }
+      return send(res, 200, { ok: true, approved, released });
+    }
+
     const post = await reviewablePost(link, body.postId);
     if (!post) return send(res, 404, { error: 'This post has already gone out or was removed.' });
 

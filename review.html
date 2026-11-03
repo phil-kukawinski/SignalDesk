@@ -17,9 +17,12 @@
   </header>
   <main class="review-main">
     <p class="review-intro" id="review-intro">Loading upcoming posts…</p>
-    <div class="review-filter" id="review-filter" hidden>
-      <button type="button" class="active" data-filter="all">All upcoming</button>
-      <button type="button" data-filter="waiting">Waiting for you</button>
+    <div class="review-toolbar">
+      <div class="review-filter" id="review-filter" hidden>
+        <button type="button" class="active" data-filter="all">All upcoming</button>
+        <button type="button" data-filter="waiting">Waiting for you</button>
+      </div>
+      <button type="button" class="review-approve-all" id="review-approve-all" hidden></button>
     </div>
     <div id="review-list" class="review-list"></div>
   </main>

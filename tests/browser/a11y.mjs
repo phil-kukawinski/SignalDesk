@@ -16,7 +16,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   };
   for (const theme of ['light', 'dark']) {
     await evaluate(`localStorage.setItem('signaldesk-theme','${theme}');applyTheme()`);
-    for (const view of ['overview', 'calendar', 'composer', 'library', 'inbox', 'analytics', 'clients', 'social-accounts', 'approvals', 'settings']) { await evaluate(`showView('${view}')`); await wait(500); await check(`${view} (${theme})`); }
+    for (const view of ['overview', 'calendar', 'composer', 'campaigns', 'library', 'inbox', 'analytics', 'clients', 'social-accounts', 'approvals', 'settings']) { await evaluate(`showView('${view}')`); await wait(500); await check(`${view} (${theme})`); }
   }
   await evaluate(`localStorage.setItem('signaldesk-theme','light');applyTheme();openNotificationPreferences()`); await wait(300); await check('notification preferences');
   await evaluate(`document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.querySelector('[data-open-feedback]')?.click()`); await wait(300); await check('feedback');

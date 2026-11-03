@@ -1,9 +1,11 @@
 // Client review page: loads a client's upcoming posts with the private token in the URL fragment.
 (() => {
   const $ = (selector, root = document) => root.querySelector(selector);
-  const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+  const hash = new URLSearchParams(location.hash.slice(1)), token = hash.get('t') || '', campaign = hash.get('campaign') || '';
   const NAME_KEY = 'signaldesk-review-name';
-  let posts = [], filter = 'all';
+  let posts = [], filter = 'all', approveArmed = false;
+  const approvable = () => posts.filter((post) => !post.clientStatus);
+  const BATCH = 25;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const toast = (message) => { const el = $('#review-toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3200); };
   try { $('#review-name').value = localStorage.getItem(NAME_KEY) || ''; } catch { /* storage unavailable */ }
@@ -26,7 +28,39 @@
     return `<p class="review-copy">${escapeHtml(version.text)}</p>${mediaThumbsHtml(version.media, { className: 'large' })}`;
   }
 
+  function renderApproveAll() {
+    const button = $('#review-approve-all'), count = approvable().length;
+    button.hidden = count < 2;
+    button.textContent = approveArmed ? `Yes, approve all ${count}` : `Approve all ${count}`;
+    button.classList.toggle('armed', approveArmed);
+  }
+
+  async function approveAll(button) {
+    const name = $('#review-name').value.trim();
+    if (!name) { toast('Add your name at the top first.'); $('#review-name').focus(); return; }
+    if (!approveArmed) { approveArmed = true; renderApproveAll(); return; }
+    const items = approvable(), total = items.length;
+    button.disabled = true;
+    let released = 0;
+    try {
+      for (let index = 0; index < total; index += BATCH) {
+        const chunk = items.slice(index, index + BATCH), last = index + BATCH >= total;
+        button.textContent = `Approving… ${Math.min(index + BATCH, total)} of ${total}`;
+        const result = await api({ action: 'approve-many', postIds: chunk.map((post) => post.id), name, comment: '', notify: last, total });
+        released += result.released;
+        chunk.forEach((post) => { post.clientStatus = 'approved'; post.notes.push({ author: name, body: '', decision: 'approved' }); });
+      }
+      toast(released ? `Approved ${total}. ${released === 1 ? 'One is' : `${released} are`} now scheduled.` : `Approved ${total}. Thank you!`);
+    } catch (error) {
+      toast(error.message);
+    }
+    approveArmed = false;
+    button.disabled = false;
+    render();
+  }
+
   function render() {
+    renderApproveAll();
     const list = $('#review-list');
     const shown = posts.filter((post) => filter === 'all' || (post.status === 'waiting' && post.clientStatus !== 'approved'));
     if (!shown.length) {
@@ -48,6 +82,9 @@
   }
 
   document.addEventListener('click', async (event) => {
+    const approveButton = event.target.closest('#review-approve-all');
+    if (approveButton) { approveAll(approveButton); return; }
+    if (approveArmed) { approveArmed = false; renderApproveAll(); }
     const filterButton = event.target.closest('[data-filter]');
     if (filterButton) {
       filter = filterButton.dataset.filter;
@@ -95,7 +132,7 @@
       return;
     }
     try {
-      const data = await api({ action: 'load' });
+      const data = await api({ action: 'load', campaign });
       posts = data.posts;
       document.title = `${data.client.name} · Content review`;
       $('#review-client').textContent = data.client.name;
@@ -105,7 +142,7 @@
       else logo.textContent = data.client.initials || data.client.name.slice(0, 2);
       if (/^#[0-9a-f]{6}$/i.test(data.client.color)) logo.style.backgroundColor = data.client.color;
       const waiting = posts.filter((post) => post.status === 'waiting' && post.clientStatus !== 'approved').length;
-      $('#review-intro').textContent = `${posts.length} upcoming post${posts.length === 1 ? '' : 's'} in the next 60 days${waiting ? `, ${waiting} waiting for your approval` : ''}. This link works until ${new Date(data.expiresAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`;
+      $('#review-intro').textContent = `${data.campaign ? `${data.campaign}: ` : ''}${posts.length} upcoming post${posts.length === 1 ? '' : 's'}${data.campaign ? '' : ' in the next 60 days'}${waiting ? `, ${waiting} waiting for your approval` : ''}. This link works until ${new Date(data.expiresAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`;
       $('#review-filter').hidden = !posts.length;
       render();
     } catch (error) {

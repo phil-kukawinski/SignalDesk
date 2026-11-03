@@ -12,7 +12,7 @@ const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lo
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, OVERVIEW_RANGES,
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
   allRows, openComments, setCommentState
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
@@ -45,7 +45,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns',
+  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
   'planning-note', 'open-comments', 'comment-state'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
@@ -549,10 +549,21 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'campaigns') {
-    const days = OVERVIEW_RANGES.includes(Number(body.days)) ? Number(body.days) : 90;
+    const days = body.all === true ? 3650 : OVERVIEW_RANGES.includes(Number(body.days)) ? Number(body.days) : 90;
     const clientId = typeof body.clientId === 'string' && body.clientId ? body.clientId : null;
     if (clientId) await assertClientInWorkspace(workspaceId, clientId);
     return send(res, 200, { campaigns: await campaignSummary(workspaceId, { clientId, days }), days });
+  }
+
+  if (action === 'campaign-posts') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    if (typeof body.campaign !== 'string' || !body.campaign.trim()) return send(res, 400, { error: 'Choose a campaign.' });
+    return send(res, 200, { posts: await campaignPosts(workspaceId, { clientId: body.clientId, campaign: body.campaign.trim() }) });
+  }
+
+  if (action === 'posts-by-id') {
+    if (!Array.isArray(body.ids)) return send(res, 400, { error: 'Choose the posts to load.' });
+    return send(res, 200, { posts: await postsById(workspaceId, body.ids) });
   }
 
   if (action === 'post-metrics-history') {

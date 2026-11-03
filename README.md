@@ -136,7 +136,8 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Image descriptions:** add alt text to each image, or get an AI suggestion. It's sent to Facebook, Instagram, LinkedIn, and Pinterest
 - **Manual reminders:** for formats SignalDesk can't publish (Instagram Stories, TikTok, YouTube Shorts, X, Threads), it sends a reminder at the scheduled time with the copy and media. You post it, then select **Mark as posted**
 - **Post now**, **Duplicate** (from post details), and **Repeat** weekly, every 2 weeks, monthly, or every N days, always at the same local time
-- **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled, or import them as Saved drafts to schedule later
+- **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled, or import them as Saved drafts to schedule later. Takes Excel's date formats and encodings, columns in any order, and extra columns. A file exported from a campaign updates those posts when it's imported again
+- **Campaigns:** one page per campaign with its drafts, approvals, scheduled and published posts, and results. Schedule or send drafts for approval in bulk, see them on the calendar, export to a spreadsheet, and share a link that lets the client approve the whole campaign at once
 - **Image prep:** crop new images to a network's shape (square, 4:5, 1.91:1, 16:9, 2:3, 9:16) and shrink them to at most 2,048 px before upload
 - **Search everything** (Ctrl+K / ⌘K): posts, clients, templates, snippets, library files, and pages
 - **Post history:** every step (created, edited, approved, moved, published, failed, client decisions) with who did it. Earlier versions can be restored into the editor
