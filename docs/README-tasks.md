@@ -19,7 +19,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 ## 10 to 30 minutes each
 
 - [ ] **7. Turn on Facebook reach and views.** Add `read_insights` to the Facebook Login for Business configuration, then reconnect both Facebook connections in SignalDesk. Do this before Meta's App Review.
-- [ ] **8. Apply for Unsplash production access.** Stock photo search has low limits until it's approved.
+- [ ] **8. Replace your Unsplash keys, then apply for production access.** The keys were pasted into a chat, so replace them first and put the new Access Key in Vercel as `UNSPLASH_ACCESS_KEY`. Then search for a photo in the Publishing Studio, attach it, and take a screenshot showing "Photo by [name] on Unsplash" for the application. Demo access allows 50 requests an hour.
 - [ ] **9. Create the reviewer login.** Follow "Before you submit" in [app-review.md](app-review.md). The Meta, LinkedIn, and Pinterest reviews all use it.
 - [ ] **10. Watch for LinkedIn's reply on app 2 (company Pages).** LinkedIn denied the Community Management API request with "Business verification failed," and you sent a vetting appeal on November 3, 2026. Watch your Gmail and any `pkworks.co` inboxes for a request for documents. Have proof of your business ready, and make sure the business name, address, website, and LinkedIn Page all match.
 - [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pins are visible only to you. The answers are in [app-review.md](app-review.md).

@@ -102,6 +102,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Publishing Studio with live caption preview, connected-account selection, per-platform copy and media, Supabase media upload, scheduling, and approval requests
 - Server-side publishing queue: direct Facebook, Instagram, LinkedIn, and Pinterest publishing (Ayrshare optional for other networks), per-network status and retries, and failure alerts
 - Post details from the calendar or Command Center: status and links for each network, retry, move, cancel, approve, or request changes
+- **File and shape checks** per network: video type, shape, and length, photo size, mixed carousel shapes, and GIFs, before scheduling. WebP, AVIF, BMP, TIFF, and HEIC photos become JPEGs on upload when the browser can open them.
 - **Upcoming posts** in the Publishing Studio: the next scheduled posts beside the draft, for the client you're writing for or all clients, with a note about what's already on the date you picked. Select a post to open it.
 - **Edit in Studio** for scheduled posts: opens the post in the Publishing Studio, sets your own draft aside, and puts it back when you save or cancel. Admins can edit any post until 2 minutes before it goes out. Users can edit their own posts while they await approval, and the edit goes back for approval
 - Publishing checklist with optional checks: proofreading (instant quick checks plus AI suggestions you can apply), platform fit (character limits, required media, hashtag counts, unclickable caption links), and link validation

@@ -446,7 +446,7 @@
       <p>A simple public page for the client’s Instagram or TikTok bio: their links, plus recent posts SignalDesk published.</p>
       <label class="option-toggle"><input type="checkbox" id="bio-enabled" checked> Page is live</label>
       <label for="bio-slug">Page address</label><input id="bio-slug" class="field" maxlength="40" placeholder="client-name">
-      <div class="review-new-link"><input id="bio-url" class="field" readonly aria-label="Page link"><button type="button" class="secondary-button" id="bio-copy">Copy</button></div>
+      <div class="review-new-link"><input id="bio-url" class="field" readonly aria-label="Page link"><button type="button" class="secondary-button" id="bio-copy">Copy</button><a class="secondary-button" id="bio-open" target="_blank" rel="noopener" hidden>Open page</a></div><p class="option-hint" id="bio-state"></p>
       <label for="bio-headline">Headline</label><input id="bio-headline" class="field" maxlength="160" placeholder="e.g. School kits that make setup easy">
       <label>Links</label><div id="bio-links" class="bio-links-editor"></div><button type="button" class="text-button" id="bio-add-link"><i data-icon="plus"></i>Add link</button>
       <label class="option-toggle"><input type="checkbox" id="bio-recent" checked> Show recent posts</label>
@@ -501,7 +501,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=ce14b10ec7'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=795d8502a6'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

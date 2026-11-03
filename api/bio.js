@@ -5,7 +5,8 @@ const RECENT_DAYS = 90;
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed.' });
-  res.setHeader('cache-control', 'public, max-age=60, s-maxage=300');
+  // Only a found page is cached, so a page that's just been published shows up right away.
+  res.setHeader('cache-control', 'no-store');
   if (getConfig().missing.length) return send(res, 503, { error: 'This page isn’t available right now.' });
   const slug = String(new URL(req.url, 'http://localhost').searchParams.get('slug') || '').toLowerCase();
   if (!/^[a-z0-9-]{3,40}$/.test(slug)) return send(res, 404, { error: 'Page not found.' });
@@ -26,6 +27,7 @@ module.exports = async function handler(req, res) {
         image: (job.scheduled_posts?.content?.media || []).find((url) => !/\.(mp4|mov|m4v|webm)(\?|$)/i.test(url)) || ''
       }));
     }
+    res.setHeader('cache-control', 'public, max-age=60, s-maxage=60');
     return send(res, 200, {
       name: client.name, initials: client.initials || client.name.slice(0, 2), headline: typeof bio.headline === 'string' ? bio.headline.slice(0, 160) : '',
       color: /^#[0-9a-f]{6}$/i.test(client.brand?.colors?.[0] || '') ? client.brand.colors[0] : '#5b8db8',
