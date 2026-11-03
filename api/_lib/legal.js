@@ -3,7 +3,7 @@
 // name and contact email come from LEGAL_OPERATOR_NAME and LEGAL_CONTACT_EMAIL, and the
 // list of outside services reflects which ones this deployment actually has turned on.
 
-const EFFECTIVE_DATE = 'October 17, 2026';
+const EFFECTIVE_DATE = 'November 3, 2026';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -31,7 +31,7 @@ function serviceProviders() {
     ['jsDelivr and Google Fonts', 'delivering the sign-in library and fonts to your browser, which shares your IP address with them']
   ];
   if (process.env.RESEND_API_KEY) list.push(['Resend', 'sending notification, digest, and report emails']);
-  if (process.env.ANTHROPIC_API_KEY) list.push(['Anthropic', 'AI features you choose to use, such as caption drafts, image descriptions, proofreading, and trend summaries. Only the text, images, and brand notes needed for that request are sent']);
+  if (process.env.ANTHROPIC_API_KEY) list.push(['Anthropic', 'AI features you choose to use, such as caption drafts, image descriptions, proofreading, and trend summaries. Only the text, images, and brand notes needed for that request are sent. Weekly planning notes run automatically and send a client’s name and brand notes, the text and numbers of their top recent posts, including posts made outside SignalDesk, and their upcoming schedule']);
   if (process.env.VAPID_PUBLIC_KEY) list.push(['Your browser’s push service (for example Apple, Google, or Mozilla)', 'delivering push notifications to devices where you turned them on']);
   if (process.env.UNSPLASH_ACCESS_KEY || process.env.UNSPLASH_API_KEY) list.push(['Unsplash', 'stock photo search in the Publishing Studio. Your search words are sent to Unsplash, and photos load from Unsplash’s servers, which shares your IP address with them']);
   if (process.env.AYRSHARE_API_KEY) list.push(['Ayrshare', 'publishing to networks that SignalDesk doesn’t connect to directly, when you link them through Ayrshare']);
@@ -106,7 +106,7 @@ function privacyPage() {
 </ul>
 <h3>Information from the networks about your posts</h3>
 <p>If you turn on click counting, links in your posts are replaced with short SignalDesk links. When someone opens one, we add one to that link’s click count for the day and send them on. We don’t store who clicked, their IP address, or any cookie.</p>
-<p>For posts published through SignalDesk, we store the post’s ID and link, and we read performance numbers such as reach, impressions, likes, comments, shares, saves, and clicks. If you use the comment inbox, we read the comments on those posts, including the commenter’s name or username as the network provides it, and send the replies you write.</p>
+<p>For accounts you connect, we read and store your posts, including ones made outside SignalDesk (text, media, links, and dates), the performance numbers for those posts such as reach, impressions, likes, comments, shares, saves, and clicks, and account numbers such as followers, reach, and views. We use these to show your calendar, analytics, and reports, and to write the weekly planning notes described below. If you use the comment inbox, we read the comments on your posts, including the commenter’s name or username as the network provides it, and send the replies you write.</p>
 <h3>Client reviewers</h3>
 <p>If you share a review link, the person reviewing can enter their name, approve posts, and leave comments. We store what they enter.</p>
 <h3>Notifications</h3>
@@ -121,6 +121,7 @@ function privacyPage() {
 <li>To read and reply to comments when you ask.</li>
 <li>To send the notifications, digests, and reports you turned on.</li>
 <li>To run AI features when you use them, such as drafting captions or describing an image.</li>
+<li>To write a planning note about once a week for each active client, automatically, with ideas for what to post next.</li>
 <li>To keep the service secure, fix problems, and prevent abuse.</li>
 </ul>
 <p>We don’t sell your information, use it for advertising, or build profiles of you or the people who interact with your posts. Data from Meta (Facebook, Instagram, Threads), LinkedIn, Pinterest, X, Google (YouTube), and TikTok is used only to provide the features you use in SignalDesk, following each network’s developer terms, and is never used to train AI models.</p>
