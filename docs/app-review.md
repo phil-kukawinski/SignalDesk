@@ -45,7 +45,7 @@ SignalDesk manages Pages and Instagram accounts for PK Works' clients, not only 
 | Deauthorize callback URL | `https://socialsignaldesk.com/api/legal?event=meta-deauthorize` |
 
 ### App description (App Review → "Tell us about your app")
-> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to manage the Facebook Pages and Instagram professional accounts of its small-business clients. An admin connects a client's Page and linked Instagram account by signing in with Facebook and choosing which Page to connect. Team members then write posts, attach images or video, get approval, and schedule them. At the scheduled time SignalDesk publishes the post to the Page and Instagram account, posts an optional first comment, shows comments so the team can reply, and reports engagement for each post in a monthly client report. SignalDesk only acts on Pages and accounts the person explicitly connects, never posts without a scheduled or approved post, and does not sell or share data. Access tokens are encrypted at rest and deleted when an account is disconnected or the person removes the app.
+> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to manage the Facebook Pages and Instagram professional accounts of its small-business clients. It is also in an invite-only beta with a small number of other agencies and freelancers; there is no open sign-up. An admin connects a client's Page and linked Instagram account by signing in with Facebook and choosing which Page to connect. Team members then write posts, attach images or video, get approval, and schedule them. At the scheduled time SignalDesk publishes the post to the Page and Instagram account, posts an optional first comment, shows comments so the team can reply, and reports engagement for each post in a monthly client report. An admin can also connect a blog or news feed (RSS), which creates posts from new articles, either held for approval or scheduled automatically. SignalDesk only acts on Pages and accounts the person explicitly connects, publishes only posts that a team member scheduled or that come from a feed an admin set up, and does not sell data. The service providers it uses, including Anthropic for AI features, are listed in the privacy policy. Access tokens are encrypted at rest and deleted when an account is disconnected or the person removes the app.
 
 ### Permission answers
 
@@ -121,6 +121,8 @@ LinkedIn requires the **Community Management API** to be the **only product on i
 | **App 1: profiles** (your existing app) | **Sign In with LinkedIn using OpenID Connect** + **Share on LinkedIn**, both self-serve and instant | Posting to the person's own profile (`openid`, `profile`, `w_member_social`) | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | **App 2: company Pages** (new) | **Community Management API** only, Development tier, then Standard | Posting to company Pages the person administers (`r_organization_admin`, `w_organization_social`, `r_organization_social`) | `LINKEDIN_PAGES_CLIENT_ID`, `LINKEDIN_PAGES_CLIENT_SECRET` |
 
+**Status, November 3, 2026:** LinkedIn denied App 2's request with "Business verification failed," and a vetting appeal has been sent. Don't create a new app unless the appeal fails. If it does, follow the checklist below.
+
 **Before requesting the Community Management API on App 2** (a rejected app can't re-apply; you'd have to create a new one):
 - Name it without "Linked" or "In", for example **SignalDesk Pages**.
 - Associate it with the **PK Works** LinkedIn Page, and have a Page super admin **verify** it (Settings tab → Verify).
@@ -135,7 +137,7 @@ Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page*
 ### Community Management API application answers
 
 **Describe your use case**
-> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to manage LinkedIn Pages for its small-business clients and its own Page. A Page admin connects a Page by signing in with LinkedIn and choosing which of the Pages they administer to connect. The team then writes and schedules posts (text, links with a preview card, and images), gets approval, and SignalDesk publishes them to the Page at the scheduled time. SignalDesk also shows comments on those posts so the team can reply, and counts likes and comments for client reports. SignalDesk only posts content a team member wrote and scheduled; it does not post automatically on its own, scrape data, or collect information about LinkedIn members.
+> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to manage LinkedIn Pages for its small-business clients and its own Page. It is also in an invite-only beta with a small number of other agencies and freelancers; there is no open sign-up. A Page admin connects a Page by signing in with LinkedIn and choosing which of the Pages they administer to connect. The team then writes and schedules posts (text, links with a preview card, and images), gets approval, and SignalDesk publishes them to the Page at the scheduled time. SignalDesk also shows comments on those posts so the team can reply, and counts likes and comments for client reports. An admin can also connect a blog or news feed (RSS), which creates posts from new articles, either held for approval or scheduled automatically. SignalDesk does not scrape data or store information about LinkedIn members.
 
 **How each permission is used**
 > - `r_organization_admin`: after sign-in, list the Pages the person administers so they can choose which one to connect, and read each Page's name and logo to show which Page is connected.
@@ -143,7 +145,7 @@ Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page*
 > - `r_organization_social`: read the connected Page's recent posts, including ones made outside SignalDesk (text, link, post type, and date), with their like and comment counts and the Page's follower count, for the calendar, analytics, and client reports. It also reads the comments on posts SignalDesk published to the Page, for the inbox.
 
 **Who uses the app**
-> PK Works staff who are admins of the client Pages they manage. It isn't offered to the public.
+> PK Works staff, plus a small number of other agencies and freelancers in our invite-only beta. There is no open sign-up, and only someone who administers a Page can connect it.
 
 **Data handling**
 > Access tokens are encrypted at rest and deleted when the person disconnects the account in SignalDesk. We store the connected Page's posts and their counts. We don't store information about LinkedIn members: comments are read when the inbox opens, without stored copies, and their authors appear only as "LinkedIn member." Post text and counts may go to our AI provider, Anthropic, to write a weekly planning note for the team. See https://socialsignaldesk.com/privacy.
@@ -174,12 +176,12 @@ New Pinterest apps start with **Trial access** (Pins visible only to you, low li
 ### Standard access application answers
 
 **Describe your app**
-> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to schedule Pins for its small-business clients. An admin connects a client's Pinterest business account with Pinterest sign-in and chooses a default board. Team members create a Pin with an image, title, description, and destination link, choose a board, and schedule it; SignalDesk creates the Pin at that time. SignalDesk then shows impressions, saves, and clicks for those Pins in monthly client reports.
+> SignalDesk is a social media planning and publishing tool used by PK Works, a small marketing agency, to schedule Pins for its small-business clients. It is also in an invite-only beta with a small number of other agencies and freelancers; there is no open sign-up. An admin connects a client's Pinterest business account with Pinterest sign-in and chooses a default board. Team members create a Pin with an image, title, description, and destination link, choose a board, and schedule it; SignalDesk creates the Pin at that time. An admin can also connect a blog or news feed (RSS), which creates posts from new articles, either held for approval or scheduled automatically. SignalDesk then shows impressions, saves, and clicks for those Pins in monthly client reports.
 
 **How you use each scope** → use the table above, one sentence per scope.
 
 **Who uses it**
-> PK Works staff managing their clients' Pinterest business accounts. It isn't offered to the public.
+> PK Works staff managing their clients' Pinterest business accounts, plus a small number of other agencies and freelancers in our invite-only beta. There is no open sign-up.
 
 **Pinterest demo video (about 90 seconds)**
 1. Sign in to SignalDesk → **Social Accounts** → **Connect** on Pinterest → approve on Pinterest → choose the default board.

@@ -21,7 +21,7 @@ async function call(url, { method = 'GET', body } = {}) {
 (async () => {
   let r = await call('/api/legal?page=privacy');
   assert.equal(r.status, 200); assert.match(r.headers['content-type'], /text\/html/);
-  assert.match(r.sent, /PK &lt;Works&gt;/); assert.match(r.sent, /mailto:owner@studio\.test/); assert.match(r.sent, /Resend/); assert.doesNotMatch(r.sent, /Anthropic|Ayrshare/);
+  assert.match(r.sent, /PK &lt;Works&gt;/); assert.match(r.sent, /mailto:owner@studio\.test/); assert.match(r.sent, /Resend/); assert.doesNotMatch(r.sent, /Anthropic|Ayrshare/); assert.match(r.sent, /Activity log[\s\S]*deleted automatically after a year/);
   r = await call('/api/legal?page=terms'); assert.equal(r.status, 200); assert.match(r.sent, /Terms of Service/); assert.doesNotMatch(r.sent, /Governing law/);
   process.env.LEGAL_GOVERNING_LAW = 'the State of New York'; r = await call('/api/legal?page=terms'); assert.match(r.sent, /Governing law[\s\S]*State of New York/);
   r = await call('/api/legal?page=data-deletion'); assert.equal(r.status, 200); assert.doesNotMatch(r.sent, /class="status"/);
