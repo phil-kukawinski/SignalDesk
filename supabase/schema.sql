@@ -835,6 +835,129 @@ drop trigger if exists guard_workspace_state on public.workspace_state;
 create trigger guard_workspace_state before update on public.workspace_state
   for each row execute function public.guard_workspace_state();
 
+-- The server checks a time is free before saving, but two people saving at the same moment can both
+-- pass that check. This repeats it in the database, one at a time per client and minute. Post now,
+-- Autopilot, and recycled evergreen posts aren't held to it, and an edit doesn't clash with its old version.
+create or replace function public.assert_slot_free(target public.scheduled_posts, at_time timestamptz, wanted text[])
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  slot timestamptz := date_trunc('minute', at_time);
+  replaced uuid;
+  replaced_slot timestamptz;
+  taken text;
+begin
+  if at_time <= now() + interval '1 minute' or target.source = 'autopilot' or target.options ? 'autoPlaced' then return; end if;
+  if coalesce((select state -> 'settings' ->> 'preventDoubleBooking' from public.workspace_state where workspace_id = target.workspace_id), 'true') = 'false' then return; end if;
+  perform pg_advisory_xact_lock(hashtextextended(target.workspace_id::text || '|' || target.client_id || '|' || extract(epoch from slot)::text, 0));
+  if target.options ? 'replaces' then
+    select coalesce(parent_id, id), date_trunc('minute', scheduled_for) into replaced, replaced_slot from public.scheduled_posts where id = (target.options ->> 'replaces')::uuid;
+    -- Rewording a post that stays where it is never counts as a new clash.
+    if replaced_slot = slot then return; end if;
+  end if;
+  select j.platform into taken
+    from public.scheduled_posts p join public.publish_jobs j on j.post_id = p.id
+    where p.workspace_id = target.workspace_id and p.client_id = target.client_id
+      and p.scheduled_for >= slot and p.scheduled_for < slot + interval '1 minute'
+      and p.status in ('pending_approval', 'scheduled', 'publishing')
+      and j.status in ('held', 'queued', 'publishing', 'manual_due') and j.platform = any(wanted)
+      and coalesce(p.parent_id, p.id) <> coalesce(target.parent_id, target.id)
+      and (replaced is null or coalesce(p.parent_id, p.id) <> replaced)
+    limit 1;
+  if taken is not null then raise exception 'double_booked' using errcode = '23505', detail = taken; end if;
+end;
+$$;
+revoke all on function public.assert_slot_free(public.scheduled_posts, timestamptz, text[]) from public;
+
+create or replace function public.publish_job_slot_check()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  post public.scheduled_posts;
+begin
+  if new.status not in ('held', 'queued') then return new; end if;
+  select * into post from public.scheduled_posts where id = new.post_id;
+  if found then perform public.assert_slot_free(post, post.scheduled_for, array[new.platform]); end if;
+  return new;
+end;
+$$;
+drop trigger if exists publish_job_slot_check on public.publish_jobs;
+create trigger publish_job_slot_check before insert on public.publish_jobs
+  for each row execute function public.publish_job_slot_check();
+
+create or replace function public.scheduled_post_slot_check()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  wanted text[];
+begin
+  if date_trunc('minute', new.scheduled_for) = date_trunc('minute', old.scheduled_for) or new.status not in ('pending_approval', 'scheduled') then return new; end if;
+  select array_agg(platform) into wanted from public.publish_jobs where post_id = new.id and status in ('held', 'queued');
+  if wanted is not null then perform public.assert_slot_free(new, new.scheduled_for, wanted); end if;
+  return new;
+end;
+$$;
+drop trigger if exists scheduled_post_slot_check on public.scheduled_posts;
+create trigger scheduled_post_slot_check before update of scheduled_for on public.scheduled_posts
+  for each row execute function public.scheduled_post_slot_check();
+
+-- Workspace activity for admins: team, account, client, and settings changes. Post events live in post_history.
+create table if not exists public.activity_log (
+  id bigint generated always as identity primary key,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  actor_name text,
+  action text not null,
+  detail jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists activity_log_workspace_idx on public.activity_log (workspace_id, created_at desc);
+
+-- Clients and settings are saved straight from the browser, so the database notes what changed.
+-- Only ids, names, and setting names are kept, and a problem here never blocks the save.
+create or replace function public.log_workspace_state()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  actor text;
+  item record;
+  keys jsonb;
+begin
+  if auth.uid() is null then return new; end if;
+  select coalesce(nullif(raw_user_meta_data ->> 'display_name', ''), email) into actor from auth.users where id = auth.uid();
+  for item in
+    select coalesce(n.id, o.id) as id, n.value as after, o.value as before
+    from (select e ->> 'id' as id, e as value from jsonb_array_elements(case when jsonb_typeof(new.state -> 'clients') = 'array' then new.state -> 'clients' else '[]'::jsonb end) e) n
+    full join (select e ->> 'id' as id, e as value from jsonb_array_elements(case when jsonb_typeof(old.state -> 'clients') = 'array' then old.state -> 'clients' else '[]'::jsonb end) e) o on n.id = o.id
+    where n.value is distinct from o.value
+  loop
+    if item.before is null then
+      insert into public.activity_log (workspace_id, actor_name, action, detail) values (new.workspace_id, actor, 'client_added', jsonb_build_object('client', item.after ->> 'name'));
+    elsif item.after is null then
+      insert into public.activity_log (workspace_id, actor_name, action, detail) values (new.workspace_id, actor, 'client_removed', jsonb_build_object('client', item.before ->> 'name'));
+    elsif not exists (select 1 from public.activity_log where workspace_id = new.workspace_id and action = 'client_updated' and actor_name is not distinct from actor and detail ->> 'clientId' = item.id and created_at > now() - interval '10 minutes') then
+      -- Editing a brand kit saves often, so a run of edits to one client counts once.
+      insert into public.activity_log (workspace_id, actor_name, action, detail) values (new.workspace_id, actor, 'client_updated', jsonb_build_object('client', item.after ->> 'name', 'clientId', item.id));
+    end if;
+  end loop;
+  if jsonb_typeof(new.state -> 'settings') = 'object' and jsonb_typeof(old.state -> 'settings') = 'object' then
+    select jsonb_agg(n.key) into keys from jsonb_each(new.state -> 'settings') n where n.value is distinct from old.state -> 'settings' -> n.key;
+    if keys is not null then
+      insert into public.activity_log (workspace_id, actor_name, action, detail) values (new.workspace_id, actor, 'settings_changed', jsonb_build_object('settings', keys));
+    end if;
+  end if;
+  return new;
+exception when others then
+  return new;
+end;
+$$;
+drop trigger if exists log_workspace_state on public.workspace_state;
+create trigger log_workspace_state after update on public.workspace_state
+  for each row execute function public.log_workspace_state();
+
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;
 alter table public.workspace_invites enable row level security;
@@ -858,6 +981,7 @@ alter table public.worker_runs enable row level security;
 alter table public.review_links enable row level security;
 alter table public.post_notes enable row level security;
 alter table public.post_history enable row level security;
+alter table public.activity_log enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table public.bio_pages enable row level security;
 alter table public.data_deletion_requests enable row level security;
@@ -877,14 +1001,14 @@ alter table public.link_click_days enable row level security;
 revoke all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.post_submissions,
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
-  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
+  public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.activity_log, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
   public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
-  public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.push_subscriptions,
+  public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.activity_log, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
   public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states to service_role;
 

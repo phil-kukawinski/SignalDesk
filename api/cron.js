@@ -56,6 +56,7 @@ module.exports = async function handler(req, res) {
     const lastCleanup = await lastWorkerRun('media-cleanup');
     if (!lastCleanup || Date.now() - Date.parse(lastCleanup) > DAY_MS) {
       media = await cleanupMedia().catch((error) => ({ error: error.message }));
+      await require('./_lib/activity').cleanupActivity().catch((error) => console.error('Activity cleanup failed:', error.message));
       await recordWorkerRun('media-cleanup', media);
     }
     const health = await checkWorkerHealth();

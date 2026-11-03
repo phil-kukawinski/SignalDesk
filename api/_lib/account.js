@@ -48,6 +48,16 @@ async function deletionPlan(userId) {
   return { workspace: membership.workspace_id, soleMember: !others.length, members: members.length, blocked };
 }
 
+// The activity log stays with the team, without this person's name or email in it.
+async function forgetInActivity(workspaceId, user) {
+  const name = String(user.user_metadata?.display_name || '').trim();
+  const scope = `activity_log?workspace_id=eq.${workspaceId}`;
+  for (const actor of [user.email, name].filter(Boolean)) {
+    await databaseRequest(`${scope}&actor_name=eq.${encodeURIComponent(actor)}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ actor_name: null }) }).catch(() => {});
+  }
+  await databaseRequest(`${scope}&detail->>email=eq.${encodeURIComponent(user.email)}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } }).catch(() => {});
+}
+
 async function deleteAccount(user) {
   const plan = await deletionPlan(user.id);
   if (plan.blocked) throw httpError(409, plan.blocked);
@@ -69,6 +79,7 @@ async function deleteAccount(user) {
       const { savedBy, savedByName, ...draft } = row.draft; // eslint-disable-line no-unused-vars
       await databaseRequest(`saved_drafts?workspace_id=eq.${plan.workspace}&id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ draft }) });
     }
+    await forgetInActivity(plan.workspace, user);
     await databaseRequest(`workspace_members?user_id=eq.${user.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
   }
   files += await removeFiles((await listNames(`${user.id}/`)).filter((name) => !stillUsed.has(name)));

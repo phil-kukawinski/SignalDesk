@@ -307,14 +307,16 @@ function commentableFor(provider, platform) {
 async function createScheduledPost({
   workspaceId, clientId, userId, title, platforms, text, mediaUrls = [], platformContent = {}, options = {},
   scheduledFor, held = false, source = 'composer', campaign = null, evergreen = false, encryptionKey,
-  manual = [], mediaAlt = {}, timeZone = 'America/New_York', actorName = null
+  manual = [], mediaAlt = {}, timeZone = 'America/New_York', actorName = null, replaces = null
 }) {
   const destinations = [
     ...(platforms.length ? await resolveDestinations(workspaceId, clientId, platforms, encryptionKey) : []),
     ...manual.map((platform) => ({ platform, provider: 'manual', connectionId: null }))
   ];
   if (!destinations.length) throw httpError(400, 'Choose at least one network or reminder.');
-  const { followUpComments = [], autoRepost, ...stored } = options;
+  const { followUpComments = [], autoRepost, ...kept } = options;
+  // The database's double-booking check needs to know an edit's old version is about to go away.
+  const stored = replaces ? { ...kept, replaces } : kept;
   const content = { text, media: mediaUrls, platformContent, ...(Object.keys(mediaAlt).length ? { mediaAlt } : {}) };
   const base = scheduledFor;
   const occurrences = occurrenceTimes(base, autoRepost, timeZone).map((at, index) => ({ id: crypto.randomUUID(), at, parent: null, index }));
@@ -376,7 +378,7 @@ async function createScheduledPost({
 async function publishViaAyrshare({ job, post, content, markSent, encryptionKey }) {
   const profile = await getProfile(job.workspace_id, job.client_id, encryptionKey);
   if (!profile) throw new PublishError('auth', 'This client is no longer connected through Ayrshare.');
-  const { followUpComments, reposts, repostOf, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
+  const { followUpComments, reposts, repostOf, replaces, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
   const body = buildPostBody({ text: content.text, platforms: [job.platform], mediaUrls: content.media, options, idempotencyKey: job.id });
   await markSent();
   let result;
@@ -1045,7 +1047,7 @@ async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 
     const day = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offsetDays));
     const at = zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), parts.hour, parts.minute, timeZone);
     if (at < Date.now() + 5 * 60000) { skipped.push({ id, reason: 'the new time has already passed' }); continue; }
-    const { reposts, repostOf, ...options } = original.options || {};
+    const { reposts, repostOf, replaces, ...options } = original.options || {}; // eslint-disable-line no-unused-vars
     const content = original.content || {};
     try {
       await assertTimeFree(workspaceId, original.client_id, { platforms: [...platforms, ...manual], times: [at] });
@@ -1197,14 +1199,14 @@ async function recycleEvergreen({ encryptionKey, limit = 10 } = {}) {
       const from = Math.max(Date.now() + 10 * 60000, Date.parse(post.scheduled_for) + queue.recycleDays * 86400000);
       let at = queue.days.length ? nextSlot(queue, timeZone, await takenSlots(post.workspace_id, post.client_id, from), from) : null;
       if (!at) at = from;
-      const { followUpComments, reposts, repostOf, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
+      const { followUpComments, reposts, repostOf, replaces, ...options } = post.options || {}; // eslint-disable-line no-unused-vars
       const platforms = [...new Set(post.publish_jobs.filter((job) => job.status === 'published').map((job) => job.platform))];
       if (!platforms.length) continue;
       at = await firstFreeTime(post.workspace_id, post.client_id, platforms, at);
       await createScheduledPost({
         workspaceId: post.workspace_id, clientId: post.client_id, userId: post.created_by, title: post.title, platforms,
         text: post.content?.text || '', mediaUrls: post.content?.media || [], platformContent: post.content?.platformContent || {},
-        options, scheduledFor: at, source: post.source, campaign: post.campaign, evergreen: true, encryptionKey
+        options: { ...options, autoPlaced: true }, scheduledFor: at, source: post.source, campaign: post.campaign, evergreen: true, encryptionKey
       });
       recycled += 1;
     } catch (error) {

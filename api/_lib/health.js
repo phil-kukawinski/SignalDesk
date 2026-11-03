@@ -9,7 +9,7 @@ const { pushConfigured } = require('./push');
 
 const MINUTE = 60000;
 // Tables added over time. If one is missing, the schema needs to be run again.
-const TABLES = ['saved_drafts', 'scheduled_posts', 'publish_jobs', 'social_connections', 'oauth_sessions', 'review_links', 'post_notes', 'post_history', 'push_subscriptions', 'bio_pages', 'data_deletion_requests', 'short_links', 'link_click_days', 'network_posts', 'account_stats', 'post_metric_days', 'planning_notes', 'comment_states', 'invite_requests', 'beta_invites', 'app_errors', 'worker_runs'];
+const TABLES = ['saved_drafts', 'activity_log', 'scheduled_posts', 'publish_jobs', 'social_connections', 'oauth_sessions', 'review_links', 'post_notes', 'post_history', 'push_subscriptions', 'bio_pages', 'data_deletion_requests', 'short_links', 'link_click_days', 'network_posts', 'account_stats', 'post_metric_days', 'planning_notes', 'comment_states', 'invite_requests', 'beta_invites', 'app_errors', 'worker_runs'];
 // Columns added to older tables, which an out-of-date database lacks even though the table is there.
 const COLUMNS = [['notification_preferences', 'planning_leads'], ['notification_preferences', 'planning_scope'], ['user_drafts', 'saved'], ['scheduled_posts', 'campaign'], ['review_links', 'token_ciphertext']];
 

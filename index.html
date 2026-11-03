@@ -20,10 +20,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="css/app.min.css?v=7c9af554b6">
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.min.css?v=c70cb10c7f">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -48,12 +46,12 @@
       <section class="lp-features" id="features">
         <h2>Everything a busy social calendar needs</h2>
         <div class="lp-grid">
-          <article><i data-icon="edit"></i><h3>Write once, tailor per network</h3><p>One post, adjusted for each network’s length and format, with previews that look like the real thing.</p></article>
-          <article><i data-icon="calendar"></i><h3>A calendar for every client</h3><p>Everything scheduled and already published, by day, week, or month. Drag to reschedule; suggested times show when to post.</p></article>
-          <article><i data-icon="check"></i><h3>Approvals that keep moving</h3><p>Teammates submit, admins approve. Clients review upcoming posts from a private link, with no account needed.</p></article>
-          <article><i data-icon="heart"></i><h3>Results from every source</h3><p>Reach, engagement, and follower growth for each account, including posts made outside SignalDesk. Branded client reports in a click.</p></article>
-          <article><i data-icon="sparkles"></i><h3>AI that sounds like the brand</h3><p>Caption drafts in each client’s voice, proofreading, image descriptions, and trend research with sources.</p></article>
-          <article><i data-icon="zap"></i><h3>Set it and let it run</h3><p>Posting queues, reusable evergreen posts, and Autopilot that turns a blog’s new articles into scheduled posts.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg><h3>Write once, tailor per network</h3><p>One post, adjusted for each network’s length and format, with previews that look like the real thing.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg><h3>A calendar for every client</h3><p>Everything scheduled and already published, by day, week, or month. Drag to reschedule; suggested times show when to post.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><h3>Approvals that keep moving</h3><p>Teammates submit, admins approve. Clients review upcoming posts from a private link, with no account needed.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19.5 12.6 12 20l-7.5-7.4A4.6 4.6 0 0 1 12 6.6a4.6 4.6 0 0 1 7.5 6z"/></svg><h3>Results from every source</h3><p>Reach, engagement, and follower growth for each account, including posts made outside SignalDesk. Branded client reports in a click.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 3.5 12.6 8 17 9.5l-4.4 1.6L11 15.5l-1.6-4.4L5 9.5 9.4 8z"/><path d="M18 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg><h3>AI that sounds like the brand</h3><p>Caption drafts in each client’s voice, proofreading, image descriptions, and trend research with sources.</p></article>
+          <article><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 3 5 13.5h6.5L11 21l8-10.5h-6.5z"/></svg><h3>Set it and let it run</h3><p>Posting queues, reusable evergreen posts, and Autopilot that turns a blog’s new articles into scheduled posts.</p></article>
         </div>
       </section>
       <section class="lp-how" id="how">
@@ -79,6 +77,8 @@
     </main>
     <footer class="lp-footer"><span>© 2026 PK Works. SignalDesk is a product of <a href="https://www.pkworks.co" target="_blank" rel="noopener">PK Works</a>.</span><nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/data-deletion">Data deletion</a><button type="button" class="text-button" data-open-signin>Sign in</button></nav></footer>
   </div>
+  <!-- The app itself. It stays inert until the script below needs it, so the public page stays light. -->
+  <template id="app-markup">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -237,7 +237,7 @@
           <div class="page-heading"><div><div class="eyebrow">CONNECTED CHANNELS</div><h1>Social accounts</h1><p class="subheading">Connect and manage each client’s social profiles.</p></div><div class="account-actions"><button class="secondary-button" id="refresh-social-accounts" type="button" title="Refresh connections"><i data-icon="refresh"></i>Refresh</button><button class="secondary-button" id="connect-social-accounts" type="button" hidden><i data-icon="plus"></i>Connect via Ayrshare</button></div></div>
           <div class="accounts-toolbar"><label class="field-label" for="accounts-client-select">Client workspace</label><select id="accounts-client-select" class="field"></select><span id="social-accounts-status" role="status">Sign in and configure the provider to connect social profiles.</span></div>
           <div class="social-account-grid" id="social-account-grid"></div>
-          <p class="integration-note">Facebook, Instagram, LinkedIn, and Pinterest connect directly through each network. For TikTok, YouTube, X, Threads, and Instagram Stories, SignalDesk reminds you at the scheduled time with the copy ready to paste.</p>
+          <p class="integration-note">Each network connects directly through its own sign-in. Instagram Stories use the Instagram connection.</p>
         </section>
 
         <section class="page" id="view-approvals">
@@ -256,6 +256,9 @@
           <div class="table-scroll"><table class="top-posts-table beta-table"><thead><tr><th>Code</th><th>For</th><th>Used</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody id="beta-list"></tbody></table></div>
           <details class="beta-errors"><summary>Server errors in the last 24 hours <span id="beta-error-count"></span></summary><ul id="beta-errors"></ul></details>
         </div>
+        <div class="panel activity-panel" id="activity-panel" hidden><div class="panel-header"><div><h2>Activity</h2><p>Who changed what across this workspace. Kept for one year.</p></div><select id="activity-group" class="field" aria-label="Show activity for"><option value="">Everything</option><option value="posts">Posts</option><option value="team">Team</option><option value="accounts">Social accounts</option><option value="workspace">Clients and settings</option></select></div>
+<p class="option-hint" id="activity-setup" hidden>Team, account, client, and settings changes appear here after the latest database update. Post activity is already showing.</p>
+<div id="activity-list" class="activity-list"></div><button type="button" class="secondary-button" id="activity-more" hidden>Show older activity</button></div>
         <div class="panel account-panel" id="account-panel" hidden><div class="panel-header"><div><h2>Your account</h2><p id="account-email"></p></div></div>
           <form class="profile-form" id="profile-form" novalidate><div class="profile-photo"><div class="avatar profile-preview" id="profile-preview"></div><div class="profile-photo-actions"><div><button class="secondary-button" type="button" id="profile-photo-choose">Choose photo…</button><button class="text-button" type="button" id="profile-photo-remove" hidden>Remove</button></div><small>JPG, PNG, or WebP. Cropped to a square.</small><input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" hidden></div></div><label class="field-label" for="profile-display-name">Display name</label><input class="field" id="profile-display-name" maxlength="60" autocomplete="name" placeholder="e.g. Sam Rivera"><small class="option-hint">Your team sees this instead of your email, and clients see it on notes you leave.</small><div class="profile-save"><button class="primary-button" type="submit" id="profile-save">Save profile</button><span class="auth-message" id="profile-message" role="status"></span></div></form>
           <div class="settings-toggle account-password"><div><b>Password</b><small>Change the password you sign in with. You stay signed in on this device.</small></div><button class="secondary-button" type="button" id="password-change">Change password…</button></div>
@@ -495,9 +498,16 @@
       <p class="auth-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/data-deletion">Data deletion</a></p>
     </form>
   </dialog>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-  <script src="js/config.js"></script>
-  <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=1800382197"></script>
+  </template>
+  <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
+       an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=bbc539b7c8'],started=false,ready=false,signin=false,form=null;
+function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
+function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
+if(needed()){start();return;}
+document.addEventListener('click',function(event){if(!ready&&event.target.closest('[data-open-signin]')){event.preventDefault();event.stopPropagation();signin=true;document.documentElement.style.cursor='progress';start();}},true);
+document.addEventListener('focusin',function(event){if(event.target.closest('#invite-request-form'))start();});
+document.addEventListener('submit',function(event){if(!ready&&event.target.id==='invite-request-form'){event.preventDefault();event.stopPropagation();form=event.target;start();}},true);
+})();</script>
 </body>
 </html>

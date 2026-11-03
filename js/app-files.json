@@ -24,6 +24,7 @@
   "js/ai.js",
   "js/composer-extras.js",
   "js/history.js",
+  "js/activity.js",
   "js/search.js",
   "js/sharing.js",
   "js/previews.js",

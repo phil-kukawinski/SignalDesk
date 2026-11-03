@@ -79,6 +79,7 @@ async function databaseRequest(path, options = {}) {
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
     console.error('Database request failed:', response.status, detail.message || detail.code || '');
+    if (detail.message === 'double_booked') throw httpError(409, 'Another post just took that time on the same network. Choose another time.');
     throw httpError(response.status === 409 ? 409 : 500, 'Could not access workspace storage.');
   }
   return response.status === 204 || response.headers.get('content-length') === '0' ? null : response.json().catch(() => null);

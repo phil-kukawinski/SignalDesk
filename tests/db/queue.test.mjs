@@ -780,6 +780,44 @@ assert.deepEqual(monthly.map((row) => row.scheduled_for.toLocaleString('en-US', 
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'x', platforms: ['facebook'], options: { autoRepost: { repeat: 13, every: 'month' } } });
 assert.equal(r.status, 400);
 
+// --- Activity: team and account changes, plus post events, for admins only ---
+{
+  const inv = await call({ action: 'invite', email: 'newperson@studio.test', role: 'user' });
+  assert.equal(inv.status, 200, JSON.stringify(inv.payload));
+  let log = await call({ action: 'activity', group: 'team' });
+  assert.equal(log.status, 200, JSON.stringify(log.payload));
+  assert.equal(log.payload.ready, true);
+  assert.equal(log.payload.activity[0].action, 'member_invited');
+  assert.equal(log.payload.activity[0].detail.email, 'newperson@studio.test');
+  await call({ action: 'remove-invite', email: 'newperson@studio.test' });
+  log = await call({ action: 'activity' });
+  assert.ok(log.payload.activity.some((row) => row.kind === 'workspace' && row.action === 'invite_removed'), 'everything includes team changes');
+  log = await call({ action: 'activity', group: 'posts' });
+  assert.ok(log.payload.activity.every((row) => row.kind === 'post'), 'the Posts filter leaves out the rest');
+  assert.ok(log.payload.activity.length > 0 && 'title' in log.payload.activity[0]);
+  assert.ok(!JSON.stringify(log.payload.activity).includes('"media"'), 'old versions of a post aren’t sent whole');
+  assert.equal((await call({ action: 'activity' }, 'user')).status, 403, 'admins only');
+  // Clients and settings saved from the browser are noted by the database, with names but no values.
+  const [{ state }] = await q(`select state from workspace_state where workspace_id='${WS}'`);
+  const adminId = (await q(`select user_id from workspace_members where workspace_id='${WS}' and role='admin' limit 1`))[0].user_id;
+  await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${adminId}', 'owner@test.local', '{"display_name":"Owner Name"}') on conflict (id) do update set raw_user_meta_data = excluded.raw_user_meta_data`);
+  const nextState = { ...state, clients: [...(state.clients || []), { id: 'activity-client', name: 'Activity Client' }], settings: { ...(state.settings || {}), name: 'Renamed' } };
+  await db.exec(`set request.jwt.claim.sub = '${adminId}'`);
+  await db.query(`update workspace_state set state=$1::jsonb where workspace_id=$2`, [JSON.stringify(nextState), WS]);
+  await db.query(`update workspace_state set state=$1::jsonb where workspace_id=$2`, [JSON.stringify({ ...nextState, clients: nextState.clients.map((c) => c.id === 'activity-client' ? { ...c, name: 'Activity Client 2' } : c) }), WS]);
+  await db.query(`update workspace_state set state=$1::jsonb where workspace_id=$2`, [JSON.stringify({ ...nextState, clients: nextState.clients.map((c) => c.id === 'activity-client' ? { ...c, name: 'Activity Client 3' } : c) }), WS]);
+  await db.query(`update workspace_state set state=$1::jsonb where workspace_id=$2`, [JSON.stringify(state), WS]);
+  await db.exec(`set request.jwt.claim.sub = ''`);
+  const rows = await q(`select actor_name, action, detail from activity_log where workspace_id='${WS}' and action in ('client_added','client_updated','client_removed','settings_changed') order by id`);
+  assert.deepEqual(rows.map((row) => row.action).filter((name) => name.startsWith('client')), ['client_added', 'client_updated', 'client_removed'], JSON.stringify(rows));
+  assert.equal(rows[0].actor_name, 'Owner Name');
+  assert.ok(rows.some((row) => row.action === 'settings_changed' && row.detail.settings.includes('name')));
+  assert.ok(!JSON.stringify(rows).includes('Renamed'), 'setting values stay out of the log');
+  const { cleanupActivity, KEEP_DAYS } = require(`${ROOT}/api/_lib/activity.js`);
+  await cleanupActivity({ now: Date.now() + (KEEP_DAYS + 1) * 86400000 });
+  assert.equal((await q(`select count(*)::int as n from activity_log where workspace_id='${WS}'`))[0].n, 0, 'old activity is deleted');
+}
+
 // --- History records each step, including content before an edit ---
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'History v1', platforms: ['facebook'], scheduleDate: new Date(future).toISOString() }, 'user');
 let historyId = r.payload.post.id;
@@ -1508,6 +1546,31 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     // Automatic posts move to the next free minute instead of failing, or stay put with the setting off.
     const { firstFreeTime } = require(`${ROOT}/api/_lib/publishing.js`);
     assert.equal(await firstFreeTime(WS, 'pk-works', ['facebook'], slot), slot + 2 * 60000, 'minutes 0 and 1 are taken');
+    // The database catches what the server check can't: a post saved between that check and the insert.
+    const dbSlot = slot + 300 * 60000, insertPost = async (id, extra = '{}', at = new Date(dbSlot).toISOString()) => {
+      await db.query(`insert into scheduled_posts (id, workspace_id, client_id, scheduled_for, content, options) values ($1, $2, 'pk-works', $3, '{}', $4::jsonb)`, [id, WS, at, extra]);
+      await db.query(`insert into publish_jobs (post_id, workspace_id, client_id, platform, provider, run_at) values ($1, $2, 'pk-works', 'facebook', 'manual', $3)`, [id, WS, at]);
+    };
+    await insertPost('a0000000-0000-4000-8000-000000000001');
+    await assert.rejects(insertPost('a0000000-0000-4000-8000-000000000002'), /double_booked/, 'a second post in the same minute is refused');
+    await db.query(`delete from scheduled_posts where id='a0000000-0000-4000-8000-000000000002'`);
+    await insertPost('a0000000-0000-4000-8000-000000000003', '{"replaces":"a0000000-0000-4000-8000-000000000001"}');
+    await db.query(`delete from scheduled_posts where id='a0000000-0000-4000-8000-000000000003'`);
+    await insertPost('a0000000-0000-4000-8000-000000000004', '{"autoPlaced":true}');
+    await db.query(`delete from scheduled_posts where id='a0000000-0000-4000-8000-000000000004'`);
+    await insertPost('a0000000-0000-4000-8000-000000000005', '{}', new Date(dbSlot + 60000).toISOString());
+    await assert.rejects(db.query(`update scheduled_posts set scheduled_for=$1 where id='a0000000-0000-4000-8000-000000000005'`, [new Date(dbSlot).toISOString()]), /double_booked/, 'moving onto a taken minute is refused');
+    await db.query(`update scheduled_posts set scheduled_for=$1 where id='a0000000-0000-4000-8000-000000000005'`, [new Date(dbSlot + 120000).toISOString()]);
+    await setting(false);
+    await insertPost('a0000000-0000-4000-8000-000000000006');
+    await db.query(`delete from scheduled_posts where id='a0000000-0000-4000-8000-000000000006'`);
+    await setting(true);
+    await db.query(`delete from scheduled_posts where id in ('a0000000-0000-4000-8000-000000000001','a0000000-0000-4000-8000-000000000005')`);
+    // A clash found by the database reads the same way to the person saving.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, options) => String(url).includes('/rest/v1/nothing') ? new Response(JSON.stringify({ message: 'double_booked', code: '23505' }), { status: 409 }) : realFetch(url, options);
+    await assert.rejects(require(`${ROOT}/api/_lib/core.js`).databaseRequest('nothing'), /Another post just took that time/);
+    globalThis.fetch = realFetch;
     assert.equal(await firstFreeTime(WS, 'pk-works', ['pinterest'], slot), slot, 'free on this network');
     await setting(false);
     assert.equal(await firstFreeTime(WS, 'pk-works', ['facebook'], slot), slot);
@@ -1572,7 +1635,11 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   // A member leaves: their membership, files, and sign-in go; the workspace stays
   // ...except a file a teammate's draft still uses, and their name comes off the shared drafts they saved.
   await db.exec(`insert into saved_drafts (workspace_id, id, draft) values ('${WS}','left-1','{"id":"left-1","savedBy":"member@x.com","savedByName":"Member","title":"Kept","state":{"uploadedMedia":[{"url":"https://sb.test/storage/v1/object/public/social-media/${USER}/in-use.jpg"}]}}'),('${WS}','other-1','{"id":"other-1","savedBy":"owner@x.com","state":{}}')`);
+  await db.exec(`insert into activity_log (workspace_id, actor_name, action, detail) values ('${WS}', 'user@test.local', 'settings_changed', '{}'), ('${WS}', 'Someone', 'member_invited', '{"email":"user@test.local"}'), ('${WS}', 'Someone', 'settings_changed', '{}')`);
+  const leavingEmail = (await q(`select email from workspace_members where workspace_id='${WS}' and role='user' limit 1`))[0]?.email;
+  if (leavingEmail) await db.query(`update activity_log set actor_name = replace(actor_name, 'user@test.local', $1), detail = replace(detail::text, 'user@test.local', $1)::jsonb`, [leavingEmail]);
   r = await call({ action: 'delete-account', confirm: 'DELETE' }, 'user');
+  assert.deepEqual((await q(`select actor_name, action from activity_log where workspace_id='${WS}' order by id desc limit 2`)).map((row) => [row.actor_name, row.action]), [['Someone', 'settings_changed'], [null, 'settings_changed']], 'the log keeps the event, without the person who left');
   assert.equal(r.status, 200, JSON.stringify(r.payload)); assert.equal(r.payload.workspaceDeleted, false);
   assert.ok(deletedFiles.includes(`${USER}/photo.jpg`) && !deletedFiles.includes(`${USER}/in-use.jpg`), JSON.stringify(deletedFiles));
   const leftDrafts = Object.fromEntries((await q(`select id, draft from saved_drafts where id in ('left-1','other-1')`)).map((row) => [row.id, row.draft]));

@@ -25,6 +25,7 @@ const { proofreadTexts } = require('./_lib/proofread');
 const { systemStatus } = require('./_lib/health');
 const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
 const { deletionPlan, deleteAccount } = require('./_lib/account');
+const { recordActivity, listActivity } = require('./_lib/activity');
 const { brandFromSite } = require('./_lib/brandsite');
 const { listNetworkPosts, syncClient } = require('./_lib/sync');
 const { latestPlanningNote, createPlanningNote, NOTE_MAX_AGE_DAYS } = require('./_lib/planning');
@@ -46,7 +47,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
   'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
-  'planning-note', 'open-comments', 'comment-state'
+  'planning-note', 'open-comments', 'comment-state', 'activity'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
@@ -296,21 +297,24 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
         footer: 'If you weren’t expecting this, you can ignore it.'
       }));
     } catch (error) { console.error('Team invite email failed:', error.message); }
+    await recordActivity(workspaceId, membership.name, 'member_invited', { email, role: body.role });
     return send(res, 200, { invited: email, emailed });
   }
 
   if (action === 'update-member' || action === 'remove-member') {
     if (typeof body.userId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.userId)) return send(res, 400, { error: 'Choose a team member.' });
     const target = `${scope}&user_id=eq.${body.userId}`;
-    const rows = await databaseRequest(`workspace_members?${target}&select=role`);
+    const rows = await databaseRequest(`workspace_members?${target}&select=role,email`);
     if (!rows?.length) return send(res, 404, { error: 'Team member not found.' });
     const demotingAdmin = rows[0].role === 'admin' && (action === 'remove-member' || body.role !== 'admin');
     if (demotingAdmin && await adminCount(workspaceId) <= 1) return send(res, 400, { error: 'A workspace needs at least one admin.' });
     if (action === 'update-member') {
       if (!ROLES.has(body.role)) return send(res, 400, { error: 'Choose Admin or User.' });
       await databaseRequest(`workspace_members?${target}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ role: body.role }) });
+      await recordActivity(workspaceId, membership.name, 'member_role_changed', { email: rows[0].email, role: body.role });
     } else {
       await databaseRequest(`workspace_members?${target}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+      await recordActivity(workspaceId, membership.name, 'member_removed', { email: rows[0].email });
     }
     return send(res, 200, { ok: true });
   }
@@ -318,6 +322,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'remove-invite') {
     const email = normalizeEmail(body.email);
     await databaseRequest(`workspace_invites?${scope}&email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    await recordActivity(workspaceId, membership.name, 'invite_removed', { email });
     return send(res, 200, { ok: true });
   }
 
@@ -360,12 +365,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const newestFirst = [...parsed.items].sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0));
     await baselineFeed(feed, body.queueLatest ? newestFirst.slice(1) : newestFirst);
     const run = body.queueLatest && feed.enabled ? await runFeed(feed, { encryptionKey, timeZone: await workspaceTimeZone(workspaceId) }) : null;
+    await recordActivity(workspaceId, membership.name, 'autopilot_saved', { url: input.url });
     return send(res, 200, { feed, run });
   }
 
   if (action === 'feed-delete') {
     if (typeof body.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.id)) return send(res, 400, { error: 'Choose a feed.' });
     await databaseRequest(`autopilot_feeds?${scope}&id=eq.${body.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    await recordActivity(workspaceId, membership.name, 'autopilot_deleted', {});
     return send(res, 200, { ok: true });
   }
 
@@ -492,6 +499,10 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const from = Date.parse(body.from), to = Date.parse(body.to);
     if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 101 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
     return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
+  }
+
+  if (action === 'activity') {
+    return send(res, 200, await listActivity(workspaceId, { group: typeof body.group === 'string' ? body.group : '', before: typeof body.before === 'string' ? body.before : '' }));
   }
 
   if (action === 'post-history') {
@@ -627,7 +638,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'export') {
     const scope = `workspace_id=eq.${workspaceId}`;
-    const [state, posts, notes, history, connections, links, feeds, bios] = await Promise.all([
+    const [state, posts, notes, history, connections, links, feeds, bios, activity] = await Promise.all([
       getWorkspaceState(workspaceId),
       databaseRequest(`scheduled_posts?${scope}&select=*,publish_jobs(id,platform,provider,status,run_at,published_at,external_url,last_error)&order=scheduled_for.asc&limit=5000`),
       databaseRequest(`post_notes?${scope}&select=post_id,author_name,author_kind,body,decision,created_at&limit=10000`),
@@ -635,12 +646,13 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       databaseRequest(`social_connections?${scope}&select=client_id,platform,display_name,username,profile_url,status,created_at`),
       databaseRequest(`review_links?${scope}&select=client_id,label,created_at,expires_at,revoked_at,last_used_at`),
       databaseRequest(`autopilot_feeds?${scope}&select=*`),
-      databaseRequest(`bio_pages?${scope}&select=slug,client_id,enabled`)
+      databaseRequest(`bio_pages?${scope}&select=slug,client_id,enabled`),
+      databaseRequest(`activity_log?${scope}&select=actor_name,action,detail,created_at&order=created_at.desc&limit=20000`).catch(() => [])
     ]);
     // Sign-in tokens and link secrets are never exported.
     return send(res, 200, {
       exportedAt: new Date().toISOString(), format: 'signaldesk-export-1',
-      workspace: state, posts: posts || [], notes: notes || [], history: history || [], connections: connections || [], reviewLinks: links || [], autopilotFeeds: feeds || [], bioPages: bios || []
+      workspace: state, posts: posts || [], notes: notes || [], history: history || [], activity: activity || [], connections: connections || [], reviewLinks: links || [], autopilotFeeds: feeds || [], bioPages: bios || []
     });
   }
 
@@ -683,12 +695,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       body: JSON.stringify({ workspace_id: workspaceId, client_id: body.clientId, token_hash: crypto.createHash('sha256').update(token).digest('hex'), token_ciphertext: encryptSecret(token, encryptionKey), label: label || null, created_by: user.id, expires_at: new Date(Date.now() + days * 86400000).toISOString() })
     });
     // Links are looked up by the secret's hash; the encrypted copy is only used to put the link in reminder emails.
+    await recordActivity(workspaceId, membership.name, 'review_link_created', { clientId: body.clientId, label });
     return send(res, 200, { link: { id: link.id, label: link.label, expires_at: link.expires_at }, token });
   }
 
   if (action === 'revoke-review-link') {
     if (!validUuid(body.id)) return send(res, 400, { error: 'Choose a link.' });
     await databaseRequest(`review_links?workspace_id=eq.${workspaceId}&id=eq.${body.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+    await recordActivity(workspaceId, membership.name, 'review_link_revoked', {});
     return send(res, 200, { revoked: true });
   }
 
@@ -816,6 +830,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     for (const { candidate, selection } of chosen) {
       const connection = adapter.connectionFor(candidate, secret, selection);
       await saveConnection({ workspaceId, clientId: session.client_id, userId: user.id, candidate, connection, encryptionKey });
+      await recordActivity(workspaceId, membership.name, 'account_connected', { clientId: session.client_id, platform: candidate.platform });
     }
     await databaseRequest(`oauth_sessions?id=eq.${session.id}`, {
       method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'completed', secret_ciphertext: null })
@@ -905,7 +920,7 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
   }
   // Post now has no time to clash over, and the queue already picks a free slot.
   if (body.scheduleDate && body.queue !== true) await assertTimeFree(membership.workspace_id, clientId, { platforms: [...input.platforms, ...input.manual], times: occurrenceTimes(input.scheduledFor, input.options.autoRepost, timeZone), original });
-  const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey, timeZone, actorName });
+  const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey, timeZone, actorName, replaces: original?.id || null });
   if (original) await replacePost(membership.workspace_id, original, post.id, actorName);
   if (held) {
     await notify({
@@ -1003,6 +1018,7 @@ module.exports = async function handler(req, res) {
       const scope = `workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(clientId)}`;
       const waiting = await databaseRequest(`publish_jobs?${scope}&platform=eq.${body.platform}&provider=eq.direct&status=in.(held,queued)&select=id`) || [];
       await databaseRequest(`social_connections?${scope}&platform=eq.${body.platform}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+      await recordActivity(workspaceId, membership.name, 'account_disconnected', { clientId, platform: body.platform });
       return send(res, 200, { disconnected: true, waitingPosts: waiting.length });
     }
 

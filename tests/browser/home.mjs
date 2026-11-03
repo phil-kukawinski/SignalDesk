@@ -32,6 +32,18 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('Analytics all → engagements: ' + await evaluate(`document.querySelectorAll('.analytics-stats .stat-number')[1].innerText`) + ' | posts: ' + await posts() + ' | home picker follows: ' + JSON.stringify(await evaluate(`document.querySelector('#overview-client').value`)));
   await evaluate(`showView('overview')`); await wait(500);
   log.push('back to all → stats: ' + await stats() + ' | upcoming: ' + await upcoming());
+  // Settings → Activity lists post and workspace events, and only admins see it.
+  await evaluate(`(()=>{const base=callSocialApi;window.__activity=[];callSocialApi=async(b)=>{if(b.action!=='activity')return base(b);__activity.push(b.group);return b.group==='team'?{ready:true,next:null,activity:[{id:'workspace-2',kind:'workspace',action:'member_invited',actor:'Owner',at:new Date().toISOString(),detail:{email:'sam@studio.test',role:'user'}}]}:{ready:false,next:null,activity:[{id:'post-1',kind:'post',action:'approved',actor:'Owner',at:new Date().toISOString(),detail:{},postId:'p1',title:'PK launch',clientId:'pk-works'}]};};showView('settings');})()`); await wait(400);
+  const activityText = () => evaluate(`document.querySelector('#activity-list').innerText.replace(/\\s+/g,' ')`);
+  const everything = await activityText();
+  log.push('activity: ' + everything + ' | setup note hidden: ' + await evaluate(`document.querySelector('#activity-setup').hidden`));
+  if (!/Approved.*Owner.*PK launch.*PK Works/.test(everything) || await evaluate(`document.querySelector('#activity-setup').hidden`)) log.push('[exception] Activity should show post events and the database update note');
+  await evaluate(`(()=>{const s=document.querySelector('#activity-group');s.value='team';s.dispatchEvent(new Event('change'));})()`); await wait(300);
+  const team = await activityText();
+  if (!/Invited a teammate.*sam@studio\.test/.test(team) || /PK launch/.test(team) || await evaluate(`__activity.at(-1)`) !== 'team') log.push('[exception] the Activity filter should ask for and show that group: ' + team);
+  await evaluate(`currentRole='user';loadActivity()`); await wait(100);
+  if (!await evaluate(`document.querySelector('#activity-panel').hidden`)) log.push('[exception] Activity should be hidden from non-admins');
+  await evaluate(`currentRole='admin';showView('overview')`); await wait(300);
   // Beta feedback goes to the server with the page attached.
   await evaluate(`window.__fb=null;const base=callSocialApi;callSocialApi=async(b)=>{if(b.action==='send-feedback'){__fb=b;return{sent:true};}return base(b);};document.querySelector('[data-open-feedback]').click()`); await wait(300);
   await evaluate(`document.querySelector('#feedback-dialog [data-kind="idea"]').click();document.querySelector('#feedback-message').value='A bulk upload would help';document.querySelector('#feedback-form').requestSubmit()`); await wait(400);

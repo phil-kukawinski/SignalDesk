@@ -30,6 +30,8 @@ Cloud sync uses team workspaces. The first person to sign in becomes the workspa
 
 Running SignalDesk on your own? Turn on **Settings → Personal mode** to hide the Social Inbox and team members.
 
+**Settings → Activity** shows admins who changed what across the workspace: posts, teammates, social accounts, clients, and settings, kept for one year. It records the names of the settings changed, not their values. When someone deletes their account, their name and email come out of this list.
+
 Roles are enforced server-side: `/api/social` rejects admin-only actions for Users and always holds their posts for approval, and a database trigger blocks Users from changing clients, settings, or approval status in shared workspace state. Each person's in-progress draft is stored separately in `user_drafts`. A person can belong to one workspace at a time.
 
 Re-running `supabase/schema.sql` on an older install migrates each existing account into its own workspace as Admin, keeping its clients, posts, and linked social profiles.
@@ -135,7 +137,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - **Client goals and alerts:** set posts per week, an engagement-rate goal, a gap warning (nothing scheduled within N days), and a daily limit in each brand kit. The Command Center shows goal progress, and Needs your attention flags gaps and busy days. The calendar marks busy days too
 - **AI caption drafts** (✦ Draft with AI): describe the post and get a version for each network in the client's voice
 - **Image descriptions:** add alt text to each image, or get an AI suggestion. It's sent to Facebook, Instagram, LinkedIn, and Pinterest
-- **Manual reminders:** for formats SignalDesk can't publish (Instagram Stories, TikTok, YouTube Shorts, X, Threads), it sends a reminder at the scheduled time with the copy and media. You post it, then select **Mark as posted**
+- **Manual reminders:** for any network you'd rather post to yourself, or one that isn't connected, it sends a reminder at the scheduled time with the copy and media. You post it, then select **Mark as posted**
 - **Post now**, **Duplicate** (from post details), and **Repeat** weekly, every 2 weeks, monthly, or every N days, always at the same local time
 - **Import CSV:** schedule up to 200 posts from a spreadsheet, with every row checked before anything is scheduled, or import them as Saved drafts to schedule later. Takes Excel's date formats and encodings, columns in any order, and extra columns. A file exported from a campaign updates those posts when it's imported again
 - **Campaigns:** one page per campaign with its drafts, approvals, scheduled and published posts, and results. Schedule or send drafts for approval in bulk, see them on the calendar, export to a spreadsheet, and share a link that lets the client approve the whole campaign at once

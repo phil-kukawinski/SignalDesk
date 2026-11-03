@@ -3,6 +3,10 @@
    1. Design tokens (light, then dark)  2. Base and layout  3. Components (later sections). Every
    color comes from a token, so dark mode only redefines the tokens. Network previews keep each
    network's real colors on purpose. */
+/* Inter, served from this site (fonts/LICENSE-inter.txt). The browser fetches only the ranges a page's text uses. */
+@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:100 900;src:url('../fonts/inter-latin.woff2') format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:100 900;src:url('../fonts/inter-latin-ext.woff2') format('woff2-variations');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
 
 :root{
   color-scheme:light;
@@ -571,6 +575,7 @@ label.settings-toggle input{width:18px;height:18px;accent-color:var(--accent);fl
 .history-row{display:grid;gap:1px;padding:8px 0;border-bottom:1px solid var(--border)}
 .history-row b{font-size:13px}.history-row span{font-size:12px;color:var(--text-muted)}.history-row small{font-size:12px;color:var(--text-muted);overflow-wrap:anywhere}
 .history-row .text-button{justify-self:start;font-size:12px}
+.activity-panel .panel-header select{width:auto;flex:none}.activity-panel .secondary-button{margin-top:12px}
 .bio-links-editor{display:grid;gap:6px;margin-bottom:6px}
 .bio-link-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:6px}
 .review-new-link-group label{display:block;margin:10px 0 4px}

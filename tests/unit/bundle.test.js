@@ -22,5 +22,6 @@ for (const file of files) {
   }
 }
 const html = fs.readFileSync(`${ROOT}/index.html`, 'utf8');
-assert.match(html, /<script src="js\/config\.js"><\/script>\s*(<!--[^>]*-->\s*)?<script src="js\/app\.min\.js\?v=[a-z0-9]+"><\/script>/, 'index.html loads config.js, then the bundle');
+assert.match(html, /<template id="app-markup">[\s\S]*<\/template>/, 'the app markup stays in its template until it is needed');
+assert.match(html, /scripts=\['https:\/\/cdn\.jsdelivr\.net\/[^']+','js\/config\.js','js\/app\.min\.js\?v=[a-z0-9]+'\]/, 'index.html loads the database library, config.js, then the bundle');
 console.log('bundle tests passed');
