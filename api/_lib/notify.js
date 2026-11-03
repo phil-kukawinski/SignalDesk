@@ -44,11 +44,12 @@ function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', c
       ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
   const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
-    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#2f6db3">${escapeHtml(eyebrow)}</div>
+    <div style="margin:0 0 18px"><img src="https://socialsignaldesk.com/icons/icon-192.png" width="28" height="28" alt="" style="vertical-align:middle;border:0;border-radius:7px"> <span style="vertical-align:middle;font:700 16px Arial,sans-serif;color:#001d51">Signal<span style="color:#0469fa">Desk</span></span></div>
+    <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#0b5fdc">${escapeHtml(eyebrow)}</div>
     <h1 style="font:800 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">${escapeHtml(heading)}</h1>
     <p style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin:0">${escapeHtml(intro)}</p>
     ${sectionHtml}
-    ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#2f6db3;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
+    ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#0b5fdc;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
     ${footer ? `<p style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
     <p style="font:11px Arial,sans-serif;color:#8d95a3;margin:${footer ? '6px' : '24px'} 0 0">SignalDesk is a product of PK Works · <a href="https://socialsignaldesk.com" style="color:#8d95a3">socialsignaldesk.com</a></p>
   </div></div>`;

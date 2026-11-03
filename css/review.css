@@ -5,11 +5,11 @@
   color-scheme:light;
   --bg:#f5f6f8;--surface:#fff;--surface-2:#f9fafb;--surface-3:#f0f2f5;--border:#e4e7ec;--border-strong:#d0d5dd;
   --text:#101828;--text-2:#344054;--muted:#5d6676;--faint:#8d95a3;
-  --accent:#2f6db3;--accent-soft:#ebf2fa;--accent-text:#22578f;
+  --accent:#0b5fdc;--accent-soft:#eaf2ff;--accent-text:#0a4fc0;
   --good:#16834a;--good-soft:#e9f7ef;--good-text:#11663a;
   --wait:#b8740f;--wait-soft:#fdf4e3;--wait-text:#8a5508;
   --warn:#c8382e;--warn-soft:#fdeceb;--warn-text:#a32b23;
-  --focus:0 0 0 3px #2f6db340;--shadow:0 1px 2px #1018280d
+  --focus:0 0 0 3px #0b5fdc40;--shadow:0 1px 2px #1018280d
 }
 @media(prefers-color-scheme:dark){:root{
   color-scheme:dark;

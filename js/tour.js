@@ -106,7 +106,7 @@ function openWelcome(){
   }
   const first=(activeUser?.user_metadata?.name||activeUser?.email||'').split(/[\s@.]/)[0];
   const name=first?first.charAt(0).toUpperCase()+first.slice(1):'';
-  dialog.innerHTML=`<div class="welcome-hero" aria-hidden="true"><span class="signal-mark welcome-mark"><svg viewBox="0 0 40 40" focusable="false"><path d="m12 14 5.5 4M23 18l5.5-5.5M23 22l5.5 5.5M17.5 22l-5.5 5.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/><circle cx="20" cy="20" r="4.5" fill="currentColor"/><circle cx="10" cy="12" r="3" fill="currentColor"/><circle cx="30" cy="10" r="3" fill="currentColor"/><circle cx="30" cy="30" r="3" fill="currentColor"/><circle cx="10" cy="30" r="3" fill="currentColor"/></svg></span><div class="welcome-orbit">${['facebook','instagram','threads','linkedin','pinterest','twitter','youtube','tiktok'].map((network,index)=>{const angle=index/8*Math.PI*2-Math.PI/2;return `<i class="platform-icon ${network}" style="translate:${Math.round(Math.cos(angle)*150)}px ${Math.round(Math.sin(angle)*52)}px"></i>`;}).join('')}</div></div>
+  dialog.innerHTML=`<div class="welcome-hero" aria-hidden="true"><span class="signal-mark welcome-mark"><svg class="sd-mark" viewBox="-4 -4 351 194" focusable="false"><path class="sd-s" d="M188 0H67A57 57 0 0 0 67 114H158A15 15 0 0 1 158 144H34L0 186H158A57 57 0 0 0 158 72H67A15 15 0 0 1 67 42H154Z"/><path class="sd-d" d="M212 0H250A93 93 0 0 1 250 186H198L232 144H250A51 51 0 0 0 250 42H178Z"/></svg></span><div class="welcome-orbit">${['facebook','instagram','threads','linkedin','pinterest','twitter','youtube','tiktok'].map((network,index)=>{const angle=index/8*Math.PI*2-Math.PI/2;return `<i class="platform-icon ${network}" style="translate:${Math.round(Math.cos(angle)*150)}px ${Math.round(Math.sin(angle)*52)}px"></i>`;}).join('')}</div></div>
   <div class="auth-form welcome-body"><h2 id="welcome-title">Welcome to SignalDesk${name?`, ${escapeHtml(name)}`:''}</h2><p>Plan, approve, and publish for every client from one place. Made by PK Works.</p>
   <ul class="welcome-points"><li>${icon('edit')}<span><b>Write once</b> and tailor it for each network</span></li><li>${icon('calendar')}<span><b>Schedule everything</b>; it posts on time, even with SignalDesk closed</span></li><li>${icon('heart')}<span><b>See what works</b> across every account, from every source</span></li></ul>
   <div class="welcome-actions"><button type="button" class="primary-button" data-welcome="tour">${icon('sparkles')}Take the 1-minute tour</button><button type="button" class="text-button" data-welcome="skip">I’ll explore on my own</button></div></div>`;
@@ -120,7 +120,7 @@ function celebrate(){
   if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
   const canvas=document.createElement('canvas');canvas.className='confetti';canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;document.body.appendChild(canvas);
   const ctx=canvas.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
-  const colors=['#2f6db3','#5b9be0','#cf5f55','#b9861d','#3f8a5c','#7457c9','#e1306c'];
+  const colors=['#0b5fdc','#5b9be0','#cf5f55','#b9861d','#3f8a5c','#7457c9','#e1306c'];
   const pieces=Array.from({length:140},()=>({x:innerWidth/2+(Math.random()-.5)*120,y:innerHeight*.35,vx:(Math.random()-.5)*14,vy:-Math.random()*13-4,size:5+Math.random()*6,rot:Math.random()*6,vr:(Math.random()-.5)*.3,color:colors[Math.floor(Math.random()*colors.length)],round:Math.random()<.35}));
   const started=performance.now();
   (function frame(now){
