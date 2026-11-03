@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 const out = process.env.SHOTS || '';
 export default async ({ send, evaluate, wait, log }) => {
-  const shot = async (selector, name) => { if (!out) return; const r = JSON.parse(await evaluate(`JSON.stringify(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`)); const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, r.x), y: Math.max(0, r.y) + (await evaluate('scrollY')), width: Math.min(r.width, 1400), height: Math.min(r.height, 1400), scale: 1 } }); fs.writeFileSync(out + name, Buffer.from(result.data, 'base64')); };
+  const shot = async (selector, name) => { if (!out) return; const r = JSON.parse(await evaluate(`JSON.stringify(document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect())`)); if (!r.width || !r.height) return; const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, r.x), y: Math.max(0, r.y) + (await evaluate('scrollY')), width: Math.min(r.width, 1400), height: Math.min(r.height, 1400), scale: 1 } }); fs.writeFileSync(out + name, Buffer.from(result.data, 'base64')); };
   // Never reach the real Supabase project from a test.
   await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1300, height: 1100, deviceScaleFactor: 1, mobile: false });
@@ -72,4 +72,30 @@ export default async ({ send, evaluate, wait, log }) => {
   const saved = JSON.parse(await evaluate(`JSON.stringify({pw:__pw,hidden:document.querySelector('#password-form').hidden,button:!document.querySelector('#password-change').hidden})`));
   log.push('password change: ' + JSON.stringify(saved));
   if (saved.pw.join() !== 'longenough1' || !saved.hidden || !saved.button) log.push('[exception] matching passwords should save and close the form');
+
+  // Profile: a name and photo replace the email-based badges, and replacing a photo removes the old file.
+  await evaluate(`showView('settings')`); await wait(300);
+  await evaluate(`(()=>{window.__profile={updates:[],uploads:[],removed:[]};const base='https://x.supabase.co/storage/v1/object/public/social-media/'+activeUser.id+'/';supabaseClient.auth.updateUser=async body=>{__profile.updates.push(body.data);return{data:{user:{...activeUser,user_metadata:{...activeUser.user_metadata,...body.data}}},error:null};};uploadToStorage=async(file,prefix)=>{const url=base+prefix+'-'+(__profile.uploads.length+1)+'.jpg';__profile.uploads.push({prefix,type:file.type,size:file.size});return{url,path:'',name:file.name,type:file.type};};supabaseClient.storage.from=()=>({remove:async paths=>{__profile.removed.push(...paths);return{};}});})()`);
+  const typeName = (name) => evaluate(`(()=>{const input=document.querySelector('#profile-display-name');input.value=${JSON.stringify(name)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const pickPhoto = (color, width, height) => evaluate(`(async()=>{const c=document.createElement('canvas');c.width=${width};c.height=${height};const g=c.getContext('2d');g.fillStyle='${color}';g.fillRect(0,0,${width},${height});const blob=await new Promise(r=>c.toBlob(r,'image/png'));await chooseProfilePhoto(new File([blob],'me.png',{type:'image/png'}));})()`);
+  await typeName('  Sam   Rivera '); await pickPhoto('#2f6db3', 800, 400); await wait(200);
+  await shot('#account-panel', 'account_profile.png');
+  const photoSize = JSON.parse(await evaluate(`(async()=>{const b=await createImageBitmap(profileNewPhoto);return JSON.stringify([b.width,b.height,profileNewPhoto.type]);})()`));
+  if (photoSize.join() !== '256,256,image/jpeg') log.push('[exception] the photo should become a 256-pixel square JPEG: ' + photoSize);
+  await evaluate(`document.querySelector('#profile-form').requestSubmit()`); await wait(300);
+  const profile = JSON.parse(await evaluate(`JSON.stringify({update:__profile.updates.at(-1),name:document.querySelector('#profile-name').textContent,img:document.querySelector('.profile .avatar img')?.getAttribute('src')||'',top:document.querySelector('#top-avatar img')?.getAttribute('src')||''})`));
+  log.push('profile: ' + JSON.stringify(profile.update));
+  if (profile.update.display_name !== 'Sam Rivera' || !/avatar-1\.jpg$/.test(profile.update.avatar_url) || profile.name !== 'Sam Rivera' || profile.img !== profile.update.avatar_url || profile.top !== profile.update.avatar_url) log.push('[exception] saving should show the new name and photo everywhere');
+  await pickPhoto('#e0a030', 300, 300); await evaluate(`document.querySelector('#profile-form').requestSubmit()`); await wait(300);
+  const replaced = JSON.parse(await evaluate(`JSON.stringify(__profile.removed)`));
+  if (replaced.length !== 1 || !/\/avatar-1\.jpg$/.test(replaced[0])) log.push('[exception] replacing a photo should remove the old file: ' + replaced);
+  await evaluate(`document.querySelector('#profile-photo-remove').click();document.querySelector('#profile-form').requestSubmit()`); await wait(300);
+  const removed = JSON.parse(await evaluate(`JSON.stringify({avatar:__profile.updates.at(-1).avatar_url,initials:document.querySelector('.profile .avatar').textContent,img:Boolean(document.querySelector('.profile .avatar img'))})`));
+  if (removed.avatar !== '' || removed.img || removed.initials !== 'SR') log.push('[exception] removing the photo should fall back to initials: ' + JSON.stringify(removed));
+  // A failed upload changes nothing, and an unsupported file is refused with a message.
+  const before = await evaluate(`__profile.updates.length`);
+  await evaluate(`uploadToStorage=async()=>null`); await pickPhoto('#000000', 100, 100); await evaluate(`document.querySelector('#profile-form').requestSubmit()`); await wait(200);
+  if (await evaluate(`__profile.updates.length`) !== before || !/didn’t upload/.test(await evaluate(`document.querySelector('#profile-message').textContent`))) log.push('[exception] a failed upload should leave the profile alone');
+  await evaluate(`chooseProfilePhoto(new File(['x'],'x.gif',{type:'image/gif'}))`); await wait(100);
+  if (!/JPG, PNG, or WebP/.test(await evaluate(`document.querySelector('#profile-message').textContent`))) log.push('[exception] an unsupported file should be refused');
 };

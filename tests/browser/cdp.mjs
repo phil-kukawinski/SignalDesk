@@ -26,4 +26,5 @@ await send('Runtime.enable'); await send('Network.enable'); await send('Network.
 const steps = (await import(path.resolve(process.argv[2]))).default;
 // Sample clients for tests (the app starts empty and signed out).
 const sampleData = () => evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/sample.js'), 'utf8'));
-try { await steps({ send, evaluate, wait, log, sampleData }); } finally { console.log(log.join('\n')); if (process.env.LOCAL_JS) console.log('[local files served] ' + served.size); ws.close(); chrome.kill(); }
+// A step that crashes must fail the run, or everything after it silently goes untested.
+try { await steps({ send, evaluate, wait, log, sampleData }); } catch (error) { log.push('[exception] The test stopped early: ' + (error.stack || error.message)); } finally { console.log(log.join('\n')); if (process.env.LOCAL_JS) console.log('[local files served] ' + served.size); ws.close(); chrome.kill(); }

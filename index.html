@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
-  <link rel="stylesheet" href="css/app.min.css?v=035e3e2a68">
+  <link rel="stylesheet" href="css/app.min.css?v=f5dd2b4da2">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -254,6 +254,7 @@
           <details class="beta-errors"><summary>Server errors in the last 24 hours <span id="beta-error-count"></span></summary><ul id="beta-errors"></ul></details>
         </div>
         <div class="panel account-panel" id="account-panel" hidden><div class="panel-header"><div><h2>Your account</h2><p id="account-email"></p></div></div>
+          <form class="profile-form" id="profile-form" novalidate><div class="profile-photo"><div class="avatar profile-preview" id="profile-preview"></div><div class="profile-photo-actions"><div><button class="secondary-button" type="button" id="profile-photo-choose">Choose photo…</button><button class="text-button" type="button" id="profile-photo-remove" hidden>Remove</button></div><small>JPG, PNG, or WebP. Cropped to a square.</small><input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" hidden></div></div><label class="field-label" for="profile-display-name">Display name</label><input class="field" id="profile-display-name" maxlength="60" autocomplete="name" placeholder="e.g. Sam Rivera"><small class="option-hint">Your team sees this instead of your email, and clients see it on notes you leave.</small><div class="profile-save"><button class="primary-button" type="submit" id="profile-save">Save profile</button><span class="auth-message" id="profile-message" role="status"></span></div></form>
           <div class="settings-toggle account-password"><div><b>Password</b><small>Change the password you sign in with. You stay signed in on this device.</small></div><button class="secondary-button" type="button" id="password-change">Change password…</button></div>
           <form class="password-form" id="password-form" hidden novalidate><label class="field-label" for="password-new">New password</label><input class="field" id="password-new" type="password" autocomplete="new-password" minlength="8" required><label class="field-label" for="password-again">Type it again</label><input class="field" id="password-again" type="password" autocomplete="new-password" minlength="8" required><p class="auth-message" id="password-message" role="status"></p><div class="password-actions"><button class="primary-button" type="submit" id="password-save">Save password</button><button class="text-button" type="button" id="password-cancel">Cancel</button></div></form>
           <div class="settings-toggle account-danger"><div><b>Delete my account</b><small id="account-delete-detail">Removes your sign-in and your data. This can’t be undone.</small></div><button class="secondary-button danger-button" type="button" id="account-delete">Delete account…</button></div>
@@ -494,6 +495,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <!-- The app: js/app-files.json lists the source files, combined by `npm run bundle`. -->
-  <script src="js/app.min.js?v=32bd2f0f5a"></script>
+  <script src="js/app.min.js?v=27a457f201"></script>
 </body>
 </html>

@@ -63,7 +63,8 @@ async function cleanupMedia({ limit = 200, now = Date.now() } = {}) {
   for (const folder of await listFolder('')) {
     if (folder.id) continue; // uploads always live in a per-person folder
     for (const file of await listFolder(folder.name)) {
-      if (!file.id) continue;
+      // Profile photos are in use for as long as the person keeps them, with no post pointing at them.
+      if (!file.id || file.name.startsWith('avatar-')) continue;
       const path = `${folder.name}/${file.name}`;
       const created = Date.parse(file.created_at || file.updated_at);
       if (Number.isFinite(created) && created < cutoff && !used.has(path)) stale.push(path);

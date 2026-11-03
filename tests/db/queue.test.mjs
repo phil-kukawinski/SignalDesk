@@ -54,7 +54,7 @@ global.fetch = async (input, options = {}) => {
   }
   if (url === 'https://sb.test/auth/v1/user') {
     const token = (options.headers.authorization || '').replace('Bearer ', '');
-    return token === 'admin' ? reply({ id: ADMIN, email: 'owner@x.com' }) : token === 'user' ? reply({ id: USER, email: 'member@x.com' }) : reply({}, 401);
+    return token === 'admin' ? reply({ id: ADMIN, email: 'owner@x.com', user_metadata: globalThis.adminMeta || {} }) : token === 'user' ? reply({ id: USER, email: 'member@x.com' }) : reply({}, 401);
   }
   const call = { url, method: options.method || 'GET', body: options.body, headers: options.headers || {} };
   external.push(call);
@@ -526,7 +526,7 @@ networkHandler = (c) => {
     if (prefix === '') return reply([{ name: 'u1', id: null }]);
     if (prefix === 'u1') return reply([
       { name: 'unused.jpg', id: 'a', created_at: old }, { name: 'kept draft.jpg', id: 'b', created_at: old },
-      { name: 'in-saved.jpg', id: 'e', created_at: old }, { name: 'in-shared.jpg', id: 'f', created_at: old },
+      { name: 'avatar-me.jpg', id: 'g', created_at: old }, { name: 'in-saved.jpg', id: 'e', created_at: old }, { name: 'in-shared.jpg', id: 'f', created_at: old },
       { name: 'scheduled.jpg', id: 'c', created_at: old }, { name: 'new.jpg', id: 'd', created_at: fresh }
     ]);
   }
@@ -1443,6 +1443,26 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     await db.exec(`delete from worker_runs where name = 'weekly-check'`);
   }
   delete process.env.RESEND_API_KEY;
+  // Profiles: a chosen name replaces the email in history and on the team list, cleaned of anything odd.
+  {
+    const { personProfile } = require(`${ROOT}/api/_lib/core.js`);
+    assert.deepEqual(personProfile({ user_metadata: { display_name: `  Sam\n ${'R'.repeat(80)}`, avatar_url: 'https://evil.test/x.jpg' } }), { name: `Sam ${'R'.repeat(56)}`, avatar: '' });
+    assert.equal(personProfile({ user_metadata: { avatar_url: 'https://sb.test/storage/v1/object/public/social-media/u/avatar-a.jpg' } }).avatar, 'https://sb.test/storage/v1/object/public/social-media/u/avatar-a.jpg');
+    assert.deepEqual(personProfile(null), { name: '', avatar: '' });
+    globalThis.adminMeta = { display_name: 'Sam Rivera' };
+    networkHandler = (c) => c.url.includes('/auth/v1/admin/users/') ? (c.url.endsWith(ADMIN) ? reply({ user_metadata: { display_name: 'Sam Rivera', avatar_url: 'https://sb.test/storage/v1/object/public/social-media/a/avatar-1.jpg' } }) : reply({}, 404)) : reply({});
+    const named = await call({ action: 'publish', clientId: 'pk-works', text: 'Named post', platforms: ['linkedin'], scheduleDate: new Date(Date.now() + 41 * 86400000).toISOString() });
+    assert.equal(named.status, 200, JSON.stringify(named.payload));
+    assert.equal((await q(`select actor_name from post_history where post_id='${named.payload.post.id}' and action='created'`))[0].actor_name, 'Sam Rivera');
+    const team = await call({ action: 'members' });
+    const byEmail = Object.fromEntries(team.payload.members.map((member) => [member.email, member]));
+    assert.equal(byEmail['owner@x.com'].name, 'Sam Rivera');
+    assert.match(byEmail['owner@x.com'].avatar, /avatar-1\.jpg$/);
+    assert.equal(byEmail['member@x.com'].name, undefined, 'someone without a profile, or a failed lookup, still lists by email');
+    globalThis.adminMeta = {};
+    await db.exec(`delete from scheduled_posts where id='${named.payload.post.id}'`);
+  }
+
   // Prevent double-booking: one post per client, network, and minute, on every route onto the schedule.
   {
     const setting = (on) => db.exec(`update workspace_state set state = jsonb_set(state, '{settings,preventDoubleBooking}', '${on}')`);

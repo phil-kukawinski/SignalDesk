@@ -3,7 +3,7 @@ const { APIError } = require('@anthropic-ai/sdk');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
-  getMembership, getWorkspaceState, assertClientInWorkspace,
+  getMembership, personProfile, getWorkspaceState, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms, decryptSecret, encryptSecret,
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
@@ -261,7 +261,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       databaseRequest(`workspace_members?${scope}&select=user_id,email,role,created_at&order=created_at.asc`),
       databaseRequest(`workspace_invites?${scope}&select=email,role,created_at&order=created_at.asc`)
     ]);
-    return send(res, 200, { members: members || [], invites: invites || [], currentUserId: user.id });
+    const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const withProfiles = await Promise.all((members || []).map(async (member) => {
+      const found = await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users/${member.user_id}`, { headers: { apikey: service, authorization: `Bearer ${service}` } }).catch(() => null);
+      return { ...member, ...(found?.ok ? personProfile(await found.json().catch(() => null)) : {}) };
+    }));
+    return send(res, 200, { members: withProfiles, invites: invites || [], currentUserId: user.id });
   }
 
   if (action === 'invite') {
@@ -495,7 +500,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'manual-done') {
-    return send(res, 200, await markManualDone(workspaceId, body.jobId, { url: body.url, userId: user.id, admin: membership.role === 'admin', actorName: membership.email }));
+    return send(res, 200, await markManualDone(workspaceId, body.jobId, { url: body.url, userId: user.id, admin: membership.role === 'admin', actorName: membership.name }));
   }
 
   if (action === 'draft-captions' || action === 'alt-text' || action === 'brand-from-site') {
@@ -648,7 +653,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const post = await getPost(workspaceId, body.postId);
     const text = typeof body.body === 'string' ? body.body.trim() : '';
     if (!text || text.length > 2000) return send(res, 400, { error: 'Write a note up to 2,000 characters.' });
-    const note = await addNote({ workspaceId, postId: post.id, authorId: user.id, authorName: membership.email || user.email || 'Teammate', kind: 'team', body: text });
+    const note = await addNote({ workspaceId, postId: post.id, authorId: user.id, authorName: membership.name, kind: 'team', body: text });
     if (post.created_by && post.created_by !== user.id) {
       await notify({ workspaceId, audience: 'users', userIds: [post.created_by], type: 'post_note', category: 'approvals', title: `New note on “${post.title || 'your post'}”`, body: `${membership.email || 'A teammate'}: ${text.slice(0, 160)}`, view: 'calendar', data: { postId: post.id } });
     }
@@ -735,12 +740,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'approve') {
     const { post, late } = await approvePost(workspaceId, body.postId, user.id);
-    await addHistory(workspaceId, post.id, 'approved', { actorName: membership.email, detail: { late } });
+    await addHistory(workspaceId, post.id, 'approved', { actorName: membership.name, detail: { late } });
     if (post.created_by && post.created_by !== user.id) {
       await notify({
         workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
         title: 'Your post was approved',
-        body: `“${post.title || 'Your post'}” was approved by ${membership.email || 'an admin'}${late ? ' and is publishing now because its time had passed' : ' and will publish as scheduled'}.`,
+        body: `“${post.title || 'Your post'}” was approved by ${membership.name}${late ? ' and is publishing now because its time had passed' : ' and will publish as scheduled'}.`,
         view: 'calendar', data: { postId: post.id }
       });
     }
@@ -750,7 +755,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'reject') {
     const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
     const post = await rejectPost(workspaceId, body.postId, note);
-    await addHistory(workspaceId, post.id, 'changes_requested', { actorName: membership.email, detail: { note } });
+    await addHistory(workspaceId, post.id, 'changes_requested', { actorName: membership.name, detail: { note } });
     if (post.created_by && post.created_by !== user.id) {
       await notify({
         workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
@@ -762,7 +767,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'cancel-post') {
     const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' });
-    await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.email, detail: { keptPublished: result.keptPublished } });
+    await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.name, detail: { keptPublished: result.keptPublished } });
     return send(res, 200, result);
   }
 
@@ -775,14 +780,14 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const recent = await databaseRequest(`scheduled_posts?${scope}&created_at=gte.${since}&select=id&limit=${DAILY_POST_LIMIT}`) || [];
     if (recent.length + ids.length > DAILY_POST_LIMIT) return send(res, 429, { error: `That would pass the beta limit of ${DAILY_POST_LIMIT} new posts in 24 hours. Copy fewer posts or try again later.` });
     const state = await getWorkspaceState(workspaceId);
-    const result = await copyPosts(workspaceId, { postIds: ids, offsetDays, userId: user.id, timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', encryptionKey, actorName: membership.email });
+    const result = await copyPosts(workspaceId, { postIds: ids, offsetDays, userId: user.id, timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', encryptionKey, actorName: membership.name });
     return send(res, 200, result);
   }
 
   if (action === 'reschedule-post') {
     const before = await getPost(workspaceId, body.postId);
     const result = await reschedulePost(workspaceId, body.postId, Date.parse(body.scheduleDate));
-    await addHistory(workspaceId, body.postId, 'rescheduled', { actorName: membership.email, detail: { from: before.scheduled_for, to: result.scheduledFor } });
+    await addHistory(workspaceId, body.postId, 'rescheduled', { actorName: membership.name, detail: { from: before.scheduled_for, to: result.scheduledFor } });
     return send(res, 200, result);
   }
 
@@ -890,7 +895,7 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
     const client = (state.clients || []).find((item) => item.id === clientId);
     input.scheduledFor = await nextQueueSlot(membership.workspace_id, client, timeZone);
   }
-  const actorName = membership.email || user.email || 'Teammate';
+  const actorName = membership.name;
   // Posts from members with the User role are always held until an admin approves them.
   const held = membership.role !== 'admin' || body.requiresApproval === true;
   let original = null;
@@ -938,6 +943,7 @@ module.exports = async function handler(req, res) {
     if (action === 'send-feedback') return send(res, 200, await sendFeedback(user, body));
     const membership = await getMembership(user.id);
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
+    membership.name = personProfile(user).name || membership.email || user.email || 'Teammate';
     if (membership.role !== 'admin' && !USER_ACTIONS.has(action)) return send(res, 403, { error: 'Only workspace admins can do that.' });
     if (WORKSPACE_ACTIONS.has(action)) return await handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin: typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '' }, res);
 

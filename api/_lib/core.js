@@ -147,6 +147,17 @@ async function getMembership(userId) {
   return rows?.[0] || null;
 }
 
+// The profile someone set under Settings → Your account. People can write these fields themselves,
+// so they're cleaned here before anyone else sees them.
+function personProfile(user) {
+  const meta = user?.user_metadata || {};
+  const avatar = String(meta.avatar_url || '');
+  return {
+    name: String(meta.display_name || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60),
+    avatar: avatar.startsWith(`${process.env.SUPABASE_URL}/storage/v1/object/public/social-media/`) ? avatar : ''
+  };
+}
+
 async function getWorkspaceState(workspaceId) {
   const query = new URLSearchParams({ select: 'state', workspace_id: `eq.${workspaceId}`, limit: '1' });
   const rows = await databaseRequest(`workspace_state?${query}`);
@@ -757,7 +768,7 @@ module.exports = {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getBearerToken, getUser, databaseRequest, ayrshareRequest,
   encryptSecret: encryptProfileKey, decryptSecret: decryptProfileKey, assertPublicUrl,
-  getMembership, getWorkspaceState, validateClientId, assertClientInWorkspace,
+  getMembership, personProfile, getWorkspaceState, validateClientId, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms,
   validatePostOptions, buildPostBody, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, checkLink

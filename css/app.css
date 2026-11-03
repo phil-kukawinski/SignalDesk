@@ -1555,3 +1555,8 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .board-copy{display:grid;gap:10px}.board-copy .option-hint,.board-copy .auth-message{margin:0}
 .board-copy-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.board-copy-fields .field{width:100%}
+.avatar img,.contact-avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}.avatar,.contact-avatar{overflow:hidden}
+.profile-form{display:grid;gap:6px;max-width:440px;margin:0 19px 18px}.profile-form .option-hint{margin:0}
+.profile-photo{display:flex;align-items:center;gap:14px;margin-bottom:8px}.profile-preview{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:20px;flex:none}
+.profile-photo-actions{display:grid;gap:4px}.profile-photo-actions>div{display:flex;align-items:center;gap:10px}.profile-photo-actions small{font-size:12px;color:var(--text-muted)}
+.profile-save{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px}.profile-save .auth-message{margin:0}

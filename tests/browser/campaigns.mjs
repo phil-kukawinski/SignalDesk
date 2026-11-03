@@ -125,6 +125,10 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (JSON.stringify(shared.calls) !== JSON.stringify([['upsert', ['edited'], 'workspace_id,id', 'w1', 'owner@studio.test'], ['delete', ['gone']]]) || shared.secondSave !== 0) fail('a save should write only the drafts that changed');
   if (shared.kept[0] !== 'same' || shared.legacy[0] !== 'old-list' || shared.usesTable) fail('drafts should survive a failed refresh and fall back before the database update');
 
+  // A refresh that was already under way when a draft was saved can't wipe that draft off the screen.
+  const raced = await json(`(async()=>{let finish;__from(name=>name==='saved_drafts'&&({select:()=>({eq:()=>({order:()=>new Promise(done=>{finish=()=>done({data:[{draft:{id:'stale',state:{}}}]});})})}),upsert:async()=>({})}));draftsInTable=true;storedDrafts.clear();savedDrafts=[];const reading=loadSavedDrafts({fresh:true});await new Promise(done=>setTimeout(done,20));savedDrafts.unshift({id:'just-saved',state:{}});await __realStore();finish();await reading;const list=savedDrafts.map(item=>item.id);__from(__offline);return list;})()`);
+  if (raced.join() !== 'just-saved') fail('a stale refresh should not replace a newer save: ' + raced);
+
   // Duplicate a campaign: new drafts at new dates, spacing kept, nothing scheduled, missing files dropped.
   await evaluate(`(()=>{const later=window.__day;__post.status='scheduled';__post.media=['https://media.test/ok.jpg','https://media.test/gone.jpg'];savedDrafts=[{id:'d9',title:'Draft to copy',client:'PK Works',platforms:['facebook'],manual:[],date:later(3),time:'09:30',state:{uploadedMedia:[],draft:'Draft to copy',draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()}];window.__realFetch=window.fetch;window.fetch=async(url,options)=>options?.method==='HEAD'?new Response(null,{status:/gone/.test(url)?404:200}):__realFetch(url,options);__calls.length=0;})()`);
   await evaluate(`showView('campaigns')`); await wait(300);
