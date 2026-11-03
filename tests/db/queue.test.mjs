@@ -422,6 +422,26 @@ await db.exec(`update social_connections set token_expires_at = now() - interval
 assert.deepEqual(await maintainConnections({ encryptionKey: key }), { refreshed: 0, warned: 0, expired: 1 });
 assert.equal((await q(`select status from social_connections where platform='linkedin'`))[0].status, 'needs_reauth');
 
+// --- Posts at risk: a post due soon on a signed-out account warns once, with a link to fix it ---
+const { warnPostsAtRisk } = require(`${ROOT}/api/_lib/publishing.js`);
+const riskPost = 'dddddddd-0000-4000-8000-000000000099';
+const riskConn = (await q(`select id from social_connections where platform='linkedin'`))[0].id;
+await db.exec(`insert into scheduled_posts (id, workspace_id, client_id, scheduled_for, content) values ('${riskPost}','${WS}','pk-works', now() + interval '1 day', '{"text":"x"}');
+insert into publish_jobs (post_id, workspace_id, client_id, platform, provider, connection_id, run_at) values ('${riskPost}','${WS}','pk-works','linkedin','direct','${riskConn}', now() + interval '1 day');`);
+assert.deepEqual(await warnPostsAtRisk(), { warned: 1 });
+const riskNote = (await q(`select title, body, view, data from notifications where type='posts_at_risk'`))[0];
+assert.ok(/^Reconnect LinkedIn for PK Works before /.test(riskNote.title), riskNote.title);
+assert.ok(/needs to be reconnected/.test(riskNote.body), riskNote.body);
+assert.deepEqual(riskNote.data.clientId, 'pk-works');
+assert.deepEqual(await warnPostsAtRisk(), { warned: 0 }, 'warns once a day');
+// A healthy sign-in that renews itself is fine; one that runs out before the post isn't.
+await db.exec(`delete from notifications where type='posts_at_risk'; update social_connections set status='active', token_expires_at = now() + interval '2 hours', refresh_token_ciphertext = null where id='${riskConn}'`);
+assert.deepEqual(await warnPostsAtRisk(), { warned: 1 });
+assert.ok(/runs out first/.test((await q(`select body from notifications where type='posts_at_risk'`))[0].body));
+await db.exec(`delete from notifications where type='posts_at_risk'; update social_connections set token_expires_at = now() + interval '30 days' where id='${riskConn}'`);
+assert.deepEqual(await warnPostsAtRisk(), { warned: 0 });
+await db.exec(`delete from scheduled_posts where id='${riskPost}'; update social_connections set status='needs_reauth', token_expires_at = now() - interval '1 minute' where id='${riskConn}'`);
+
 // --- Disconnect ---
 r = await call({ action: 'disconnect', clientId: 'pk-works', platform: 'pinterest' });
 assert.equal(r.status, 200);

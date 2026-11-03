@@ -6,7 +6,7 @@ const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATE
 const DIGEST_HOUR = 8;
 // Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
 // category is unticked) and left out of digests so they don't arrive twice.
-const URGENT_TYPES = new Set(['publish_failed', 'publish_unknown', 'connection_expired', 'connection_expiring', 'connection_signed_out', 'manual_due', 'worker_stalled', 'comment_failed']);
+const URGENT_TYPES = new Set(['publish_failed', 'publish_unknown', 'connection_expired', 'connection_expiring', 'connection_signed_out', 'posts_at_risk', 'manual_due', 'worker_stalled', 'comment_failed']);
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing', planning: 'Planning' };
@@ -69,7 +69,7 @@ async function sendEmail(to, subject, content) {
 
 // Creates in-app notifications and sends immediate emails. Never throws: a failed
 // notification must not undo the action that triggered it.
-async function notify({ workspaceId, audience = 'admins', userIds = [], excludeUserId, type, category, title, body = '', view = null, data = {} }) {
+async function notify({ workspaceId, audience = 'admins', userIds = [], excludeUserId, type, category, title, body = '', view = null, data = {}, cta = null }) {
   const urgent = URGENT_TYPES.has(type);
   if (urgent) data = { ...data, urgent: true };
   try {
@@ -88,7 +88,7 @@ async function notify({ workspaceId, audience = 'admins', userIds = [], excludeU
       for (const member of recipients) {
         const prefs = withDefaults(preferences.get(member.user_id));
         if (!(prefs.email_frequency === 'immediate' || (urgent && prefs.email_frequency !== 'off')) || !prefs.email_categories.includes(category) || !member.email) continue;
-        await sendEmail(member.email, title, renderEmail({ heading: title, intro: body || 'There is new activity in your SignalDesk workspace.', sections: [] }))
+        await sendEmail(member.email, title, renderEmail({ heading: title, intro: body || 'There is new activity in your SignalDesk workspace.', sections: [], ...(cta ? { ctaLabel: cta.label, ctaUrl: cta.url } : {}) }))
           .catch((error) => console.error('Immediate email failed:', error.message));
       }
     }

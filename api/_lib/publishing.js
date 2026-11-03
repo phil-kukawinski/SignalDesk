@@ -571,6 +571,60 @@ async function maintainConnections({ encryptionKey, limit = 20 } = {}) {
   return { refreshed, warned, expired };
 }
 
+// Why a post due at `runAt` would fail on this connection ('' when it's fine).
+function connectionRisk(connection, runAt) {
+  if (!connection) return 'was disconnected';
+  if (connection.status === 'needs_reauth') return 'needs to be reconnected';
+  const at = Date.parse(runAt), expires = Date.parse(connection.token_expires_at);
+  if (!Number.isFinite(expires) || expires > at) return '';
+  const renews = connection.refresh_token_ciphertext && adapterFor(connection.platform).refresh && (!connection.refresh_expires_at || Date.parse(connection.refresh_expires_at) > at);
+  return renews ? '' : 'has a sign-in that runs out first';
+}
+
+// Warns admins when posts due in the next two days would fail because of their account, at most
+// once a day per account, so there's time to reconnect it before anything goes wrong.
+async function warnPostsAtRisk({ hours = 48 } = {}) {
+  const soon = new Date(Date.now() + hours * 3600000).toISOString();
+  const jobs = await databaseRequest(`publish_jobs?status=in.(held,queued)&provider=eq.direct&run_at=lt.${soon}&select=workspace_id,client_id,platform,connection_id,run_at&order=run_at.asc&limit=500`) || [];
+  if (!jobs.length) return { warned: 0 };
+  const ids = [...new Set(jobs.map((job) => job.connection_id).filter(Boolean))];
+  const connections = ids.length ? await databaseRequest(`social_connections?id=in.(${ids.join(',')})&select=id,platform,status,token_expires_at,refresh_expires_at,refresh_token_ciphertext`) || [] : [];
+  const byId = new Map(connections.map((item) => [item.id, item]));
+  const groups = new Map();
+  for (const job of jobs) {
+    const reason = connectionRisk(byId.get(job.connection_id), job.run_at);
+    if (!reason) continue;
+    const key = `${job.workspace_id}|${job.client_id}|${job.platform}`;
+    const group = groups.get(key) || { job, reason, count: 0 };
+    group.count += 1;
+    groups.set(key, group);
+  }
+  if (!groups.size) return { warned: 0 };
+  const since = new Date(Date.now() - 86400000).toISOString();
+  const recent = await databaseRequest(`notifications?type=eq.posts_at_risk&created_at=gte.${since}&select=workspace_id,data`) || [];
+  const told = new Set(recent.map((row) => `${row.workspace_id}|${row.data?.clientId}|${row.data?.platform}`));
+  const { notify, appUrl } = require('./notify');
+  const { WORKSPACE_TIMEZONES } = require('./core');
+  let warned = 0;
+  for (const [key, { job, reason, count }] of groups) {
+    if (told.has(key)) continue;
+    const state = await getWorkspaceState(job.workspace_id);
+    const client = (state.clients || []).find((item) => item.id === job.client_id);
+    const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
+    const when = new Date(job.run_at).toLocaleString('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const name = `${label(job.platform)}${client ? ` for ${client.name}` : ''}`;
+    await notify({
+      workspaceId: job.workspace_id, audience: 'admins', type: 'posts_at_risk', category: 'publishing',
+      title: `Reconnect ${name} before ${when}`,
+      body: `${count === 1 ? 'A post goes' : `${count} posts go`} out ${count === 1 ? 'on' : 'starting'} ${when}, and this account ${reason}. ${count === 1 ? 'It' : 'They'} will fail unless it's reconnected.`,
+      view: 'social-accounts', data: { clientId: job.client_id, platform: job.platform },
+      cta: { label: 'Reconnect the account', url: `${appUrl()}/#view=social-accounts&client=${encodeURIComponent(job.client_id)}` }
+    });
+    warned += 1;
+  }
+  return { warned };
+}
+
 // --- Comments on published jobs ---
 
 async function postJobComment(job, text, encryptionKey) {
@@ -1243,6 +1297,6 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 
 module.exports = {
   ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
-  processPublishQueue, runJob, maintainConnections, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
+  processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };
