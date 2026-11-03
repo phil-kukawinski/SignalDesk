@@ -1,5 +1,4 @@
 @charset "UTF-8";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 /* SignalDesk styles: one stylesheet.
    1. Design tokens (light, then dark)  2. Base and layout  3. Components (later sections). Every
    color comes from a token, so dark mode only redefines the tokens. Network previews keep each

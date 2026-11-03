@@ -53,14 +53,14 @@
   ],
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/:path(.*)",
       "has": [
         {
           "type": "host",
           "value": "www.socialsignaldesk.com"
         }
       ],
-      "destination": "https://socialsignaldesk.com/:path*",
+      "destination": "https://socialsignaldesk.com/:path",
       "permanent": true
     },
     {
