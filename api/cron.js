@@ -7,6 +7,7 @@ const { processEmailDigests, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia } = require('./_lib/media');
 const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
+const { maybeRunWeeklyCheck } = require('./_lib/weekly-check');
 
 const DAY_MS = 86400000;
 
@@ -20,7 +21,7 @@ function authorized(req) {
 // Top Posts reports, email digests, planning reminders and notes, and a daily media cleanup. Call it on a schedule with
 // `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this header automatically).
 // `?only=publish` runs just the publishing queue, for an every-minute schedule.
-// `?only=health` only checks that publishing is running; Vercel Cron calls it daily as a backstop.
+// `?only=health` only checks that publishing is running (and the Monday check, if due); Vercel Cron calls it daily as a backstop.
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   if (!authorized(req)) return send(res, 401, { error: 'Unauthorized.' });
@@ -29,7 +30,10 @@ module.exports = async function handler(req, res) {
   const only = new URL(req.url || '/', 'http://localhost').searchParams.get('only');
   const started = Date.now();
   try {
-    if (only === 'health') return send(res, 200, { health: await checkWorkerHealth() });
+    if (only === 'health') {
+      const weeklyCheck = await maybeRunWeeklyCheck().catch((error) => ({ error: error.message }));
+      return send(res, 200, { health: await checkWorkerHealth(), weeklyCheck });
+    }
     const publishing = await processPublishQueue({ encryptionKey, limit: 15, deadline: started + 200000 });
     const comments = await processDueComments({ encryptionKey, limit: 50 });
     await recordWorkerRun('publish', { ...publishing, comments: comments.posted });
@@ -55,11 +59,12 @@ module.exports = async function handler(req, res) {
       await recordWorkerRun('media-cleanup', media);
     }
     const health = await checkWorkerHealth();
+    const weeklyCheck = await maybeRunWeeklyCheck().catch((error) => ({ error: error.message }));
     // Platform owners hear about server errors and widespread failures, at most every 6 hours.
     const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
     if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, media, health });
+    return send(res, 200, { weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);

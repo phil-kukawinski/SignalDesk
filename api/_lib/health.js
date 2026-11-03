@@ -9,7 +9,9 @@ const { pushConfigured } = require('./push');
 
 const MINUTE = 60000;
 // Tables added over time. If one is missing, the schema needs to be run again.
-const TABLES = ['scheduled_posts', 'publish_jobs', 'social_connections', 'oauth_sessions', 'review_links', 'post_notes', 'post_history', 'push_subscriptions', 'bio_pages', 'data_deletion_requests', 'short_links', 'link_click_days'];
+const TABLES = ['scheduled_posts', 'publish_jobs', 'social_connections', 'oauth_sessions', 'review_links', 'post_notes', 'post_history', 'push_subscriptions', 'bio_pages', 'data_deletion_requests', 'short_links', 'link_click_days', 'network_posts', 'account_stats', 'post_metric_days', 'planning_notes', 'comment_states', 'invite_requests', 'beta_invites', 'app_errors', 'worker_runs'];
+// Columns added to older tables, which an out-of-date database lacks even though the table is there.
+const COLUMNS = [['notification_preferences', 'planning_leads'], ['notification_preferences', 'planning_scope'], ['user_drafts', 'saved'], ['scheduled_posts', 'campaign'], ['review_links', 'token_ciphertext']];
 
 const check = (group, key, label, status, detail, fix = '') => ({ group, key, label, status, detail, fix });
 
@@ -25,6 +27,12 @@ function ago(iso) {
 async function missingTables() {
   const results = await Promise.all(TABLES.map((table) => databaseRequest(`${table}?select=*&limit=0`).then(() => null).catch(() => table)));
   return results.filter(Boolean);
+}
+
+// Everything the schema should have created that isn't there.
+async function missingFromDatabase() {
+  const [tables, columns] = await Promise.all([missingTables(), Promise.all(COLUMNS.map(([table, column]) => databaseRequest(`${table}?select=${column}&limit=0`).then(() => null).catch(() => `${table}.${column}`)))]);
+  return [...tables, ...columns.filter(Boolean)];
 }
 
 function siteChecks(origin) {
@@ -157,10 +165,10 @@ async function recentProblems(workspaceId, clientNames) {
 
 async function systemStatus({ workspaceId, origin, clients = [] }) {
   const clientNames = Object.fromEntries(clients.map((client) => [client.id, client.name]));
-  const tables = await missingTables();
+  const tables = await missingFromDatabase();
   const config = getConfig();
   const checks = [
-    check('core', 'database', 'Database', tables.length ? 'error' : 'ok', tables.length ? `Missing tables: ${tables.join(', ')}.` : 'Connected, with every table in place.', tables.length ? 'Copy the latest supabase/schema.sql from the project into a new query in the Supabase SQL Editor and run it. Re-running an older saved query tab runs the old version. It’s safe to re-run.' : ''),
+    check('core', 'database', 'Database', tables.length ? 'error' : 'ok', tables.length ? `Missing: ${tables.join(', ')}.` : 'Connected, with every table in place.', tables.length ? 'Copy the latest supabase/schema.sql from the project into a new query in the Supabase SQL Editor and run it. Re-running an older saved query tab runs the old version. It’s safe to re-run.' : ''),
     check('core', 'secrets', 'Server keys', config.missing.length ? 'error' : 'ok', config.missing.length ? `Missing: ${config.missing.join(', ')}.` : 'Supabase keys and the encryption key are set.', config.missing.length ? 'Add them in Vercel, then redeploy.' : ''),
     await projectCheck(origin),
     ...siteChecks(origin),
@@ -174,4 +182,4 @@ async function systemStatus({ workspaceId, origin, clients = [] }) {
   return { checkedAt: new Date().toISOString(), counts, checks, problems };
 }
 
-module.exports = { systemStatus };
+module.exports = { systemStatus, missingFromDatabase };

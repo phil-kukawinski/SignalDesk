@@ -1384,6 +1384,46 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   assert.equal(alert.sent, 1, JSON.stringify(alert)); assert.equal(mails[0].to[0], 'owner@x.com'); assert.match(mails[0].html, /Boom/);
   assert.equal((await alertPlatformAdmins({ lastAlert: new Date().toISOString() })).reason, 'recently alerted');
   assert.equal((await q(`select count(*)::int as n from app_errors where alerted_at is null and source='api/test'`))[0].n, 0, 'alerted errors are marked');
+  // --- Weekly check: reports problems, says when all is well, runs once on Mondays ---
+  {
+    const { runWeeklyCheck, maybeRunWeeklyCheck } = require(`${ROOT}/api/_lib/weekly-check.js`);
+    const { recordWorkerRun } = require(`${ROOT}/api/_lib/publishing.js`);
+    await db.exec(`delete from app_errors; update social_connections set status='active'; delete from publish_jobs where status in ('failed','unknown')`);
+    await recordWorkerRun('publish'); await recordWorkerRun('worker');
+    let siteStatus = 200, domainStatus = 'verified';
+    const checkMails = [];
+    networkHandler = (c) => {
+      if (c.url === 'https://api.resend.com/emails') { checkMails.push(body(c)); return reply({ id: 'w' }); }
+      if (c.url === 'https://api.resend.com/domains') return reply({ data: [{ name: 'signaldesk.test', status: domainStatus }] });
+      if (c.url === 'https://sb.test/auth/v1/health') return reply({});
+      if (c.url === 'https://signaldesk.test/') return new Response('<script src="js/app.min.js?v=abc123"></script>', { status: siteStatus });
+      if (c.url === 'https://signaldesk.test/js/app.min.js?v=abc123') return new Response('x');
+      throw new Error('unexpected ' + c.url);
+    };
+    let check = await runWeeklyCheck();
+    assert.equal(check.problems, 0, JSON.stringify(check.results.filter((item) => !item.ok)));
+    assert.equal(checkMails.length, 1);
+    assert.equal(checkMails[0].subject, 'SignalDesk weekly check: all good');
+    // A blocked site, a stale domain, and an out-of-date database are each reported, in one email.
+    siteStatus = 403; domainStatus = 'failed';
+    await db.exec(`alter table notification_preferences rename column planning_leads to planning_leads_old`);
+    check = await runWeeklyCheck();
+    await db.exec(`alter table notification_preferences rename column planning_leads_old to planning_leads`);
+    assert.equal(check.problems, 3, JSON.stringify(check.results));
+    assert.ok(/3 things need a look/.test(checkMails[1].subject));
+    assert.ok(/bot checkpoint/.test(checkMails[1].text) && /notification_preferences\.planning_leads/.test(checkMails[1].text) && /failed at the email provider/.test(checkMails[1].text));
+    // Only on Mondays, and only once.
+    const sent = checkMails.length, monday = Date.UTC(2030, 0, 7, 14), tuesday = Date.UTC(2030, 0, 8, 14);
+    assert.deepEqual(await maybeRunWeeklyCheck({ now: tuesday }), { skipped: true });
+    assert.deepEqual(await maybeRunWeeklyCheck({ now: Date.UTC(2030, 0, 7, 9) }), { skipped: true }, 'too early in the day');
+    siteStatus = 200; domainStatus = 'verified';
+    await db.exec(`update worker_runs set last_run_at = '2030-01-01T00:00:00Z' where name = 'weekly-check'`);
+    assert.equal((await maybeRunWeeklyCheck({ now: monday })).skipped, undefined);
+    assert.equal(checkMails.length, sent + 1);
+    await db.exec(`update worker_runs set last_run_at = '2030-01-07T14:00:00Z' where name = 'weekly-check'`);
+    assert.deepEqual(await maybeRunWeeklyCheck({ now: monday + 600000 }), { skipped: true }, 'once a week');
+    await db.exec(`delete from worker_runs where name = 'weekly-check'`);
+  }
   delete process.env.RESEND_API_KEY;
   // Daily post limit per workspace
   await db.exec(`insert into scheduled_posts (workspace_id, client_id, title, status, scheduled_for, content, created_by) select '11111111-1111-1111-1111-111111111111', 'pk-works', 'Bulk ' || g, 'scheduled', now() + interval '20 days', '{"text":"x"}', '${ADMIN}' from generate_series(1, 150) g`);
