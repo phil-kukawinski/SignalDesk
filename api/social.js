@@ -10,7 +10,7 @@ const {
 } = require('./_lib/core');
 const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
 const {
-  PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, listPosts, getPost, approvePost, rejectPost,
+  PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
   nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
   allRows, openComments, setCommentState
@@ -898,6 +898,8 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
     original = await getPost(membership.workspace_id, body.postId);
     assertEditable(original, { userId: user.id, admin: membership.role === 'admin' });
   }
+  // Post now has no time to clash over, and the queue already picks a free slot.
+  if (body.scheduleDate && body.queue !== true) await assertTimeFree(membership.workspace_id, clientId, { platforms: [...input.platforms, ...input.manual], times: occurrenceTimes(input.scheduledFor, input.options.autoRepost, timeZone), original });
   const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey, timeZone, actorName });
   if (original) await replacePost(membership.workspace_id, original, post.id, actorName);
   if (held) {

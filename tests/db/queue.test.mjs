@@ -26,7 +26,7 @@ const ADMIN = 'aaaaaaaa-0000-0000-0000-000000000001', USER = 'bbbbbbbb-0000-0000
 await db.exec(`insert into auth.users values ('${ADMIN}','owner@x.com',now()),('${USER}','member@x.com',now());
 insert into workspaces (id, name, created_by) values ('11111111-1111-1111-1111-111111111111','Studio','${ADMIN}');
 insert into workspace_members values ('11111111-1111-1111-1111-111111111111','${ADMIN}','owner@x.com','admin',now()),('11111111-1111-1111-1111-111111111111','${USER}','member@x.com','user',now());
-insert into workspace_state (workspace_id, state) values ('11111111-1111-1111-1111-111111111111','{"clients":[{"id":"pk-works","name":"PK Works"}],"settings":{"timezone":"Eastern Time (US & Canada)"}}');`);
+insert into workspace_state (workspace_id, state) values ('11111111-1111-1111-1111-111111111111','{"clients":[{"id":"pk-works","name":"PK Works"}],"settings":{"timezone":"Eastern Time (US & Canada)","preventDoubleBooking":false}}');`);
 const WS = '11111111-1111-1111-1111-111111111111';
 
 const key = crypto.randomBytes(32);
@@ -1443,6 +1443,53 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     await db.exec(`delete from worker_runs where name = 'weekly-check'`);
   }
   delete process.env.RESEND_API_KEY;
+  // Prevent double-booking: one post per client, network, and minute, on every route onto the schedule.
+  {
+    const setting = (on) => db.exec(`update workspace_state set state = jsonb_set(state, '{settings,preventDoubleBooking}', '${on}')`);
+    const slot = Math.floor((Date.now() + 40 * 86400000) / 60000) * 60000, at = (offset) => new Date(slot + offset * 60000).toISOString();
+    networkHandler = () => reply({});
+    const book = (text, platforms, offset, role) => call({ action: 'publish', clientId: 'pk-works', text, platforms, scheduleDate: at(offset) }, role);
+    await setting(true);
+    const first = await book('First at ten', ['facebook'], 0);
+    assert.equal(first.status, 200, JSON.stringify(first.payload));
+    let clash = await book('Second at ten', ['facebook', 'linkedin'], 0);
+    assert.equal(clash.status, 409);
+    assert.match(clash.payload.error, /^Facebook already has “First at ten” scheduled for .*Choose another time\.$/);
+    assert.equal((await book('Other network', ['linkedin'], 0)).status, 200, 'another network at the same time is fine');
+    assert.equal((await book('Next minute', ['facebook'], 1)).status, 200, 'the next minute is free');
+    // Another client's account is separate.
+    await db.exec(`insert into scheduled_posts (id, workspace_id, client_id, title, status, scheduled_for, content) values ('99999999-0000-4000-8000-000000000001','${WS}','someone-else','Theirs','scheduled','${at(5)}','{}')`);
+    await db.exec(`insert into publish_jobs (post_id, workspace_id, client_id, platform, provider, run_at, status) values ('99999999-0000-4000-8000-000000000001','${WS}','someone-else','facebook','direct','${at(5)}','queued')`);
+    assert.equal((await book('Mine', ['facebook'], 5)).status, 200, 'another client doesn’t block this one');
+    // A post waiting for approval holds its time.
+    assert.equal((await book('Waiting', ['linkedin'], 10, 'user')).status, 200);
+    assert.equal((await book('Clashes with waiting', ['linkedin'], 10)).status, 409);
+    // Moving onto a taken time is refused and leaves the post where it was; moving elsewhere works.
+    const mover = await book('Mover', ['facebook'], 20);
+    clash = await call({ action: 'reschedule-post', postId: mover.payload.post.id, scheduleDate: at(0) });
+    assert.equal(clash.status, 409);
+    assert.equal(Date.parse((await q(`select scheduled_for from scheduled_posts where id='${mover.payload.post.id}'`))[0].scheduled_for), slot + 20 * 60000);
+    assert.equal((await call({ action: 'reschedule-post', postId: mover.payload.post.id, scheduleDate: at(21) })).status, 200);
+    // Copying onto a taken time skips that post and says why.
+    const copied = await call({ action: 'copy-posts', postIds: [first.payload.post.id], offsetDays: 7 });
+    assert.equal(copied.payload.created.length, 1);
+    const copiedAgain = await call({ action: 'copy-posts', postIds: [first.payload.post.id], offsetDays: 7 });
+    assert.equal(copiedAgain.payload.created.length, 0);
+    assert.match(copiedAgain.payload.skipped[0].reason, /already has/);
+    // Editing a post that's already in a clash, without moving it, still works once the setting is on.
+    await setting(false);
+    const doubled = await book('Booked while off', ['facebook'], 0);
+    assert.equal(doubled.status, 200, 'with the setting off, the same time is allowed');
+    await setting(true);
+    const edited = await call({ action: 'update-post', postId: doubled.payload.post.id, clientId: 'pk-works', text: 'Reworded', platforms: ['facebook'], scheduleDate: at(0) });
+    assert.equal(edited.status, 200, JSON.stringify(edited.payload));
+    const moved = await call({ action: 'update-post', postId: edited.payload.post.id, clientId: 'pk-works', text: 'Reworded', platforms: ['facebook'], scheduleDate: at(1) });
+    assert.equal(moved.status, 409, 'editing a post onto a taken time is refused');
+    // Posting right now has no time to clash over.
+    assert.equal((await call({ action: 'publish', clientId: 'pk-works', text: 'Right now', platforms: ['linkedin'] })).status, 200);
+    await setting(false);
+    await db.exec(`delete from scheduled_posts where scheduled_for >= '${at(-1)}' or status = 'publishing' or title = 'Right now'`);
+  }
   // Daily post limit per workspace
   await db.exec(`insert into scheduled_posts (workspace_id, client_id, title, status, scheduled_for, content, created_by) select '11111111-1111-1111-1111-111111111111', 'pk-works', 'Bulk ' || g, 'scheduled', now() + interval '20 days', '{"text":"x"}', '${ADMIN}' from generate_series(1, 150) g`);
   networkHandler = () => reply({});

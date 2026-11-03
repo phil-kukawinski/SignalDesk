@@ -741,6 +741,33 @@ async function cancelPost(workspaceId, postId, { userId, admin }) {
   return { canceled: true, keptPublished: published };
 }
 
+// The Prevent double-booking setting (on unless turned off): one post per client, network, and minute.
+// Posts waiting for approval hold their time too, so approving one can't create a clash.
+async function assertTimeFree(workspaceId, clientId, { platforms, times, original = null }) {
+  const { WORKSPACE_TIMEZONES } = require('./core');
+  const state = await getWorkspaceState(workspaceId);
+  if (state.settings?.preventDoubleBooking === false || !platforms.length || !times.length) return;
+  const minute = (at) => Math.floor(at / 60000), wanted = new Set(times.map(minute));
+  if (original) {
+    // Editing the words of a post that stays where it is never counts as a new clash.
+    const had = new Set(original.publish_jobs.filter((job) => job.status !== 'canceled').map((job) => job.platform));
+    if (wanted.size === 1 && wanted.has(minute(Date.parse(original.scheduled_for))) && platforms.every((platform) => had.has(platform))) return;
+  }
+  const ignore = new Set(original ? await familyIds(workspaceId, original) : []);
+  const range = new URLSearchParams({ select: 'id,title,scheduled_for,publish_jobs(platform,status)', workspace_id: `eq.${workspaceId}`, client_id: `eq.${clientId}`, status: 'in.(pending_approval,scheduled,publishing)', order: 'scheduled_for.asc', limit: '500' });
+  range.append('scheduled_for', `gte.${new Date(minute(Math.min(...times)) * 60000).toISOString()}`);
+  range.append('scheduled_for', `lt.${new Date((minute(Math.max(...times)) + 1) * 60000).toISOString()}`);
+  const clashes = (await databaseRequest(`scheduled_posts?${range}`) || []).filter((post) => !ignore.has(post.id) && wanted.has(minute(Date.parse(post.scheduled_for))));
+  for (const post of clashes) {
+    const taken = platforms.filter((platform) => post.publish_jobs.some((job) => job.platform === platform && ['held', 'queued', 'publishing', 'manual_due'].includes(job.status)));
+    if (!taken.length) continue;
+    const names = taken.map((platform) => PLATFORM_LABELS[platform] || MANUAL_PLATFORMS[platform] || platform);
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    const when = new Date(post.scheduled_for).toLocaleString('en-US', { timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    throw httpError(409, `${list} already ${names.length > 1 ? 'have' : 'has'} “${post.title || 'a post'}” scheduled for ${when}. Choose another time.`);
+  }
+}
+
 async function reschedulePost(workspaceId, postId, when) {
   const post = await getPost(workspaceId, postId);
   if (!['pending_approval', 'scheduled'].includes(post.status) || post.publish_jobs.some((job) => ['publishing', 'published'].includes(job.status))) {
@@ -750,6 +777,10 @@ async function reschedulePost(workspaceId, postId, when) {
   const delta = when - Date.parse(post.scheduled_for);
   const ids = await familyIds(workspaceId, post);
   const rows = await databaseRequest(`scheduled_posts?id=in.(${ids.join(',')})&select=id,scheduled_for,status`) || [];
+  await assertTimeFree(workspaceId, post.client_id, {
+    platforms: [...new Set(post.publish_jobs.filter((job) => job.status !== 'canceled').map((job) => job.platform))],
+    times: rows.filter((row) => ['pending_approval', 'scheduled'].includes(row.status)).map((row) => Date.parse(row.scheduled_for) + delta), original: post
+  });
   for (const row of rows) {
     if (!['pending_approval', 'scheduled'].includes(row.status)) continue;
     const at = new Date(Date.parse(row.scheduled_for) + delta).toISOString();
@@ -1004,6 +1035,7 @@ async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 
     const { reposts, repostOf, ...options } = original.options || {};
     const content = original.content || {};
     try {
+      await assertTimeFree(workspaceId, original.client_id, { platforms: [...platforms, ...manual], times: [at] });
       const post = await createScheduledPost({
         workspaceId, clientId: original.client_id, userId, title: original.title, platforms, manual, text: content.text || '', mediaUrls: content.media || [],
         platformContent: content.platformContent || {}, mediaAlt: content.mediaAlt || {}, options, scheduledFor: at, held: original.status === 'pending_approval',
@@ -1332,7 +1364,7 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 }
 
 module.exports = {
-  ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
+  assertTimeFree, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };
