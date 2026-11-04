@@ -1,7 +1,9 @@
 // Shared helpers and navigation.
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
-const toast = (message) => { const el=$('#toast'); el.textContent=message; el.classList.add('show'); clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>el.classList.remove('show'),2600); };
+// An open dialog covers everything outside it, so the toast moves inside the dialog to stay visible.
+const toast = (message) => { const el=$('#toast'); (Array.from(document.querySelectorAll('dialog[open]')).pop()||document.body).append(el); el.textContent=message; el.classList.add('show'); clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>el.classList.remove('show'),2600); };
+document.addEventListener('close',event=>{const el=$('#toast');if(el&&!event.target.open&&event.target.contains?.(el))document.body.append(el);},true);
 const clients = [];
 let savedPosts = [], serverPosts = [], templates = [], snippets = [], libraryAssets = [];
 const allPosts = () => [...savedPosts, ...serverCalendarPosts()];

@@ -137,4 +137,10 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // The logo goes back to the Command Center.
   const logo = await evaluate(`(()=>{showView('composer');const away=document.querySelector('#view-composer').classList.contains('active');document.querySelector('.sidebar .brand').click();return away&&document.querySelector('#view-overview').classList.contains('active');})()`);
   if (logo !== true) fail('The logo should open the Command Center');
+
+  // Messages stay visible over an open dialog, and return to the page when it closes.
+  await evaluate(`(()=>{const dialog=document.querySelector('#post-dialog');dialog.showModal();toast('Over a dialog');})()`);
+  if (!await evaluate(`Boolean(document.querySelector('#toast').closest('dialog[open]'))`)) log.push('[exception] a message should appear inside an open dialog');
+  await evaluate(`document.querySelector('#post-dialog').close()`); await wait(100);
+  if (await evaluate(`Boolean(document.querySelector('#toast').closest('dialog'))`)) log.push('[exception] a message should leave the dialog when it closes');
 };
