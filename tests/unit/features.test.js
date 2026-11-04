@@ -46,7 +46,8 @@ global.fetch = async (input, opts = {}) => {
   if (url.includes('/rest/v1/weekly_reports?') && method === 'GET') return ok([]);
   if (url.includes('/rest/v1/network_posts?') && method === 'GET' && url.includes('job_id=is.null')) return ok([]);
   if (url.includes('/rest/v1/network_posts?') && method === 'GET') return ok(url.includes('offset=0') || !url.includes('offset=') ? [{ client_id: 'pk-works', platform: 'instagram', text: 'Fall kits', url: 'https://instagram.com/p/9', published_at: '2026-10-20T14:00:00Z', metrics: { views: 900, engagements: 70 } }] : []);
-  if (url.includes('/rest/v1/trend_reports?') && method === 'GET') return ok([]);
+  if (url.includes('/rest/v1/trend_reports?') && method === 'GET') return ok(global.__trendRows || []);
+  if (url.includes('/rest/v1/worker_runs?') && url.includes('trend-tries') && method === 'GET' && global.__trendTries) return ok([{ last_result: { count: global.__trendTries } }]);
   if (url.includes('/rest/v1/trend_reports') && method === 'POST') return ok([{ id: 't1', ...body, created_at: new Date().toISOString() }], 201);
   if (url.includes('/rest/v1/')) return ok(null, 204);
   if (url === 'https://api.ayrshare.com/api/post' && method === 'POST') return ok({ status: 'awaiting approval', id: 'post-1' });
@@ -93,6 +94,27 @@ const future = new Date(Date.now() + 86400000).toISOString();
   const saved = calls.find((c) => c.url.endsWith('/rest/v1/trend_reports') && c.method === 'POST').body;
   assert.deepEqual(saved.platforms, ['tiktok', 'instagram']); assert.deepEqual(saved.data.hashtags[0].sourceUrls, ['https://ads.tiktok.com/trend']); assert.equal(saved.data.topPosts[0].url, '');
   r = await call({ action: 'trends-refresh', focus: 'custom', customFocus: '', platforms: ['tiktok'] }); assert.equal(r.status, 400);
+  // One scan a week: the same focus shows that report, anything else waits, and neither calls the AI.
+  const scanned = new Date(Date.now() - 2 * 86400000).toISOString();
+  const nextOpens = new Date(Date.parse(scanned) + 7 * 86400000).toISOString();
+  global.__trendRows = [{ id: 't1', focus: 'all', platforms: ['instagram', 'tiktok'], data: { summary: 'x' }, model: 'm', created_at: scanned }];
+  const aiCalls = () => calls.filter((c) => c.url.startsWith('https://api.anthropic.com')).length, aiBefore = aiCalls();
+  r = await call({ action: 'trends-refresh', focus: 'all', platforms: ['tiktok', 'instagram'] });
+  assert.equal(r.status, 200); assert.equal(r.payload.cached, true); assert.equal(r.payload.report.id, 't1'); assert.equal(r.payload.nextScanAt, nextOpens);
+  r = await call({ action: 'trends-refresh', focus: 'all', platforms: ['tiktok'], force: true });
+  assert.equal(r.status, 429, 'a different scan waits, even when forced'); assert.match(r.payload.error, /next one opens/); assert.equal(r.payload.nextScanAt, nextOpens);
+  assert.equal(aiCalls(), aiBefore, 'a used-up week never calls the AI');
+  r = await call({ action: 'trends' }); assert.equal(r.status, 200); assert.equal(r.payload.nextScanAt, nextOpens, 'the page can say when the next scan opens');
+  // A scan that's more than a week old doesn't count (the database query filters it out), and failed tries are capped.
+  global.__trendRows = [];
+  const rowsQuery = calls.filter((c) => c.url.includes('/rest/v1/trend_reports?') && c.url.includes('created_at=gte.')).pop();
+  const since = Date.parse(decodeURIComponent(rowsQuery.url.match(/created_at=gte\.([^&]+)/)[1]));
+  assert.ok(Math.abs(Date.now() - since - 7 * 86400000) < 60000, 'scans are counted over the last 7 days');
+  r = await call({ action: 'trends' }); assert.equal(r.payload.nextScanAt, null, 'a free week has no wait');
+  global.__trendTries = 2;
+  r = await call({ action: 'trends-refresh', focus: 'all', platforms: ['tiktok'] });
+  assert.equal(r.status, 429); assert.match(r.payload.error, /couple of tries/); assert.equal(aiCalls(), aiBefore);
+  global.__trendTries = 0;
   // Digests: daily at/after 8 AM local, once per day; nothing before 8 AM
   prefsRows = [{ user_id: A, email_frequency: 'daily', email_categories: ['approvals'], weekly_day: 1, last_digest_at: null }, { user_id: U, email_frequency: 'weekly', email_categories: ['approvals'], weekly_day: 1, last_digest_at: null }];
   calls.length = 0;

@@ -68,8 +68,17 @@ const DAILY_POST_LIMIT = 150;
 const TEAM_LIMIT = 25;
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
-const TREND_CACHE_HOURS = 24;
-const TREND_DAILY_LIMIT = 3;
+// Trend scans are by far the largest AI request, so each workspace gets one a week.
+const TREND_WEEKLY_LIMIT = Math.max(1, parseInt(process.env.TREND_WEEKLY_LIMIT, 10) || 1);
+const TREND_WINDOW_MS = 7 * 86400000;
+// Failed scans leave no report but still cost money, so tries are capped too.
+const TREND_DAILY_TRIES = 2;
+// Scans in the last 7 days, newest first, and when the next one opens up if they've all been used.
+async function trendScanState(scope, select) {
+  const recent = await databaseRequest(`trend_reports?${scope}&created_at=gte.${new Date(Date.now() - TREND_WINDOW_MS).toISOString()}&select=${select}&order=created_at.desc`) || [];
+  const blocking = recent[TREND_WEEKLY_LIMIT - 1];
+  return { recent, nextScanAt: blocking ? new Date(Date.parse(blocking.created_at) + TREND_WINDOW_MS).toISOString() : null };
+}
 const ROLES = new Set(['admin', 'user']);
 
 function allowedOrigin(req) {
@@ -472,11 +481,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'trends') {
-    const [latest, recent] = await Promise.all([
+    const [latest, recent, scans] = await Promise.all([
       databaseRequest(`trend_reports?${scope}${typeof body.id === 'string' && /^[0-9a-f-]{36}$/i.test(body.id) ? `&id=eq.${body.id}` : ''}&select=id,focus,platforms,data,model,created_at&order=created_at.desc&limit=1`),
-      databaseRequest(`trend_reports?${scope}&select=id,focus,platforms,created_at&order=created_at.desc&limit=8`)
+      databaseRequest(`trend_reports?${scope}&select=id,focus,platforms,created_at&order=created_at.desc&limit=8`),
+      trendScanState(scope, 'created_at')
     ]);
-    return send(res, 200, { report: latest?.[0] || null, recent: recent || [], platforms: TREND_PLATFORMS });
+    return send(res, 200, { report: latest?.[0] || null, recent: recent || [], platforms: TREND_PLATFORMS, nextScanAt: scans.nextScanAt });
   }
 
   if (action === 'trends-refresh') {
@@ -484,10 +494,15 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const focus = await trendFocus(workspaceId, body);
     const focusLabel = `${focus.key}|${[...platforms].sort().join(',')}`;
-    const recent = await databaseRequest(`trend_reports?${scope}&created_at=gte.${new Date(Date.now() - 86400000).toISOString()}&select=id,focus,created_at,platforms,data,model&order=created_at.desc`) || [];
-    const cached = recent.find((report) => `${report.focus}|${[...report.platforms].sort().join(',')}` === focusLabel && Date.parse(report.created_at) > Date.now() - TREND_CACHE_HOURS * 3600000);
-    if (cached && !(body.force === true && membership.role === 'admin')) return send(res, 200, { report: cached, cached: true });
-    if (recent.length >= TREND_DAILY_LIMIT) return send(res, 429, { error: `This workspace has used its ${TREND_DAILY_LIMIT} trend refreshes for today. Try again tomorrow.` });
+    const { recent, nextScanAt } = await trendScanState(scope, 'id,focus,created_at,platforms,data,model');
+    const cached = recent.find((report) => `${report.focus}|${[...report.platforms].sort().join(',')}` === focusLabel);
+    if (nextScanAt) {
+      // The week's scan is used. The same focus gets that report; anything else waits.
+      if (cached) return send(res, 200, { report: cached, cached: true, nextScanAt });
+      const when = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric' }).format(new Date(nextScanAt));
+      return send(res, 429, { error: `This workspace has used its trend scan for this week. The next one opens ${when}.`, nextScanAt });
+    }
+    if (!await useAiCredit(workspaceId, { kind: 'trend-tries', limit: TREND_DAILY_TRIES })) return send(res, 429, { error: 'Trend scans didn’t finish after a couple of tries today. Try again tomorrow.' });
     const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
     const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
     const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms });
@@ -495,7 +510,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       method: 'POST', headers: { prefer: 'return=representation' },
       body: JSON.stringify({ workspace_id: workspaceId, focus: focus.key, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources }, model: result.model, created_by: user.id })
     });
-    return send(res, 200, { report, cached: false });
+    return send(res, 200, { report, cached: false, nextScanAt: recent.length + 1 >= TREND_WEEKLY_LIMIT ? new Date(Date.parse(report.created_at) + TREND_WINDOW_MS).toISOString() : null });
   }
 
   if (action === 'posts') {
