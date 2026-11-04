@@ -16,6 +16,7 @@ const {
   allRows, openComments, setCommentState
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
+const { readDocument, askQuestions, writePlan, rewritePost, cleanRequest, cleanSchedule } = require('./_lib/campaign-builder');
 const { pushConfigured } = require('./_lib/push');
 const { reportTotals, reportHighlights } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
@@ -47,19 +48,21 @@ const WORKSPACE_ACTIONS = new Set([
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
   'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
-  'planning-note', 'open-comments', 'comment-state', 'activity'
+  'planning-note', 'open-comments', 'comment-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note'
+  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 // AI writing help per workspace per day (caption drafts, image descriptions, Fill from website). Keeps costs bounded.
 const AI_DAILY_LIMIT = Math.max(1, parseInt(process.env.AI_DAILY_LIMIT, 10) || 75);
+// Whole campaign plans are the largest AI request, so they get their own smaller limit.
+const CAMPAIGN_DAILY_LIMIT = Math.max(1, parseInt(process.env.CAMPAIGN_DAILY_LIMIT, 10) || 10);
 // Beta limits per workspace, so one account can't run up costs or flood the networks.
 const DAILY_POST_LIMIT = 150;
 const TEAM_LIMIT = 25;
@@ -130,10 +133,10 @@ async function clientName(workspaceId, clientId) {
 }
 
 // Counts one AI request against the workspace's daily allowance; false once it's used up.
-async function useAiCredit(workspaceId) {
-  const counter = `ai-usage:${workspaceId}:${new Date().toISOString().slice(0, 10)}`;
+async function useAiCredit(workspaceId, { kind = 'ai-usage', limit = AI_DAILY_LIMIT } = {}) {
+  const counter = `${kind}:${workspaceId}:${new Date().toISOString().slice(0, 10)}`;
   const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
-  if (used >= AI_DAILY_LIMIT) return false;
+  if (used >= limit) return false;
   await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
   return true;
 }
@@ -534,6 +537,32 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const brandClient = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
     return send(res, 200, { variants: await draftCaptions({ idea, brandClient, platforms }) });
+  }
+
+  if (action === 'campaign-questions' || action === 'campaign-plan' || action === 'campaign-post') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const state = await getWorkspaceState(workspaceId);
+    const client = (state.clients || []).find((item) => item.id === body.clientId);
+    const request = cleanRequest(body, new Set([...PLATFORM_KEYS, ...Object.keys(MANUAL_PLATFORMS)].filter((network) => network !== 'other')));
+    if (action === 'campaign-questions') {
+      const document = readDocument(body.file);
+      if (!request.brief && !document) return send(res, 400, { error: 'Describe the campaign or upload a document.' });
+      if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
+      return send(res, 200, await askQuestions({ client, brief: request.brief, document, networks: request.networks, start: typeof body.start === 'string' ? body.start.slice(0, 10) : '', days: Number.isInteger(body.days) ? body.days : null }));
+    }
+    if (!request.brief && !request.docNotes) return send(res, 400, { error: 'Describe the campaign or upload a document.' });
+    if (action === 'campaign-post') {
+      const post = body.post && typeof body.post === 'object' ? body.post : {};
+      const networks = request.networks;
+      if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
+      const clip = (value, max) => String(value ?? '').slice(0, max);
+      return send(res, 200, { post: await rewritePost({ client, ...request, angle: clip(body.angle, 1000), change: clip(body.change, 500).trim(), others: (Array.isArray(body.others) ? body.others : []).slice(0, 30).map((title) => clip(title, 100)), post: { networks, date: clip(post.date, 10), title: clip(post.title, 100), format: clip(post.format, 80), text: clip(post.text, 5000), creativeIdea: clip(post.creativeIdea, 3000) } }) });
+    }
+    const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const schedule = cleanSchedule(body, today);
+    if (!await useAiCredit(workspaceId, { kind: 'campaign-usage', limit: CAMPAIGN_DAILY_LIMIT })) return send(res, 429, { error: `This workspace has used its ${CAMPAIGN_DAILY_LIMIT} campaign plans for today. Try again tomorrow.` });
+    return send(res, 200, { plan: await writePlan({ workspaceId, client, timeZone, ...request, ...schedule }) });
   }
 
   if (action === 'save-bio') {

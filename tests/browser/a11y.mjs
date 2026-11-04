@@ -20,6 +20,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   }
   await evaluate(`localStorage.setItem('signaldesk-theme','light');applyTheme();openNotificationPreferences()`); await wait(300); await check('notification preferences');
   await evaluate(`document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.querySelector('[data-open-feedback]')?.click()`); await wait(300); await check('feedback');
+  await evaluate(`document.querySelectorAll('dialog[open]').forEach(d=>d.close());openBuilder()`); await wait(300); await check('build with AI');
   await evaluate(`document.querySelectorAll('dialog[open]').forEach(d=>d.close())`);
   for (const v of seen.values()) log.push(`[${process.env.A11Y_REPORT ? 'a11y' : 'exception'}] ${v.impact} ${v.id} (${v.where}): ${v.help} → ${v.nodes.join(' | ')}`);
   log.push(`accessibility: ${seen.size} serious or critical problem${seen.size === 1 ? '' : 's'}`);

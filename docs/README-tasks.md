@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 3, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 4, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -32,7 +32,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 
 ## Half a day or more, with waiting
 
-- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's.
+- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's. Also ask about sending uploaded documents to Anthropic for campaign plans, since they may include client material.
 - [ ] **16. Complete Meta Business Verification.** It's done for PK Works in Meta's business settings and can take days or longer. Start it before you record anything for App Review.
 - [ ] **17. Complete Meta App Review.** Needs tasks 7, 9, and 16. Use each feature once, record the screencast, and paste the answers from [app-review.md](app-review.md). List Anthropic as a service provider.
 

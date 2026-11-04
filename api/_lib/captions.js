@@ -101,4 +101,4 @@ async function describeImage({ url, context }) {
   return String(parse(response, 'description').altText || '').trim().slice(0, 1000);
 }
 
-module.exports = { draftCaptions, describeImage };
+module.exports = { draftCaptions, describeImage, NETWORK_NOTES };

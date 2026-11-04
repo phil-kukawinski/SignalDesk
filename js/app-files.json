@@ -41,6 +41,7 @@
   "js/bulk.js",
   "js/drafts.js",
   "js/campaign-board.js",
+  "js/campaign-builder.js",
   "js/planning.js",
   "js/inbox.js",
   "js/tour.js",
