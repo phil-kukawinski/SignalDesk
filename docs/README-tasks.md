@@ -8,7 +8,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 
 ## A few minutes each
 
-- [ ] **0. Run the latest database update. Do this first.** Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health will flag a missing table, Activity shows post events only, and the database's double-booking check stays off.
+- [x] **0. Run the latest database update. Do this first.** Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health will flag a missing table, Activity shows post events only, and the database's double-booking check stays off.
 - [ ] **1. Ask Google to index the home page.** In Search Console, paste `https://socialsignaldesk.com/` into URL Inspection and click Request indexing.
 - [ ] **2. Add your name and photo.** Settings → Your account.
 - [ ] **3. Add OpenID Connect to LinkedIn app 1.** Add the **Sign In with LinkedIn using OpenID Connect** product. It's self-serve and instant.

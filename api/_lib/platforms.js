@@ -722,7 +722,7 @@ const pinterest = {
     url.searchParams.set('client_id', process.env.PINTEREST_APP_ID);
     url.searchParams.set('redirect_uri', redirectUri());
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', 'boards:read,pins:read,pins:write,user_accounts:read');
+    url.searchParams.set('scope', 'boards:read,boards:write,pins:read,pins:write,user_accounts:read');
     url.searchParams.set('state', state);
     return url.href;
   },

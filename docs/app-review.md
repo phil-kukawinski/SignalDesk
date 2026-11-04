@@ -168,6 +168,7 @@ New Pinterest apps start with **Trial access** (Pins visible only to you, low li
 |---|---|
 | `user_accounts:read` | Show which Pinterest account was connected (name and picture) |
 | `boards:read` | List the account's boards so the person can choose a default board, and a board per Pin |
+| `boards:write` | Required by Pinterest to create a Pin on a board. SignalDesk doesn't create, edit, or delete boards |
 | `pins:write` | Create the Pins a team schedules |
 | `pins:read` | Read the account's recent Pins, including ones made outside SignalDesk, with their impressions, saves, Pin clicks, and outbound clicks, for the calendar, analytics, and reports |
 

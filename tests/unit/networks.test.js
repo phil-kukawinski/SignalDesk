@@ -37,6 +37,12 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
     assert.ok(hosts.includes(signIn.hostname), `${name} signs in at ${signIn.hostname}, which js/publishing.js would block`);
   }
 
+  // --- Pinterest: creating a Pin needs boards:write as well as pins:write, or every Pin fails
+  const pinterestId = process.env.PINTEREST_APP_ID; process.env.PINTEREST_APP_ID = pinterestId || 'test-pinterest-app';
+  const pinterestScopes = new URL(PROVIDERS.pinterest.authorizeUrl('state-' + 'c'.repeat(40))).searchParams.get('scope').split(',');
+  if (pinterestId === undefined) delete process.env.PINTEREST_APP_ID; else process.env.PINTEREST_APP_ID = pinterestId;
+  for (const scope of ['boards:read', 'boards:write', 'pins:read', 'pins:write', 'user_accounts:read']) assert.ok(pinterestScopes.includes(scope), `Pinterest sign-in should ask for ${scope}`);
+
   // --- X: PKCE challenge in the sign-in link matches the verifier sent with the code
   const state = 'state-' + 'a'.repeat(40);
   const authUrl = new URL(PROVIDERS.x.authorizeUrl(state));
