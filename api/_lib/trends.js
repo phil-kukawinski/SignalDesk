@@ -1,6 +1,6 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
 
-const TREND_MODEL = 'claude-opus-5-5';
+const TREND_MODEL = 'claude-sonnet-5-5';
 const TREND_PLATFORMS = {
   tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn',
   twitter: 'X', youtube: 'YouTube', threads: 'Threads', pinterest: 'Pinterest'
@@ -136,7 +136,7 @@ async function generateTrendReport({ clients, focus, platforms, today, watchTerm
     role: 'user',
     content: `Today is ${today}. Build this week's trend report for: ${platformNames}.\n\nFocus: ${focus}\n\nClients:\n${clientLines}\n\n${watchTerms.length ? `Watched terms (brand names, hashtags, competitors): ${watchTerms.join(', ')}. Also search for notable public posts or coverage from the past week that mention them, and report those in mentions.` : 'There are no watched terms, so leave mentions empty.'}`
   }];
-  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 8 }, submitTool()];
+  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }, submitTool()];
   const sources = new Map();
   for (let turn = 0; turn <= MAX_CONTINUATIONS; turn += 1) {
     const response = await client.beta.messages.create({

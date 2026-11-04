@@ -84,7 +84,7 @@ const future = new Date(Date.now() + 86400000).toISOString();
   r = await call({ action: 'trends-refresh', focus: 'all', platforms: ['tiktok', 'instagram', 'bogus'] }); assert.equal(r.status, 200, JSON.stringify(r.payload));
   const claude = calls.filter((c) => c.url.startsWith('https://api.anthropic.com/v1/messages'));
   assert.equal(claude.length, 2); const req = claude[0].body;
-  assert.equal(req.model, 'claude-opus-5-5'); assert.equal(req.fallbacks, 'default'); assert.deepEqual(req.output_config, { effort: 'medium' });
+  assert.equal(req.model, 'claude-sonnet-5-5'); assert.equal(req.fallbacks, 'default'); assert.deepEqual(req.output_config, { effort: 'medium' });
   assert.equal(req.tools[0].type, 'web_search_20260209'); assert.equal(req.tools[1].strict, true); assert.deepEqual(req.tool_choice, { type: 'auto' });
   const headers = calls.find((c) => c.url.startsWith('https://api.anthropic.com')).headers; const h = headers instanceof Headers ? Object.fromEntries(headers) : headers;
   assert.match(JSON.stringify(h), /server-side-fallback-2026-07-01/);

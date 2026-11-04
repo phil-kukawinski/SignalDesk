@@ -60,16 +60,16 @@ const USER_ACTIONS = new Set([
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 // AI writing help per workspace per day (caption drafts, image descriptions, Fill from website). Keeps costs bounded.
-const AI_DAILY_LIMIT = Math.max(1, parseInt(process.env.AI_DAILY_LIMIT, 10) || 75);
+const AI_DAILY_LIMIT = Math.max(1, parseInt(process.env.AI_DAILY_LIMIT, 10) || 30);
 // Whole campaign plans are the largest AI request, so they get their own smaller limit.
-const CAMPAIGN_DAILY_LIMIT = Math.max(1, parseInt(process.env.CAMPAIGN_DAILY_LIMIT, 10) || 10);
+const CAMPAIGN_DAILY_LIMIT = Math.max(1, parseInt(process.env.CAMPAIGN_DAILY_LIMIT, 10) || 3);
 // Beta limits per workspace, so one account can't run up costs or flood the networks.
 const DAILY_POST_LIMIT = 150;
 const TEAM_LIMIT = 25;
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
-const TREND_CACHE_HOURS = 6;
-const TREND_DAILY_LIMIT = 12;
+const TREND_CACHE_HOURS = 24;
+const TREND_DAILY_LIMIT = 3;
 const ROLES = new Set(['admin', 'user']);
 
 function allowedOrigin(req) {

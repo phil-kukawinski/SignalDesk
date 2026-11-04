@@ -9,7 +9,7 @@ const PLANNING_LEADS = [7, 14, 30, 60, 90];
 const DEFAULT_LEADS = [30];
 // Dates within a few days of each other share one reminder (Thanksgiving through Giving Tuesday is one heads-up).
 const CLUSTER_GAP_DAYS = 3;
-const NOTE_MODEL = 'claude-opus-5-5';
+const NOTE_MODEL = 'claude-sonnet-5-5';
 const NOTE_MAX_AGE_DAYS = 7;
 
 const dayMs = 86400000;

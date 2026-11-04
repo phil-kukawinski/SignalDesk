@@ -2,7 +2,8 @@ const { Anthropic } = require('@anthropic-ai/sdk');
 const { assertPublicUrl, httpError } = require('./core');
 
 // AI help in the Publishing Studio: caption drafts in a client's voice, and image descriptions.
-const CAPTION_MODEL = 'claude-opus-5-5';
+const CAPTION_MODEL = 'claude-sonnet-5-5';
+const ALT_MODEL = 'claude-haiku-5-5';
 const NETWORK_NOTES = {
   facebook: 'Facebook: conversational, 1–3 short paragraphs, links are clickable.',
   instagram: 'Instagram: hook in the first line, line breaks for readability, up to about 8 relevant hashtags at the end, links are not clickable (say "link in bio" if needed). Max 2,200 characters.',
@@ -90,7 +91,7 @@ async function fetchImage(raw) {
 async function describeImage({ url, context }) {
   const image = await fetchImage(url);
   const response = await client().beta.messages.create({
-    model: CAPTION_MODEL,
+    model: ALT_MODEL,
     max_tokens: 1000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',

@@ -4,7 +4,7 @@ const { assertPublicUrl, httpError } = require('./core');
 // Brand kit → "Fill from website": reads a client's homepage (and its About page, if linked),
 // then has Claude draft the brand kit fields. Nothing is saved until the person reviews and saves.
 
-const MODEL = 'claude-opus-5-5';
+const MODEL = 'claude-haiku-5-5';
 const MAX_HTML = 600000;
 const SOCIAL_HOSTS = { instagram: /instagram\.com\/([A-Za-z0-9._]{1,30})/i, facebook: /facebook\.com\/([A-Za-z0-9.\-]{2,80})/i, linkedin: /linkedin\.com\/(company|in)\/([A-Za-z0-9\-_%]{2,100})/i, pinterest: /pinterest\.[a-z.]+\/([A-Za-z0-9_]{2,30})/i, tiktok: /tiktok\.com\/@([A-Za-z0-9._]{2,30})/i, x: /(?:twitter|x)\.com\/([A-Za-z0-9_]{1,15})/i, youtube: /youtube\.com\/(@[A-Za-z0-9._-]{2,40}|channel\/[A-Za-z0-9_-]+)/i };
 const IGNORE_SOCIAL = /^(share|sharer|intent|home|login|p|reel|explore|hashtag|watch|embed|plugins|dialog|tr)$/i;

@@ -6,7 +6,8 @@ const { planningContext } = require('./planning');
 
 // Build with AI on the Campaigns page: reads an optional document once, asks what's missing, then
 // writes a day-by-day plan. Nothing is stored here; the plan becomes saved drafts only when the person says so.
-const BUILDER_MODEL = 'claude-opus-5-5';
+const BUILDER_MODEL = 'claude-sonnet-5-5';
+const QUESTIONS_MODEL = 'claude-haiku-5-5';
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const MAX_DOC_CHARS = 60000;
 const MAX_POSTS = 30;
@@ -182,7 +183,7 @@ async function askQuestions({ client, brief, document, networks, start, days }) 
   let response;
   try {
     response = await aiClient().beta.messages.create({
-      model: BUILDER_MODEL,
+      model: QUESTIONS_MODEL,
       max_tokens: 6000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',

@@ -869,7 +869,7 @@ r = await call({ action: 'draft-captions', clientId: 'pk-works', idea: 'Fall kit
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 assert.deepEqual(r.payload.variants.map((v) => v.platform), ['facebook', 'instagram']);
 assert.match(aiRequests[0].system, /PK Works/);
-assert.equal(aiRequests[0].model, 'claude-opus-5-5');
+assert.equal(aiRequests[0].model, 'claude-sonnet-5-5');
 r = await call({ action: 'alt-text', url: altUrl, context: 'Alt test' }, 'user');
 assert.equal(r.payload.altText, 'A teacher unpacking a kit');
 assert.deepEqual(aiRequests[1].messages[0].content[0], { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: Buffer.from('fake-jpeg-bytes').toString('base64') } });

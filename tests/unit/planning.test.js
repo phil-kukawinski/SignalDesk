@@ -120,7 +120,7 @@ global.fetch = async (input, opts = {}) => {
   assert.ok(context.dates.some((item) => item.name === 'Halloween'));
   assert.ok(context.dates.some((item) => item.name === 'Breast Cancer Awareness Month'), 'ongoing months are included');
   const note = await planning.createPlanningNote({ workspaceId: 'ws-1', client, timeZone: 'America/New_York', now });
-  assert.equal(aiRequest.model, 'claude-opus-5-5');
+  assert.equal(aiRequest.model, 'claude-sonnet-5-5');
   assert.match(aiRequest.system, /Warm, plain-spoken/);
   assert.match(aiRequest.messages[0].content, /Today is 2026-10-28/);
   assert.match(aiRequest.messages[0].content, /2026-10-31 Halloween \[holiday, major\]/);

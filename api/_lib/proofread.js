@@ -1,6 +1,6 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
 
-const PROOFREAD_MODEL = 'claude-opus-5-5';
+const PROOFREAD_MODEL = 'claude-haiku-5-5';
 const ISSUE_TYPES = ['spelling', 'grammar', 'punctuation', 'clarity', 'consistency'];
 
 const ISSUES_SCHEMA = {
