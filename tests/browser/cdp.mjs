@@ -23,7 +23,8 @@ const evaluate = async (expression) => { const r = await send('Runtime.evaluate'
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 if (process.env.LOCAL_JS) await send('Fetch.enable', { patterns: [{ urlPattern: '*signaldesk-social.vercel.app/js/*' }, { urlPattern: '*signaldesk-social.vercel.app/css/*' }, { urlPattern: 'https://signaldesk-social.vercel.app/' }] });
 await send('Runtime.enable'); await send('Network.enable'); await send('Network.setBypassServiceWorker', { bypass: true }); await send('Network.setCacheDisabled', { cacheDisabled: true }); await send('Page.enable');
-const steps = (await import(path.resolve(process.argv[2]))).default;
+// A test file that can't load must fail the run rather than look like a test with nothing to report.
+const steps = (await import(path.resolve(process.argv[2])).catch((error) => { console.log('[exception] The test could not load: ' + error.message); chrome.kill(); process.exit(1); })).default;
 // Sample clients for tests (the app starts empty and signed out).
 const sampleData = () => evaluate(fs.readFileSync(path.join(ROOT, 'tests/fixtures/sample.js'), 'utf8'));
 // A step that crashes must fail the run, or everything after it silently goes untested.

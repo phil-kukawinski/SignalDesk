@@ -16,7 +16,7 @@ const {
   allRows, openComments, setCommentState
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
-const { readDocument, askQuestions, writePlan, rewritePost, cleanRequest, cleanSchedule } = require('./_lib/campaign-builder');
+const { readDocument, askQuestions, writePlan, rewritePost, cleanRequest, cleanSchedule, cleanPostLimit } = require('./_lib/campaign-builder');
 const { pushConfigured } = require('./_lib/push');
 const { reportTotals, reportHighlights } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
@@ -559,11 +559,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const state = await getWorkspaceState(workspaceId);
     const client = (state.clients || []).find((item) => item.id === body.clientId);
     const request = cleanRequest(body, new Set([...PLATFORM_KEYS, ...Object.keys(MANUAL_PLATFORMS)].filter((network) => network !== 'other')));
+    const postLimit = cleanPostLimit(body);
     if (action === 'campaign-questions') {
       const document = readDocument(body.file);
       if (!request.brief && !document) return send(res, 400, { error: 'Describe the campaign or upload a document.' });
       if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
-      return send(res, 200, await askQuestions({ client, brief: request.brief, document, networks: request.networks, start: typeof body.start === 'string' ? body.start.slice(0, 10) : '', days: Number.isInteger(body.days) ? body.days : null }));
+      return send(res, 200, await askQuestions({ client, brief: request.brief, document, networks: request.networks, start: typeof body.start === 'string' ? body.start.slice(0, 10) : '', days: Number.isInteger(body.days) ? body.days : null, postLimit }));
     }
     if (!request.brief && !request.docNotes) return send(res, 400, { error: 'Describe the campaign or upload a document.' });
     if (action === 'campaign-post') {
@@ -577,7 +578,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     const schedule = cleanSchedule(body, today);
     if (!await useAiCredit(workspaceId, { kind: 'campaign-usage', limit: CAMPAIGN_DAILY_LIMIT })) return send(res, 429, { error: `This workspace has used its ${CAMPAIGN_DAILY_LIMIT} campaign plans for today. Try again tomorrow.` });
-    return send(res, 200, { plan: await writePlan({ workspaceId, client, timeZone, ...request, ...schedule }) });
+    return send(res, 200, { plan: await writePlan({ workspaceId, client, timeZone, ...request, ...schedule, postLimit }) });
   }
 
   if (action === 'save-bio') {

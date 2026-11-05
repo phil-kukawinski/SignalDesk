@@ -1595,6 +1595,7 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .builder-file{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px}.builder-file span{overflow-wrap:anywhere}
 .builder-dialog label.builder-file-button{position:relative;display:inline-flex;align-items:center;justify-content:center;height:auto;min-height:36px;margin:0;padding-top:0;padding-bottom:0;cursor:pointer}.builder-dialog label.builder-file-button:focus-within{outline:2px solid var(--accent,currentColor);outline-offset:2px}
 .builder-subhead{margin-top:10px}
+.builder-dialog .schedule-fields+.schedule-fields{margin-top:14px}
 .builder-dialog fieldset{margin-top:12px}
 .builder-notes{margin-top:12px}.builder-notes summary{cursor:pointer;font-weight:600}
 .builder-angle{margin:12px 0}

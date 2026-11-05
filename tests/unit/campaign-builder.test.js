@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 Object.assign(process.env, { SUPABASE_URL: 'https://sb.test', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'svc', SOCIAL_PROFILE_ENCRYPTION_KEY: crypto.randomBytes(32).toString('base64'), ANTHROPIC_API_KEY: 'test' });
-const { readDocument, docxText, cleanPlan, cleanRequest, cleanSchedule, askQuestions, writePlan, MAX_FILE_BYTES } = require(ROOT + '/api/_lib/campaign-builder.js');
+const { readDocument, docxText, cleanPlan, cleanRequest, cleanSchedule, cleanPostLimit, extraPosts, trimToLimit, askQuestions, writePlan, MAX_FILE_BYTES } = require(ROOT + '/api/_lib/campaign-builder.js');
 
 // The smallest .docx that matters: a zip holding word/document.xml.
 function zip(entries, { store = false } = {}) {
@@ -85,6 +85,21 @@ assert.equal(code(() => cleanSchedule({ start: '2026-11-03' }, '2026-11-04')), 4
 assert.equal(code(() => cleanSchedule({ start: 'tomorrow' }, '2026-11-04')), 400);
 for (const days of [0, 61, 1.5, 'lots']) assert.equal(code(() => cleanSchedule({ start: '2026-11-10', days }, '2026-11-04')), 400, `${days} days`);
 
+// --- how many posts someone asked for
+assert.equal(cleanPostLimit({}), null, 'blank means the AI decides');
+assert.equal(cleanPostLimit({ postCount: '' }), null);
+assert.deepEqual(cleanPostLimit({ postCount: 3 }), { count: 3, per: 'week' }, 'per week unless total is chosen');
+assert.deepEqual(cleanPostLimit({ postCount: '30', postPer: 'total' }), { count: 30, per: 'total' });
+for (const postCount of [0, -1, 1.5, 15, 'lots']) assert.equal(code(() => cleanPostLimit({ postCount })), 400, `${postCount} a week`);
+assert.equal(code(() => cleanPostLimit({ postCount: 31, postPer: 'total' })), 400);
+const dated = (days) => days.map((day) => ({ id: day, date: new Date(Date.UTC(2026, 10, 10 + day)).toISOString().slice(0, 10) }));
+const limitWeek = { count: 2, per: 'week' }, limitTotal = { count: 3, per: 'total' };
+assert.equal(extraPosts(dated([0, 1, 2, 3, 7, 8]), limitWeek, '2026-11-10'), 2, 'weeks count from the start date');
+assert.equal(extraPosts(dated([0, 6, 7, 13]), limitWeek, '2026-11-10'), 0, 'the 7th day starts a new week');
+assert.equal(extraPosts(dated([0, 1, 2, 3]), limitTotal, '2026-11-10'), 1);
+assert.deepEqual(trimToLimit(dated([0, 1, 2, 3, 4, 5, 6]), limitTotal, '2026-11-10').map((post) => post.id), [0, 3, 6], 'trimming keeps the start and end');
+assert.deepEqual(trimToLimit(dated([0, 1, 2, 3, 7]), limitWeek, '2026-11-10').map((post) => post.id), [0, 3, 7], 'trimming works week by week');
+
 // --- questions: what goes to the AI, and what comes back
 (async () => {
   let sent;
@@ -127,6 +142,47 @@ for (const days of [0, 61, 1.5, 'lots']) assert.equal(code(() => cleanSchedule({
     return new Response(sse(reply, stop), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   };
   const planArgs = { workspaceId: 'ws-1', client, timeZone: 'America/New_York', brief: 'Promote kits', docNotes: 'Kits cost $20.', answers: [{ question: 'Goal?', answer: 'Sales' }], networks: ['facebook', 'linkedin'], start: '2026-11-10', days: 7, now: new Date('2026-11-04T12:00:00Z') };
+  // A post count: asked for in the prompt, redone once if it's ignored, then trimmed with a note.
+  {
+    const realReply = reply;
+    const planWith = (count) => JSON.stringify({ name: 'N', angle: 'A', assumptions: ['Guess'], posts: Array.from({ length: count }, (_, index) => ({ date: `2026-11-1${index % 4}`, time: '09:00', networks: ['facebook'], title: `P${index}`, format: 'Image', captions: [{ network: 'facebook', text: 'T' }], creativeIdea: '' })) });
+    let bodies = [];
+    const stub = global.fetch;
+    const replies = (...counts) => { let turn = 0; bodies = []; global.fetch = async (url, options) => { if (String(url).includes('sb.test')) return stub(url, options); bodies.push(JSON.parse(options.body)); const count = counts[Math.min(turn++, counts.length - 1)]; if (count === 'fail') return new Response('{}', { status: 400 }); return new Response(sse(planWith(count)), { status: 200, headers: { 'content-type': 'text/event-stream' } }); }; };
+    const limited = { ...planArgs, start: '2026-11-10', days: 14, postLimit: { count: 3, per: 'total' } };
+    replies(3);
+    let limitedPlan = await writePlan(limited);
+    assert.equal(bodies.length, 1, 'a plan within the limit is not redone');
+    assert.equal(limitedPlan.posts.length, 3);
+    assert.ok(/Write exactly 3 posts/.test(bodies[0].messages[0].content), 'the limit goes in the prompt');
+    assert.ok(!/three to five a week/.test(bodies[0].system), 'the usual pace is dropped when a number is set');
+    assert.deepEqual(limitedPlan.assumptions, ['Guess']);
+    replies(4, 3);
+    limitedPlan = await writePlan(limited);
+    assert.equal(bodies.length, 2, 'over the limit gets one redo');
+    assert.ok(/1 too many post/.test(bodies[1].messages[0].content));
+    assert.equal(limitedPlan.posts.length, 3);
+    assert.deepEqual(limitedPlan.assumptions, ['Guess'], 'a good redo needs no note');
+    replies(6, 5);
+    limitedPlan = await writePlan(limited);
+    assert.equal(bodies.length, 2, 'never more than one redo');
+    assert.equal(limitedPlan.posts.length, 3, 'still over, so trimmed');
+    assert.ok(/2 more posts than you asked for/.test(limitedPlan.assumptions[0]), 'trimming is explained');
+    replies(4, 'fail');
+    limitedPlan = await writePlan(limited);
+    assert.equal(limitedPlan.posts.length, 3, 'a failed redo keeps and trims the first plan');
+    replies(2);
+    limitedPlan = await writePlan(limited);
+    assert.ok(/You asked for 3 posts, and this plan has 2/.test(limitedPlan.assumptions[0]), 'too few is pointed out');
+    assert.equal(bodies.length, 1);
+    replies(4);
+    limitedPlan = await writePlan({ ...limited, postLimit: { count: 1, per: 'week' } });
+    assert.ok(/at most 1 post in each week/.test(bodies[0].messages[0].content));
+    assert.equal(limitedPlan.posts.length, 1, 'all four landed in one week');
+    global.fetch = stub;
+    reply = realReply;
+  }
+
   const written = await writePlan(planArgs);
   assert.equal(sent.stream, true, 'long plans stream');
   assert.equal(sent.output_config.format.type, 'json_schema');

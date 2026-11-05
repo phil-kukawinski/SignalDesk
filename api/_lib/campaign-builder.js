@@ -12,6 +12,8 @@ const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const MAX_DOC_CHARS = 60000;
 const MAX_POSTS = 30;
 const MAX_DAYS = 60;
+const MAX_POSTS_PER_WEEK = 14;
+const MIN_REDO_MS = 60000; // A redo only starts with this long left before the plan's time limit.
 const dayMs = 86400000;
 const PLAN_TIMEOUT_MS = 270000; // Under the 300 seconds the server allows, so people see a real message.
 
@@ -175,8 +177,8 @@ function cleanAnswers(value) {
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const validDay = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && isoDay(Date.parse(`${value}T00:00:00Z`) || 0) === value;
 
-async function askQuestions({ client, brief, document, networks, start, days }) {
-  const intro = `Campaign request:\n${brief || '(none written; see the document)'}\n\nNetworks: ${networks.join(', ')}\nStarts: ${start}${days ? `, running ${days} days` : ''}`;
+async function askQuestions({ client, brief, document, networks, start, days, postLimit = null }) {
+  const intro = `Campaign request:\n${brief || '(none written; see the document)'}\n\nNetworks: ${networks.join(', ')}\nStarts: ${start}${days ? `, running ${days} days` : ''}${postLimit ? `\nPosts: ${postLimit.per === 'total' ? `${postLimit.count} in total` : `at most ${postLimit.count} per week`}` : ''}`;
   const content = [];
   if (document?.kind === 'pdf') content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: document.data } });
   content.push({ type: 'text', text: document?.kind === 'text' ? `<document>\n${document.text}\n</document>\n\n${intro}` : intro });
@@ -188,7 +190,7 @@ async function askQuestions({ client, brief, document, networks, start, days }) 
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: QUESTIONS_SCHEMA } },
-      system: `You help a social media manager plan a campaign for a client. Before the plan is written, decide what you still need to know. Ask only about things that would change the plan and aren't already covered by the request, the document, or the client details, such as the goal, the offer, the audience, or a deadline. The start date, length, and networks you're given are already decided, so don't ask about them. Ask at most four short questions in plain language, with no marketing jargon. Ask none if there's enough to go on. ${DATA_RULE}\n\n${brandLines(client)}`,
+      system: `You help a social media manager plan a campaign for a client. Before the plan is written, decide what you still need to know. Ask only about things that would change the plan and aren't already covered by the request, the document, or the client details, such as the goal, the offer, the audience, or a deadline. The start date, length, networks, and any number of posts you're given are already decided, so don't ask about them. Ask at most four short questions in plain language, with no marketing jargon. Ask none if there's enough to go on. ${DATA_RULE}\n\n${brandLines(client)}`,
       messages: [{ role: 'user', content }]
     });
   } catch (error) {
@@ -248,6 +250,38 @@ function cleanPlan(raw, { networks, start, end }) {
   };
 }
 
+// --- The number of posts someone asked for. One post can go to several networks and still counts as one.
+const weekOf = (date, start) => Math.floor((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / (7 * dayMs));
+function postsByWeek(posts, start) {
+  const weeks = new Map();
+  for (const post of posts) {
+    const week = weekOf(post.date, start);
+    if (!weeks.has(week)) weeks.set(week, []);
+    weeks.get(week).push(post);
+  }
+  return [...weeks.values()];
+}
+// How many posts are over the limit.
+function extraPosts(posts, limit, start) {
+  if (limit.per === 'total') return Math.max(0, posts.length - limit.count);
+  return postsByWeek(posts, start).reduce((extra, week) => extra + Math.max(0, week.length - limit.count), 0);
+}
+// Keeps posts spread evenly, so the start and end of the campaign survive.
+function keepEvenly(posts, count) {
+  if (posts.length <= count) return posts;
+  if (count === 1) return [posts[0]];
+  return Array.from({ length: count }, (_, index) => posts[Math.round(index * (posts.length - 1) / (count - 1))]);
+}
+function trimToLimit(posts, limit, start) {
+  if (limit.per === 'total') return keepEvenly(posts, limit.count);
+  return postsByWeek(posts, start).flatMap((week) => keepEvenly(week, limit.count));
+}
+function limitRule(limit) {
+  const counted = 'A post can go to more than one network and still counts as one post. This number overrides any number in the request.';
+  if (limit.per === 'total') return `Write exactly ${limit.count} ${limit.count === 1 ? 'post' : 'posts'}. ${counted}`;
+  return `Write at most ${limit.count} ${limit.count === 1 ? 'post' : 'posts'} in each week, with weeks counted in 7-day blocks from the campaign start date. Use fewer if the campaign doesn't need that many. ${counted}`;
+}
+
 function briefBlock({ brief, docNotes, answers }) {
   return [
     brief && `Campaign request:\n${brief}`,
@@ -256,13 +290,13 @@ function briefBlock({ brief, docNotes, answers }) {
   ].filter(Boolean).join('\n\n');
 }
 
-async function writePlan({ workspaceId, client, timeZone, brief, docNotes, answers, networks, start, days, now = new Date() }) {
+async function writePlan({ workspaceId, client, timeZone, brief, docNotes, answers, networks, start, days, postLimit = null, now = new Date() }) {
   const end = isoDay(Date.parse(`${start}T00:00:00Z`) + ((days || MAX_DAYS) - 1) * dayMs);
   const [context, booked] = await Promise.all([planningContext({ workspaceId, client, timeZone, now }), bookedPosts({ workspaceId, clientId: client.id, start, end, timeZone })]);
   const dates = context.dates.filter((item) => item.date >= start && item.date <= end);
   const prompt = `${briefBlock({ brief, docNotes, answers })}
 
-Campaign start: ${start}. ${days ? `It runs ${days} days, through ${end}.` : `If the request gives a length, use it. Otherwise run 14 days. It can't go past ${end}.`}
+Campaign start: ${start}. ${days ? `It runs ${days} days, through ${end}.` : `If the request gives a length, use it. Otherwise run 14 days. It can't go past ${end}.`}${postLimit ? `\n\n${limitRule(postLimit)}` : ''}
 
 Networks and what each accepts:
 ${networks.map(networkLine).join('\n')}
@@ -275,19 +309,41 @@ ${booked.length ? booked.map((post) => `- ${post.date} ${post.time} on ${post.ne
 
 Dates during the campaign. Use one only if it truly fits:
 ${dates.length ? dates.map((item) => `- ${item.date}: ${item.name}`).join('\n') : 'None.'}`;
-  try {
+  const deadline = Date.now() + PLAN_TIMEOUT_MS;
+  const askForPlan = async (extraNote = '') => {
     const response = await aiClient().beta.messages.stream({
       model: BUILDER_MODEL,
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: PLAN_SCHEMA } },
-      system: `You plan social media campaigns for a social media manager, who will review and edit everything before it posts. Write a plan with a clear arc, such as tease, launch, proof, and last call, not the same post repeated. Vary formats and fit each post to what its network accepts. A post doesn't need to go everywhere: use one to three networks per post, and at most ${MAX_POSTS} posts, usually three to five a week unless the request says otherwise. Choose times suited to each network and audience. Write every caption ready to post in the client's voice, and adapt it to each network in that post. Today is ${context.todayIso}. ${TRUTH_RULES} List everything you had to guess under assumptions. ${DATA_RULE}\n\n${brandLines(client)}`,
-      messages: [{ role: 'user', content: prompt }]
-    }, { timeout: PLAN_TIMEOUT_MS, maxRetries: 0 }).finalMessage();
-    const plan = cleanPlan(outputOf(response, 'That plan ran too long. Try fewer days or networks.'), { networks, start, end });
+      system: `You plan social media campaigns for a social media manager, who will review and edit everything before it posts. Write a plan with a clear arc, such as tease, launch, proof, and last call, not the same post repeated. Vary formats and fit each post to what its network accepts. A post doesn't need to go everywhere: use one to three networks per post, and at most ${MAX_POSTS} posts${postLimit ? '' : ', usually three to five a week unless the request says otherwise'}. Choose times suited to each network and audience. Write every caption ready to post in the client's voice, and adapt it to each network in that post. Today is ${context.todayIso}. ${TRUTH_RULES} List everything you had to guess under assumptions. ${DATA_RULE}\n\n${brandLines(client)}`,
+      messages: [{ role: 'user', content: prompt + extraNote }]
+    }, { timeout: deadline - Date.now(), maxRetries: 0 }).finalMessage();
+    return cleanPlan(outputOf(response, 'That plan ran too long. Try fewer days or networks.'), { networks, start, end });
+  };
+  try {
+    let plan = await askForPlan();
     if (!plan.posts.length) throw httpError(502, 'The AI didn’t return any usable posts. Try again.');
-    return { ...plan, booked };
+    if (!postLimit) return { ...plan, booked };
+    // Over the limit: ask once more, then trim. A failed redo keeps the first plan rather than losing it.
+    let extra = extraPosts(plan.posts, postLimit, start);
+    if (extra && deadline - Date.now() > MIN_REDO_MS) {
+      try {
+        const redo = await askForPlan(`\n\nYour last plan had ${extra} too many ${extra === 1 ? 'post' : 'posts'}. Rewrite it to follow this rule: ${limitRule(postLimit)}`);
+        const redoExtra = extraPosts(redo.posts, postLimit, start);
+        if (redo.posts.length && redoExtra < extra) { plan = redo; extra = redoExtra; }
+      } catch (error) {
+        console.error('Campaign plan redo failed:', error.message);
+      }
+    }
+    const notes = [];
+    if (extra) {
+      plan = { ...plan, posts: trimToLimit(plan.posts, postLimit, start) };
+      notes.push(`The AI wrote ${extra} more ${extra === 1 ? 'post' : 'posts'} than you asked for, so ${extra === 1 ? 'one was' : 'some were'} removed. Check that the campaign still flows.`);
+    }
+    if (postLimit.per === 'total' && plan.posts.length < postLimit.count) notes.push(`You asked for ${postLimit.count} posts, and this plan has ${plan.posts.length}.`);
+    return { ...plan, assumptions: [...notes, ...plan.assumptions], booked };
   } catch (error) {
     if (error instanceof APIConnectionTimeoutError) throw httpError(504, 'That plan took too long to write. Try fewer days or networks.');
     throw error;
@@ -327,4 +383,12 @@ function cleanSchedule(body, today) {
   return { start: body.start, days };
 }
 
-module.exports = { readDocument, docxText, askQuestions, writePlan, rewritePost, cleanPlan, cleanRequest, cleanSchedule, canonical, QUESTIONS_SCHEMA, PLAN_SCHEMA, POST_SCHEMA, MAX_FILE_BYTES };
+function cleanPostLimit(body) {
+  if (body.postCount === undefined || body.postCount === null || body.postCount === '') return null;
+  const per = body.postPer === 'total' ? 'total' : 'week';
+  const count = Number(body.postCount), most = per === 'total' ? MAX_POSTS : MAX_POSTS_PER_WEEK;
+  if (!Number.isInteger(count) || count < 1 || count > most) throw httpError(400, per === 'total' ? `Choose 1 to ${most} posts.` : `Choose 1 to ${most} posts per week.`);
+  return { count, per };
+}
+
+module.exports = { readDocument, docxText, askQuestions, writePlan, rewritePost, cleanPlan, cleanRequest, cleanSchedule, cleanPostLimit, extraPosts, trimToLimit, canonical, QUESTIONS_SCHEMA, PLAN_SCHEMA, POST_SCHEMA, MAX_FILE_BYTES };

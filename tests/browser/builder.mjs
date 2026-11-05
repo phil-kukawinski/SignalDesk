@@ -33,6 +33,8 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!networks.includes('facebook:true') || !networks.includes('instagram:true')) fail('connected networks should start ticked');
   if (!networks.includes('tiktok:false')) fail('unconnected networks should be offered as reminders, unticked');
   if (networks.some((item) => item.startsWith('other:') || item.startsWith('x:true'))) fail('reminders should not include Other or start ticked');
+  // How many posts: blank by default, and checked before anything goes to the AI.
+  if (await evaluate(`document.querySelector('#builder-post-count').value`) !== '' || await evaluate(`document.querySelector('#builder-post-per').value`) !== 'week') fail('the post count should start blank, counted per week');
   await shot('builder_brief.png');
   const sideways = await json(`(()=>{const d=document.querySelector('#builder-dialog');return{over:d.scrollWidth-d.clientWidth,who:[...d.querySelectorAll('*')].filter(el=>el.getBoundingClientRect().right>d.getBoundingClientRect().right).map(el=>el.tagName+'.'+el.className+'#'+el.id).slice(0,6)}})()`);
   log.push('sideways: ' + JSON.stringify(sideways));
@@ -49,9 +51,19 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!/PDF, Word/.test(await evaluate(pick('photo.png', 10)))) fail('other file types should be refused');
   await evaluate(pick('brief.txt', 20));
   if (!/brief\.txt/.test(await evaluate(`document.querySelector('.builder-file').textContent`))) fail('the chosen file should show');
+  const setPosts = (count, per) => evaluate(`(()=>{const area=document.querySelector('#builder-brief');area.value='Promote product X.';area.dispatchEvent(new Event('input',{bubbles:true}));const number=document.querySelector('#builder-post-count');number.value=${JSON.stringify(count)};number.dispatchEvent(new Event('input',{bubbles:true}));const select=document.querySelector('#builder-post-per');select.value=${JSON.stringify(per)};select.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-builder-ask]').click();})()`);
+  await setPosts('15', 'week'); await wait(100);
+  if (!/1 to 14 posts per week/.test(await evaluate(`document.querySelector('#builder-dialog').textContent`))) fail('too many posts per week should be refused');
+  await setPosts('31', 'total'); await wait(100);
+  if (!/1 to 30 posts/.test(await evaluate(`document.querySelector('#builder-dialog').textContent`))) fail('too many total posts should be refused');
+  if (await evaluate(`__calls.some(call=>call.action==='campaign-questions')`)) fail('a bad post count should not reach the AI');
+  await evaluate(`(()=>{const number=document.querySelector('#builder-post-count');number.value='4';number.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  if (await evaluate(`document.querySelector('#builder-post-per').value`) !== 'total') fail('the chosen count type should stay chosen');
+  await shot('builder_posts.png');
   await evaluate(`(()=>{const area=document.querySelector('#builder-brief');area.value='I need a campaign to run 14 days to promote product X.';area.dispatchEvent(new Event('input',{bubbles:true}));const days=document.querySelector('#builder-days');days.value='14';days.dispatchEvent(new Event('input',{bubbles:true}));const tiktok=document.querySelector('[data-builder-network="tiktok"]');tiktok.checked=true;tiktok.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[data-builder-ask]').click();})()`); await wait(300);
   const asked = await json(`__calls.find(call=>call.action==='campaign-questions')`);
   if (asked.file?.name !== 'brief.txt' || !asked.file.data) fail('the document should be sent with the first request');
+  if (asked.postCount !== 4 || asked.postPer !== 'total') fail('the post count should go with the questions');
   if (!asked.networks.includes('tiktok')) fail('the chosen networks should be sent');
   if (asked.days !== 14 || !asked.start) fail('the AI should be told the dates so it does not ask');
 
@@ -139,4 +151,8 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`document.querySelector('#builder-dialog').close();activeUser={id:'u2',email:'other@studio.test'};openBuilder();`); await wait(200);
   if (await evaluate(`document.querySelectorAll('.builder-post').length`) !== 0) fail('someone else signing in should not see the plan');
   await evaluate(`document.querySelector('#builder-dialog').close()`);
+
+  // The post count reaches the plan.
+  const firstPlan = await json(`__calls.filter(call=>call.action==='campaign-plan')[0]`);
+  if (firstPlan.postCount !== 4 || firstPlan.postPer !== 'total') fail('the post count should go with the plan');
 };
