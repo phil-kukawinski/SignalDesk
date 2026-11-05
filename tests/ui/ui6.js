@@ -38,7 +38,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  const fire=(type,x,y,el=document.elementFromPoint(x,y))=>el.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:x,clientY:y,button:0,pointerId:1,pointerType:'mouse'}));
  fire('pointerdown',startX,startY,ev);fire('pointermove',startX+10,startY+10);fire('pointermove',(startX+endX)/2,(startY+endY)/2);fire('pointermove',endX,endY);
  L('dragGhost',ev.classList.contains('dragging')+' label:'+ev.querySelector('b').textContent+' inTarget:'+(ev.parentElement===target));
- fire('pointerup',endX,endY);ev.dispatchEvent(new MouseEvent('click',{bubbles:true}));await wait(60);
+ fire('pointerup',endX,endY);ev.dispatchEvent(new MouseEvent('click',{bubbles:true}));await wait(60);document.querySelector('#confirm-dialog [value=yes]')?.click();await wait(60);
  const move=calls.filter(c=>c.action==='reschedule-post').pop();const moved=new Date(move?.scheduleDate);
  L('dragMove',move?.postId+' '+localIsoDate(moved)+'='+target.dataset.date+' '+moved.getHours()+':'+moved.getMinutes()+' dialogOpened:'+document.querySelector('#post-dialog').open);
  // Edit in Studio

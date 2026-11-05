@@ -187,7 +187,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 ### Calendar, approvals, and clients
 
 - **Content Calendar** has Day, Week, Month, and Grid views.
-  - Drag a post to reschedule it, and click a post for its details.
+  - Drag a post or draft to reschedule it, then confirm. Day and Week views set the day and time; Month sets the day and keeps the time. Click a post for its details.
   - The gold bands are good times to post: general starter times at first, then based on your own results.
   - **Print** saves the visible range as a PDF.
 - **Team & Approvals:** posts from members with the User role wait here for an admin to approve.

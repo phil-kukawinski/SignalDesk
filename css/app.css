@@ -450,6 +450,7 @@ label.settings-toggle input{width:18px;height:18px;accent-color:var(--accent);fl
 .editing-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid var(--accent-border);border-radius:12px;background:var(--surface-3);color:var(--text);font-size:13px;font-weight:600}
 .editing-banner[hidden]{display:none}
 .timeline-event[data-draggable]{cursor:grab;touch-action:none}
+.calendar-event[data-draggable]{cursor:grab}.calendar-event.dragging{cursor:grabbing}
 .timeline-event.dragging{cursor:grabbing;z-index:6;opacity:.92;box-shadow:0 8px 20px var(--shadow-color)}
 /* Brand kits, templates, queue, campaigns, grid preview, notes, comments, reports, library */
 .wide-dialog{width:min(620px,calc(100vw - 28px))}
