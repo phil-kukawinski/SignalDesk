@@ -43,6 +43,12 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   if (pinterestId === undefined) delete process.env.PINTEREST_APP_ID; else process.env.PINTEREST_APP_ID = pinterestId;
   for (const scope of ['boards:read', 'boards:write', 'pins:read', 'pins:write', 'user_accounts:read']) assert.ok(pinterestScopes.includes(scope), `Pinterest sign-in should ask for ${scope}`);
 
+  // --- Pinterest: Trial access is explained, and doesn't flag the account as needing a reconnect
+  const realFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({ code: 29, message: 'Apps with Trial access may not create Pins in production https://api.pinterest.com - use API Sandbox https://api-sandbox.pinterest.com instead.' }), { status: 403, headers: { 'content-type': 'application/json' } });
+  await assert.rejects(PROVIDERS.pinterest.publish({ connection: { token: 'pt', meta: { boardId: 'b1' } }, job: { id: 'job-t', platform: 'pinterest' }, content: { text: 'Pin', media: ['https://cdn.test/a.jpg'] }, options: {}, stage: {}, saveStage: async () => {}, markSent: async () => {} }), (error) => error.kind === 'invalid' && /Standard access/.test(error.message));
+  global.fetch = realFetch;
+
   // --- X: PKCE challenge in the sign-in link matches the verifier sent with the code
   const state = 'state-' + 'a'.repeat(40);
   const authUrl = new URL(PROVIDERS.x.authorizeUrl(state));

@@ -712,6 +712,8 @@ async function pinterestApi(path, { method = 'GET', token, body, sending = false
     headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {})
   }, { sending });
+  // Trial apps can't create live Pins. Reconnecting can't fix that, so it mustn't flag the account as signed out.
+  if (!response.ok && /trial access/i.test(payload.message || '')) throw new PublishError('invalid', 'Pinterest hasn’t approved SignalDesk for live Pins yet (Trial access). Retry after Standard access is approved.');
   if (!response.ok) throw new PublishError(httpKind(response.status), payload.message || `Pinterest returned HTTP ${response.status}.`);
   return payload;
 }

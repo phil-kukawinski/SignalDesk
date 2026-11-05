@@ -162,7 +162,7 @@ Once App 2's keys are in Vercel, Social Accounts shows **Connect a company Page*
 ## Pinterest
 
 ### Access
-New Pinterest apps start with **Trial access** (Pins visible only to you, low limits). Apply for **Standard access** from the app's page at developers.pinterest.com once the trial app works. SignalDesk requests these scopes:
+New Pinterest apps start with **Trial access** (live Pins are refused until approved; only Pinterest's API Sandbox can create test Pins). Apply for **Standard access** from the app's page at developers.pinterest.com once the trial app works. SignalDesk requests these scopes:
 
 | Scope | Used for |
 |---|---|

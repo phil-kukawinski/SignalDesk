@@ -24,7 +24,7 @@ SignalDesk is a product of PK Works. This page is the checklist for bringing som
 - **YouTube (Google):** Google Cloud → **APIs & Services → OAuth consent screen → Audience → Test users** → add their Google email (up to 100). They'll see "Google hasn't verified this app": **Advanced → Go to SignalDesk**.
 - **TikTok:** TikTok developer portal → your app → **Sandbox** → **Target users** → add their TikTok account. Videos post as private until TikTok's audit passes.
 - **LinkedIn:** personal profiles work for anyone. Company Pages only work after LinkedIn approves the Community Management API; until then use the **LinkedIn Page** reminder.
-- **Pinterest:** with Trial access, Pinterest may only allow your own account. Ask testers to try; if Pinterest refuses, it'll work after Standard access.
+- **Pinterest:** with Trial access, Pinterest refuses to create live Pins for anyone, including you. Pinterest publishing works after Standard access.
 - **X:** anyone can sign in. Posting counts against your X API plan's monthly allowance.
 
 **YouTube upload limit:** Google's default quota allows about **6 uploads a day across all users**. Request a higher quota in Google Cloud (**YouTube Data API v3 → Quotas**, or the YouTube API audit form) before testers rely on YouTube.
