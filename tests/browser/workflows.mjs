@@ -141,6 +141,10 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // Messages stay visible over an open dialog, and return to the page when it closes.
   await evaluate(`(()=>{const dialog=document.querySelector('#post-dialog');dialog.showModal();toast('Over a dialog');})()`);
   if (!await evaluate(`Boolean(document.querySelector('#toast').closest('dialog[open]'))`)) log.push('[exception] a message should appear inside an open dialog');
+  // A failed action in a post says why, where it can't be missed.
+  await evaluate(`(()=>{const real=callSocialApi;callSocialApi=async()=>{throw new Error('Could not retry');};window.__restore=()=>{callSocialApi=real;};return postAction({action:'retry-job'},'Queued');})()`); await wait(100);
+  if (await evaluate(`document.querySelector('#toast').textContent`) !== 'Could not retry') log.push('[exception] a failed post action should show its error as a message');
+  await evaluate(`__restore()`);
   await evaluate(`document.querySelector('#post-dialog').close()`); await wait(100);
   if (await evaluate(`Boolean(document.querySelector('#toast').closest('dialog'))`)) log.push('[exception] a message should leave the dialog when it closes');
 };

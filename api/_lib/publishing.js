@@ -43,9 +43,9 @@ async function loadConnection(id, encryptionKey) {
 }
 
 async function saveConnection({ workspaceId, clientId, userId, candidate, connection, encryptionKey }) {
-  await databaseRequest('social_connections?on_conflict=workspace_id,client_id,platform', {
+  const saved = await databaseRequest('social_connections?on_conflict=workspace_id,client_id,platform', {
     method: 'POST',
-    headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+    headers: { prefer: 'resolution=merge-duplicates,return=representation' },
     body: JSON.stringify({
       workspace_id: workspaceId,
       client_id: clientId,
@@ -66,6 +66,13 @@ async function saveConnection({ workspaceId, clientId, userId, candidate, connec
       connected_by: userId,
       updated_at: nowIso()
     })
+  });
+  // Disconnecting clears the account from a client's posts, so reconnecting gives unfinished ones this account again.
+  const connectionId = saved?.[0]?.id;
+  if (!connectionId) return;
+  const platforms = [candidate.platform, ...Object.keys(CONNECTION_PLATFORM).filter((platform) => CONNECTION_PLATFORM[platform] === candidate.platform)];
+  await databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(clientId)}&platform=in.(${platforms.join(',')})&provider=eq.direct&connection_id=is.null&status=in.(held,queued,failed,unknown)`, {
+    method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ connection_id: connectionId, updated_at: nowIso() })
   });
 }
 
@@ -819,7 +826,7 @@ async function retryJob(workspaceId, jobId, { confirmed = false } = {}) {
   if (!['failed', 'unknown'].includes(job.status)) throw httpError(409, 'Only failed posts can be retried.');
   if (job.status === 'unknown' && !confirmed) throw httpError(409, 'Check the account first: this post may already be live.');
   if (job.provider === 'direct') {
-    const connection = (await databaseRequest(`social_connections?id=eq.${job.connection_id}&select=status`))?.[0];
+    const connection = job.connection_id ? (await databaseRequest(`social_connections?id=eq.${job.connection_id}&select=status`))?.[0] : null;
     if (!connection || connection.status !== 'active') throw httpError(400, 'Reconnect this account in Social Accounts, then retry.');
   }
   await patchJobs(`id=eq.${job.id}`, { status: 'queued', run_at: nowIso(), attempts: 0, last_error: null, error_kind: null, notified_at: null, sent_at: null, stage: {} });
