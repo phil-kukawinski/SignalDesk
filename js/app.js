@@ -1,5 +1,7 @@
 // Startup.
 $('#personal-mode')?.addEventListener('change',()=>{applyPersonalMode();scheduleWorkspaceSave();});
+$('#auto-planning-notes')?.addEventListener('change',()=>{scheduleWorkspaceSave();renderPlanPanel();});
+setInterval(checkForStateChanges,60000);document.addEventListener('visibilitychange',checkForStateChanges);
 setInterval(()=>{if(document.visibilityState==='visible'&&['view-calendar','view-overview','view-approvals'].includes($('.page.active')?.id))loadServerPosts();},60000);
 const workspaceReady=loadWorkspaceState().then(()=>maybeWelcome()).catch(error=>{console.error('Workspace load failed:',error);if(activeUser||!supabaseConfigured)document.body.classList.remove('signed-out');setStorageStatus('Connection failed');toast('Could not load workspace data. Check your Supabase setup.');renderWorkspace();});
 // Installable app and push notifications: register the service worker on secure origins.

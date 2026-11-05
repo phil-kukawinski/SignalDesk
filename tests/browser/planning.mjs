@@ -104,4 +104,33 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   const templates = await evaluate(`JSON.stringify(replyTemplates.map(t=>t.text))`);
   if (templates !== JSON.stringify(['Hi {name}, see you Saturday!'])) fail('saved templates should use {name}: ' + templates);
   if (!(await evaluate(`collectSharedState().replyTemplates.length===1`))) fail('templates should be shared with the workspace');
+
+  // Automatic planning notes can be turned off, and the Plan panel says so.
+  if (!(await evaluate(`collectSettings().autoPlanningNotes===true`))) fail('automatic planning notes should be on by default');
+  await evaluate(`document.querySelector('#auto-planning-notes').checked=false`);
+  if (!(await evaluate(`collectSettings().autoPlanningNotes===false`))) fail('the switch should save as off');
+  await evaluate(`applyWorkspaceState({settings:{autoPlanningNotes:false}})`);
+  if (await evaluate(`document.querySelector('#auto-planning-notes').checked`)) fail('a saved off should load as off');
+  await evaluate(`planNotes.clear();planNotes.set(planClient().id,{note:null,stale:false});showView('overview');renderPlanPanel()`); await wait(200);
+  if (!/Automatic weekly notes are off/.test(await evaluate(`document.querySelector('#plan-panel')?.innerText||''`))) fail('the Plan panel should say automatic notes are off');
+  await evaluate(`applyWorkspaceState({settings:{}})`);
+  if (!(await evaluate(`document.querySelector('#auto-planning-notes').checked`))) fail('older workspaces should stay on');
+
+  // Uploads say that files are public.
+  for (const where of ['#upload-zone', '#library-public-note']) if (!/public links/.test(await evaluate(`document.querySelector('${where}')?.textContent||''`))) fail(where + ' should say files are at public links');
+
+  // Someone else saves the workspace: offer a reload, but never for this window's own saves.
+  await evaluate(`(()=>{window.__remote='2026-11-05T10:00:00+00:00';knownStateUpdate='2026-11-05T10:00:00.000Z';sharedStateDirty=false;
+    supabaseClient.from=()=>({upsert:async()=>({error:null}),update:()=>({eq:async()=>({error:null})}),select:()=>({eq:()=>({maybeSingle:async()=>({data:{state:{},updated_at:__remote},error:null})})})});})()`);
+  const banner = `document.querySelector('#state-changed-banner').hidden`;
+  await evaluate(`checkForStateChanges()`); await wait(100);
+  if (!(await evaluate(banner))) fail('the same time in another format is not a change');
+  await evaluate(`window.__remote='2026-11-05T10:05:00+00:00';sharedStateDirty=true;checkForStateChanges()`); await wait(100);
+  if (!(await evaluate(banner))) fail('stay quiet while this window has unsaved changes');
+  await evaluate(`sharedStateDirty=false;checkForStateChanges()`); await wait(100);
+  if (await evaluate(banner)) fail('a change by someone else should offer a reload');
+  await evaluate(`sharedStateDirty=true;saveWorkspaceState()`); await wait(200);
+  if (!(await evaluate(banner))) fail('saving merges the latest copy, so the notice should clear');
+  await evaluate(`window.__remote=knownStateUpdate;checkForStateChanges()`); await wait(100);
+  if (!(await evaluate(banner))) fail('this window’s own save should not count as a change');
 };

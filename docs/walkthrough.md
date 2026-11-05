@@ -3,7 +3,7 @@
 Your guide to running SignalDesk: what's set up, what's left, how to use it day to day, and what to do when something breaks.
 
 Live site: **https://socialsignaldesk.com**
-Last updated: October 26, 2026
+Last updated: November 5, 2026
 
 ---
 
@@ -235,7 +235,9 @@ Uncheck **Invite-only sign-ups** in Settings → Beta invites. Check it again to
 | New posts | 150 per 24 hours |
 | People (members plus pending invites) | 25 |
 | Clients | 50 |
-| AI requests (drafts, descriptions, Fill from website) | 200 per day |
+| AI help (drafts, image descriptions, Fill from website, campaign questions, single-post rewrites, asking for a planning note) | 30 per day, shared |
+| Campaign plans | 3 per day |
+| Trend scans | 1 every 7 days |
 | Uploads | Images and video only, 50 MB each |
 
 ### Deleting accounts
@@ -287,7 +289,7 @@ select jobname, schedule from cron.job where jobname like 'signaldesk%';
 
 ### Backups
 
-Supabase's free plan has no backups you can restore yourself. Until you upgrade, use **Settings → Export** now and then to download a full copy (JSON) and a posts spreadsheet (CSV).
+Supabase's free plan has no backups you can restore yourself. Until you upgrade, use **Settings → Export** now and then to download a full copy (JSON) and a posts spreadsheet (CSV). Export isn't a restore plan: before taking customers, turn on automated backups and test a restore (tasks 12 and A in `docs/README-tasks.md`).
 
 ---
 

@@ -255,6 +255,8 @@ async function processPlanningNotes({ now = new Date(), limit = 1 } = {}) {
     const latest = await latestPlanningNote(pair.workspace_id, pair.client_id);
     if (latest && now - Date.parse(latest.createdAt) < NOTE_MAX_AGE_DAYS * dayMs) continue;
     const state = await getWorkspaceState(pair.workspace_id);
+    // An admin can turn automatic notes off, so nothing goes to the AI unless someone asks for it.
+    if (state.settings?.autoPlanningNotes === false) continue;
     const client = (state.clients || []).find((item) => item.id === pair.client_id);
     if (!client) continue;
     const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';

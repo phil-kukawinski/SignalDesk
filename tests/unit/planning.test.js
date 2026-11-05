@@ -137,6 +137,32 @@ global.fetch = async (input, opts = {}) => {
   const publishing = require(ROOT + '/api/_lib/publishing.js');
   const platforms = require(ROOT + '/api/_lib/platforms.js');
   const job = { id: 'aaaaaaaa-0000-0000-0000-000000000001', post_id: 'bbbbbbbb-0000-0000-0000-000000000001', client_id: 'pk-works', platform: 'facebook', external_id: 'page_1', connection_id: 'cccccccc-0000-0000-0000-000000000001', published_at: '2026-10-27T15:00:00Z', metrics: { comments: 3 }, url: 'https://fb/post' };
+  // Automatic notes: an admin's off switch means nothing goes to the AI; asking for a note still works.
+  {
+    const base = global.fetch, savedRows = planningRows;
+    let settings = { autoPlanningNotes: false };
+    planningRows = [];
+    global.fetch = async (input, opts = {}) => {
+      const url = String(input.url || input);
+      if (url.includes('/rest/v1/workspace_state?')) return ok([{ workspace_id: 'ws-1', state: { clients: [client], settings } }]);
+      if (url.includes('/rest/v1/scheduled_posts?') && url.includes('parent_id=is.null') && !url.includes('status=in.')) return ok([{ workspace_id: 'ws-1', client_id: client.id }]);
+      return base(input, opts);
+    };
+    calls.length = 0;
+    assert.equal((await planning.processPlanningNotes({ now })).created, 0, 'switched off: no note');
+    assert.ok(!calls.some((call) => call.url.includes('api.anthropic.com')), 'switched off: nothing is sent to the AI');
+    settings = {};
+    assert.equal((await planning.processPlanningNotes({ now })).created, 1, 'on by default');
+    assert.ok(calls.some((call) => call.url.includes('api.anthropic.com')));
+    settings = { autoPlanningNotes: false };
+    planningRows = [];
+    calls.length = 0;
+    await planning.createPlanningNote({ workspaceId: 'ws-1', client, timeZone: 'America/New_York', now });
+    assert.ok(calls.some((call) => call.url.includes('api.anthropic.com')), 'asking for a note works with automatic notes off');
+    global.fetch = base;
+    planningRows = savedRows;
+  }
+
   const adapter = platforms.adapterFor('facebook');
   adapter.listComments = async () => [
     { id: 'c1', author: 'Ana Ruiz', text: 'Love this!', at: '2026-10-27T16:00:00Z', replies: [] },

@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 4, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 5, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -23,16 +23,29 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [ ] **9. Create the reviewer login.** Follow "Before you submit" in [app-review.md](app-review.md). The Meta, LinkedIn, and Pinterest reviews all use it.
 - [ ] **10. Watch for LinkedIn's reply on app 2 (company Pages).** LinkedIn denied the Community Management API request with "Business verification failed," and you sent a vetting appeal on November 3, 2026. Watch your Gmail and any `pkworks.co` inboxes for a request for documents. Have proof of your business ready, and make sure the business name, address, website, and LinkedIn Page all match.
 - [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pinterest refuses to create live Pins, so scheduled Pins fail. Facebook and Instagram aren't affected. The answers are in [app-review.md](app-review.md).
-- [ ] **12. Upgrade to Vercel Pro and Supabase Pro.** This is quick but costs money, so wait until just before you invite anyone else.
+- [ ] **12. Upgrade to Vercel Pro and Supabase Pro.** This is quick but costs money, so wait until just before you invite anyone else. Check what backups Supabase Pro includes while you're there, since task A depends on them.
 
 ## About an hour each
 
 - [ ] **13. Finish the PK Works campaign test.** Import two or three posts as drafts, send them for approval, open the client link in a private window, click Approve all, and let one post publish on schedule. This is the most useful test on the list, because these features haven't run on real accounts yet.
 - [ ] **14. Send a test post to each connected network.** Include an image, a carousel, and an Instagram video.
 
+## Before taking customers
+
+Added November 5, 2026, from the outside review.
+
+- [ ] **A. Turn on automated backups and test a restore.** Needs Supabase Pro (task 12). Restore a backup into a separate, temporary Supabase project, never the live one, and confirm clients, posts, and connections came back. About half a day. A backup that's never been restored isn't proven.
+- [ ] **B. Try real failures on your own accounts.** Each should show a clear message, and none should post twice. About an hour, spread out:
+  - Revoke SignalDesk's access on a network, with a post scheduled soon. It should say Reconnect needed, then publish on retry after reconnecting.
+  - Schedule several posts for the same minute across networks. Each should publish once.
+  - Upload a file over 50 MB and a video the network won't accept. Each should be refused before scheduling.
+- [ ] **C. Check that a repeat post keeps its local time across a clock change.** Daylight saving ended November 1, so the next real change is March 14, 2027. Set a weekly repeat that spans it and check its times on the calendar.
+- [ ] **D. Confirm that one workspace can't see another's data.** Use a second real workspace with a test client, before any paying customer signs up. Sign in to each one and confirm neither shows the other's clients, posts, or files. Create only this one test account, because of Supabase's email limit.
+- [ ] **E. Check how the Threads and X test post went out.** Open the PK Works test post's details and see whether those two were direct posts or reminders. Tell me which, so the docs and the report can say for sure.
+
 ## Half a day or more, with waiting
 
-- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's. Also ask about sending uploaded documents to Anthropic for campaign plans, since they may include client material.
+- [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, and `/data-deletion`. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's. Also ask about sending uploaded documents to Anthropic for campaign plans, since they may include client material, and about client confidentiality when agencies use the automatic planning notes, which admins can now turn off. Check Anthropic's current data-use and retention terms for the API so the privacy policy states them correctly.
 - [ ] **16. Complete Meta Business Verification.** It's done for PK Works in Meta's business settings and can take days or longer. Start it before you record anything for App Review.
 - [ ] **17. Complete Meta App Review.** Needs tasks 7, 9, and 16. Use each feature once, record the screencast, and paste the answers from [app-review.md](app-review.md). List Anthropic as a service provider.
 

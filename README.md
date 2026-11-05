@@ -2,7 +2,7 @@
 
 SignalDesk is a product of [PK Works](https://www.pkworks.co).
 
-A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
+A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest, and reminders for Threads, X, YouTube, and TikTok. Direct connectors for those four exist but need each network's own setup. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
 
 Live site: https://socialsignaldesk.com
 
@@ -119,7 +119,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Saved drafts: Save draft keeps the post under More → Saved drafts, shared with the whole workspace (in `saved_drafts`)
 - Analytics → Campaigns: results for each campaign tag (posts, reach, engagement, clicks, best post) with a report per campaign; Audience cards show follower growth; a top post can be turned into AI drafts for the client's other networks
 - Review reminders: when posts wait 2 days on a client's review link, admins are told, and the client can get an email with their link (Brand kit → Monthly report email)
-- Plan ahead (Command Center): upcoming holidays and key dates (`js/observances.js`: US holidays, shopping days, season starts and clock changes, awareness months, and optional fun days) with how many posts are planned for each, and **What to post next**: an AI note per client on what's worked, gaps in the schedule, dates that fit the brand, and post ideas with a draft caption (refreshed weekly by the worker, in `planning_notes`). Needs your attention flags a big date within two weeks with nothing planned
+- Plan ahead (Command Center): upcoming holidays and key dates (`js/observances.js`: US holidays, shopping days, season starts and clock changes, awareness months, and optional fun days) with how many posts are planned for each, and **What to post next**: an AI note per client on what's worked, gaps in the schedule, dates that fit the brand, and post ideas with a draft caption (refreshed weekly by the worker, in `planning_notes`; admins can turn the automatic notes off in Settings → General, and **Get ideas** still works). Needs your attention flags a big date within two weeks with nothing planned
 - Planning reminders: “Valentine’s Day is in 2 weeks. Have you started on ideas yet?” under the bell, as far ahead as each person picks (1 week to 3 months, several at once, or never; Settings → Notifications). Wrap-up emails list the dates coming up and each client's latest ideas
 - Studio time suggestions learn from each client's own posts on the networks picked, then all of its posts, then the workspace's
 - Social Inbox: **Needs a reply** lists comments nobody has answered on the last two weeks of posts (answered here or on the network, or marked done, in `comment_states`), with reply templates (`{name}` fills in the commenter's first name) shared with the team. Needs your attention shows the count
@@ -160,12 +160,12 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 ## Known limitations
 - Posts made outside SignalDesk come from an account sync that runs about every 3 hours per account (90 days on the first sync, then 35). **Sync now** on the calendar refreshes one client right away. LinkedIn doesn't let apps read a personal profile's posts, so only posts made through SignalDesk appear for those.
 - Editing a scheduled post replaces it with a new one, so its ID and history start over. Reposts can't be edited on their own; edit the original post.
-- Facebook, Instagram, and Pinterest are connected and syncing on the live site. LinkedIn publishing and Pinterest publishing haven't been tried against the live APIs yet, so expect small fixes on the first real posts.
+- Facebook and Instagram are connected and publishing on the live site. Pinterest refuses live Pins until Standard access is approved, so it's disconnected for now. LinkedIn publishing hasn't been tried against the live API yet, so expect small fixes on the first real posts.
 - Instagram only accepts JPEG images between 4:5 and 1.91:1. When a post publishes, SignalDesk converts other images (PNG, WebP, very tall or wide shapes) with `sharp`: transparent areas become white and the image is padded, not cropped, using its dominant color. The converted copy is stored under `system/instagram/` in the media bucket. The composer preview notes when this will happen.
 - Links get preview cards: Facebook receives the post's first link as the post link, and LinkedIn gets a card built from the page's Open Graph title, description, and image (SignalDesk reads the page, since LinkedIn's API doesn't). If the page can't be read, LinkedIn shows a plain card.
 - Direct publishing supports text, images, and video on Facebook, Instagram (Reels, Stories, and carousels of up to 10 items), LinkedIn, Pinterest (video Pins, or the video's cover as an image Pin), Threads, and X, and video on YouTube and TikTok. A chosen video cover is used by Instagram Reels, Facebook, YouTube, TikTok (frame only), Pinterest, and LinkedIn.
 - Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
-- Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live.
+- Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live. The app checks about once a minute and shows a notice with a **Reload** button when someone else has saved.
 - Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed doesn't cancel posts it already scheduled; cancel them from the calendar.
 - Instagram tags are spaced along the bottom of a single image; there is no drag-to-position UI yet. Collaborator invites must be accepted on Instagram. Reposts copy the post's text and media but not its comments, and approving a post approves its reposts too.
 - Weekly Top Posts covers posts SignalDesk published; **Analytics → Top posts, every source** covers everything on the connected accounts. For direct posts, numbers come from each network's API and are cached for 6 hours: Instagram insights, Facebook reactions, comments, and shares (reach when Meta provides it), Pinterest Pin analytics, and LinkedIn likes and comments (which may need extra LinkedIn permissions). Anything a network doesn't provide shows as —.
@@ -187,12 +187,12 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - The service worker keeps a copy of the app files for spotty connections. Scheduling and loading data still need a connection.
 - Dark mode re-colors the main screens. A few rarely used panels may still look light.
 - Holidays and key dates are a built-in list of US dates, not a live calendar feed. Lunar-calendar dates (Lunar New Year, Ramadan, Eid, Passover, Diwali, Hanukkah) are listed through 2030 and can shift by a day locally.
-- Uploaded social media is stored in a public Supabase bucket so networks can fetch it. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
+- Uploaded social media is stored in a public Supabase bucket so networks can fetch it. The Publishing Studio, Content Library, and privacy policy all say so. Do not upload private or sensitive files. Once a day, the worker deletes uploads older than 30 days that no draft, saved post, or recent scheduled post uses. If it can't read those references, it deletes nothing.
 
 ## Status and next steps
 A day-to-day guide, setup checklist, and troubleshooting table is in [docs/walkthrough.md](docs/walkthrough.md). Inviting beta testers (adding them on each network, the welcome note, and branded sign-in emails) is in [docs/beta-testers.md](docs/beta-testers.md). App review answers, portal settings, and screencast scripts for Meta, LinkedIn, and Pinterest are in [docs/app-review.md](docs/app-review.md).
 
-Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook, Instagram, and Pinterest accounts are connected. What's left to do by hand, easiest first, is in [docs/README-tasks.md](docs/README-tasks.md). On the code side, audit logs are planned for later.
+Supabase, Vercel, the scheduler, the legal pages, Resend email, AI features, Unsplash, and push notifications are set up on the live site, and Facebook and Instagram accounts are connected. What's left to do by hand, easiest first, is in [docs/README-tasks.md](docs/README-tasks.md). On the code side, audit logs are planned for later.
 
 ## Testing
 Run `npm install`, then `npm test`. It runs:

@@ -186,9 +186,11 @@ New Pinterest apps start with **Trial access** (live Pins are refused until appr
 
 **Pinterest demo video (about 90 seconds)**
 1. Sign in to SignalDesk → **Social Accounts** → **Connect** on Pinterest → approve on Pinterest → choose the default board.
-2. **Publishing Studio**: choose Pinterest, attach an image, set the Pin title, link, and board under **More options → Pinterest**, show the Pinterest preview, and select **Post now**.
-3. Open the board on Pinterest and show the new Pin linking to the destination.
-4. Show the Pin's numbers in **Analytics** (or explain they appear within a day).
+2. **Publishing Studio**: choose Pinterest, attach an image, set the Pin title, link, and board under **More options → Pinterest**, show the Pinterest preview, and select **Schedule post**.
+3. Show the scheduled Pin on the calendar and open its details. Say on screen or in a caption: "Trial access refuses live Pins, so this demo stops at scheduling. With Standard access, SignalDesk creates this Pin at the scheduled time."
+4. Show where a Pin's numbers appear in **Analytics**, and explain they fill in once Pins are live.
+
+Before recording, check Pinterest's current application form in case it asks for something else. Don't use **Post now** or let the scheduled time pass during recording, because Pinterest will refuse the Pin and the post will show as failed. Cancel the demo post afterward.
 
 ---
 
