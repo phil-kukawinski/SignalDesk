@@ -403,7 +403,7 @@
       <p id="scheduled-detail"></p>
       <ul class="scheduled-networks" id="scheduled-networks"></ul>
       <p class="option-hint">The Publishing Studio is cleared for your next post.</p>
-      <div class="auth-actions"><button class="primary-button" type="button" id="scheduled-calendar">View in calendar</button><button class="secondary-button" type="button" id="scheduled-open">Post details</button><button class="secondary-button" type="button" id="scheduled-another">Create another post</button></div>
+      <div class="auth-actions"><button class="primary-button" type="button" id="scheduled-campaign" hidden>Back to campaign drafts</button><button class="primary-button" type="button" id="scheduled-calendar">View in calendar</button><button class="secondary-button" type="button" id="scheduled-open">Post details</button><button class="secondary-button" type="button" id="scheduled-another">Create another post</button></div>
     </div>
   </dialog>
   <dialog id="stock-dialog" class="auth-dialog wide-dialog stock-dialog" aria-labelledby="stock-title">
@@ -435,7 +435,7 @@
       <div class="auth-actions"><label class="secondary-button file-button">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label><button class="text-button" type="button" id="csv-template">Download a template</button></div>
       <p class="auth-message" id="csv-message" role="status"></p>
       <div class="table-scroll" id="csv-preview"></div>
-      <div class="auth-actions"><button class="primary-button" type="button" id="csv-schedule" disabled>Schedule posts</button><button class="secondary-button" type="button" id="csv-drafts" disabled>Import as drafts</button><button class="primary-button" type="button" id="csv-update" hidden>Save changes</button><button class="secondary-button" type="button" id="csv-close">Close</button></div>
+      <div class="auth-actions"><button class="primary-button" type="button" id="csv-schedule" disabled>Schedule posts</button><button class="secondary-button" type="button" id="csv-drafts" disabled>Import as drafts</button><button class="primary-button" type="button" id="csv-show-drafts" hidden>Show drafts</button><button class="primary-button" type="button" id="csv-update" hidden>Save changes</button><button class="secondary-button" type="button" id="csv-close">Close</button></div>
     </div>
   </dialog>
   <dialog id="search-dialog" class="auth-dialog search-dialog" aria-label="Search">
@@ -503,7 +503,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=c1e052908a'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=2f49cc6d2f'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

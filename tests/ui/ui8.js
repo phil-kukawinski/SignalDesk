@@ -78,6 +78,17 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  document.querySelector('#csv-drafts').click();await wait(80);
  const imported=savedDrafts.map(d=>[d.title,d.client,d.platforms.join(','),d.date,d.time,d.state.postOptions.campaign].join('|')).join(' ; ');
  L('csvDrafts',draftButtons+' -> '+imported+' msg:'+document.querySelector('#csv-message').textContent);
+ // Show drafts: rows from more than one campaign go to Saved drafts; one campaign opens that campaign.
+ const showBtn=document.querySelector('#csv-show-drafts');L('csvShowDrafts',(showBtn.hidden?'hidden':'shown')+' '+JSON.stringify(csvImported));
+ if(showBtn.hidden||csvImported?.campaign)setTimeout(()=>{throw new Error('Show drafts should appear, and open Saved drafts for mixed campaigns')});
+ document.querySelector('#csv-close').click();document.querySelector('#csv-open').click();await wait(20);
+ if(!document.querySelector('#csv-show-drafts').hidden)setTimeout(()=>{throw new Error('Show drafts should reset for a new import')});
+ savedDrafts=[];csvRows=parseCsv(csv).slice(1,2).map(validateCsvRow);renderCsvPreview();document.querySelector('#csv-drafts').click();await wait(80);
+ const realOpen=openBoardCampaign;let opened=null;openBoardCampaign=async(clientId,name)=>{opened=clientId+'/'+name;};
+ document.querySelector('#csv-show-drafts').click();await wait(80);openBoardCampaign=realOpen;
+ L('csvShowCampaign',String(opened)+' view:'+document.querySelector('.page.active')?.id+' dialog:'+document.querySelector('#csv-dialog').open);
+ if(opened!=='pk-works/Fall'||document.querySelector('#csv-dialog').open||!document.querySelector('#view-campaigns').classList.contains('active'))setTimeout(()=>{throw new Error('Show drafts should open the Fall campaign: '+opened)});
+ showView('composer');savedDrafts=[];csvRows=parseCsv(csv).slice(1).map(validateCsvRow);document.querySelector('#csv-open').click();await wait(20);csvRows=parseCsv(csv).slice(1).map(validateCsvRow);renderCsvPreview();document.querySelector('#csv-drafts').click();await wait(80);
  if(draftButtons!=='Import 2 as drafts / Schedule 1 post'||savedDrafts.length!==2||savedDrafts[0].title!=='Hello, "world"'||savedDrafts[0].time!=='09:30'||savedDrafts[0].state.postOptions.campaign!=='Fall'||calls.filter(c=>c.action==='publish').length!==publishesBefore)setTimeout(()=>{throw new Error('CSV import as drafts went wrong: '+draftButtons+' -> '+imported);});
  document.querySelector('#csv-close').click();
  // Search

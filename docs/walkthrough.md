@@ -182,7 +182,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 6. **Publishing options:**
    - Pick a date and time, a campaign, and tracking options: UTM tags, or **short links** that count clicks per network.
    - Then choose **Schedule post**, **Post now**, **Send for approval**, or **Add to queue**.
-7. **After scheduling:** a confirmation lists each network and the time, and the Publishing Studio clears for the next post. **View in calendar** jumps to the post's date.
+7. **After scheduling:** a confirmation lists each network and the time, and the Publishing Studio clears for the next post. **View in calendar** jumps to the post's date. If the post started as a saved draft, the draft is removed, since the scheduled post replaces it. Opened from a campaign, the confirmation also offers **Back to campaign drafts**.
 
 ### Calendar, approvals, and clients
 

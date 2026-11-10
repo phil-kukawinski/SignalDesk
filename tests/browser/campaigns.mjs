@@ -115,6 +115,25 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`document.querySelector('.calendar-event.is-draft').click()`); await wait(300);
   if (await evaluate(`document.querySelector('#post-copy').value`) !== 'Calendar draft') fail('clicking a draft on the calendar should open it in the Studio');
 
+  // Scheduling a draft opened from a campaign removes the draft, and offers a way back to the campaign.
+  await evaluate(`(()=>{const at=__day(3);savedDrafts=[{id:'d5',title:'Campaign draft',client:'PK Works',platforms:['facebook'],manual:[],date:at,time:'10:00',state:{uploadedMedia:[],draft:'Campaign draft',draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()},{id:'d6',title:'Other draft',client:'PK Works',platforms:['facebook'],manual:[],date:at,time:'11:00',state:{uploadedMedia:[],draft:'Other draft',draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()}];window.__stores=0;storeSavedDrafts=async()=>{__stores+=1;};window.__realPlatforms=selectedPlatforms;selectedPlatforms=()=>['facebook'];})()`);
+  await evaluate(`showView('campaigns');openBoardCampaign('pk-works','Launch')`); await wait(400);
+  await evaluate(`document.querySelector('[data-board-draft="d5"]').click()`); await wait(300);
+  if (await evaluate(`document.querySelector('#post-copy').value`) !== 'Campaign draft') fail('a campaign draft should open in the Studio');
+  await evaluate(`document.querySelector('#post-copy').value='Campaign draft, edited';sendSocialPost(false)`); await wait(500);
+  const scheduled = await json(`{left:savedDrafts.map(d=>d.id),stores:__stores,open:document.querySelector('#scheduled-dialog').open,back:!document.querySelector('#scheduled-campaign').hidden,focused:document.activeElement?.id,active:activeSavedDraftId}`);
+  log.push('scheduled draft: ' + JSON.stringify(scheduled));
+  if (JSON.stringify(scheduled.left) !== '["d6"]' || !scheduled.stores || scheduled.active !== null) fail('scheduling a draft should remove it from Saved drafts');
+  if (!scheduled.open || !scheduled.back || scheduled.focused !== 'scheduled-campaign') fail('the confirmation should offer Back to campaign drafts');
+  await evaluate(`document.querySelector('#scheduled-campaign').click()`); await wait(400);
+  const back = await json(`{view:document.querySelector('.page.active')?.id,campaign:boardOpen?.name,drafts:[...document.querySelectorAll('[data-board-draft]')].map(el=>el.dataset.boardDraft)}`);
+  log.push('back to campaign: ' + JSON.stringify(back));
+  if (back.view !== 'view-campaigns' || back.campaign !== 'Launch' || back.drafts.includes('d5') || !back.drafts.includes('d6')) fail('Back to campaign drafts should reopen the campaign without the scheduled draft');
+  // A draft opened from somewhere else doesn't offer the way back.
+  await evaluate(`openSavedDraft('d6');sendSocialPost(false)`); await wait(500);
+  if (!(await evaluate(`document.querySelector('#scheduled-campaign').hidden`))) fail('only drafts opened from a campaign should offer Back to campaign drafts');
+  await evaluate(`document.querySelector('#scheduled-dialog').close();selectedPlatforms=__realPlatforms;storeSavedDrafts=async()=>{};`);
+
   // Shared drafts: a save writes only what changed, so a teammate's edits to other drafts survive.
   const shared = await json(`(async()=>{const calls=[],draft=id=>({id,state:{}}),same=draft('same'),edited=draft('edited');__from(name=>name==='saved_drafts'&&({upsert:async(rows,options)=>{calls.push(['upsert',rows.map(row=>row.id),options.onConflict,rows[0].workspace_id,rows[0].draft.savedBy]);return{};},delete:()=>({eq:()=>({in:async(column,ids)=>{calls.push(['delete',ids]);return{};}})})}));draftsInTable=true;storedDrafts.clear();storedDrafts.set('same',JSON.stringify(same));storedDrafts.set('edited','{"old":true}');storedDrafts.set('gone','{}');savedDrafts=[same,edited];await __realStore();
     const again=calls.length;await __realStore();const secondSave=calls.length-again;

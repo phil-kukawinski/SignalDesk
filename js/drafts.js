@@ -29,10 +29,13 @@ async function saveCurrentDraft(){
   savedDrafts.unshift(draft);activeSavedDraftId=draft.id;
   try{await storeSavedDrafts();toast(index>=0?'Draft updated in Saved drafts.':'Saved to drafts. Find it under More → Saved drafts.');}catch(error){savedDrafts.shift();toast(error.message);}
 }
-let activeSavedDraftId=null;
+let activeSavedDraftId=null,draftCampaignReturn=null;
+// Scheduling a draft that was opened in the Studio removes it from Saved drafts, since the post replaces it.
+// Returns the campaign it was opened from, if any, so the confirmation can offer a way back.
+async function retireScheduledDraft(){const id=activeSavedDraftId,back=draftCampaignReturn;activeSavedDraftId=null;draftCampaignReturn=null;if(!id||!savedDrafts)return back;const before=savedDrafts;savedDrafts=savedDrafts.filter(item=>item.id!==id);if(savedDrafts.length===before.length)return back;renderDraftsCount();renderDraftsList();try{await storeSavedDrafts();}catch(error){savedDrafts=before;renderDraftsCount();renderDraftsList();toast(`The post is scheduled, but its draft couldn’t be removed: ${error.message}`);}return back;}
 
 function openSavedDraft(id){
-  const draft=savedDrafts?.find(item=>item.id===id);if(!draft)return;
+  const draft=savedDrafts?.find(item=>item.id===id);if(!draft)return;draftCampaignReturn=null;
   const snapshot=editingPost?null:snapshotDraft();if(editingPost)stopEditing();
   applyDraftState(draft.state);
   if(draft.client&&$('#client-select')&&[...$('#client-select').options].some(option=>option.value===draft.client)){$('#client-select').value=draft.client;$('#client-select').dispatchEvent(new Event('change',{bubbles:true}));}
@@ -76,5 +79,5 @@ async function openDraftsDialog(){let dialog=$('#drafts-dialog');if(!dialog){dia
   if(menu&&!$('#open-drafts')){const item=document.createElement('button');item.className='menu-item';item.id='open-drafts';item.type='button';item.setAttribute('role','menuitem');item.textContent='Saved drafts';menu.appendChild(item);item.addEventListener('click',()=>{menu.hidden=true;$('#more-actions')?.setAttribute('aria-expanded','false');openDraftsDialog();});}
   // Save draft keeps the post in Saved drafts (it used to save to this browser's calendar only).
   const save=$('#save-draft');if(save){const fresh=save.cloneNode(true);save.replaceWith(fresh);fresh.addEventListener('click',saveCurrentDraft);}
-  $('#clear-draft')?.addEventListener('click',()=>{activeSavedDraftId=null;});
+  $('#clear-draft')?.addEventListener('click',()=>{activeSavedDraftId=null;draftCampaignReturn=null;});
 })();
