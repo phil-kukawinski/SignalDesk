@@ -62,7 +62,7 @@ function markOpenCommentCounts(){const counts=openCommentsCache.data?.counts||{}
 
 // Needs your attention on the Command Center.
 // Command Center: comments waiting for a reply go ahead of the approval items.
-function addInboxAttention(items){const count=openCommentCount();if(!count)return;const at=items.findIndex(item=>item.tone==='pending');items.splice(at<0?items.length:at,0,{kind:'view',view:'inbox',title:`${count} comment${count===1?'':'s'} waiting for a reply`,detail:'On posts from the last two weeks',meta:'Answer or mark done in the Social Inbox',tone:'warning'});}
+function addInboxAttention(items){const count=openCommentCount();if(!count)return;const at=items.findIndex(item=>item.tone==='pending');items.splice(at<0?items.length:at,0,{key:`comments:${count}`,kind:'view',view:'inbox',title:`${count} comment${count===1?'':'s'} waiting for a reply`,detail:'On posts from the last two weeks',meta:'Answer or mark done in the Social Inbox',tone:'warning'});}
 function refreshInboxOnHome(){renderInboxCount();if(cloudFeaturesAvailable()&&currentRole==='admin'&&serverPosts.length&&!document.hidden&&!openCommentsCache.loading&&(openCommentsCache.key!==(homeClientId()||'')||Date.now()-openCommentsCache.at>OPEN_COMMENTS_TTL))loadOpenComments();}
 
 // --- Reply templates menu ---

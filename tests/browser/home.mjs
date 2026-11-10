@@ -66,4 +66,29 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!tipBox.visible || tipBox.top < 0 || tipBox.left < 0 || tipBox.right > 1400 || !tipBox.inBody) log.push('[exception] the explainer bubble should be fully on screen');
   await evaluate(`document.querySelector('.analytics-stats .tip').dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));(()=>{const s=document.querySelector('#analytics-range');s.value='30';s.dispatchEvent(new Event('change'));})();try{localStorage.removeItem('signaldesk.analyticsDays')}catch{}`);
   await evaluate(`try{localStorage.removeItem('signaldesk.homeClient')}catch{}`);
+
+  // Needs your attention: each item can be dismissed, with Undo, and comes back if it changes.
+  await evaluate(`(()=>{try{localStorage.removeItem(attentionDismissKey());}catch{}setPicker('');serverPosts=serverPosts.concat([{id:'p9',clientId:'pk-works',title:'Broken post',text:'x',status:'failed',scheduledFor:new Date(Date.now()-3600000).toISOString(),createdBy:'u',media:[],mediaAlt:{},platformContent:{},options:{},jobs:[{id:'p9j',platform:'facebook',provider:'direct',status:'failed',attempts:1,error:'Token expired'}]}]);drawCommandCenter();})()`); await wait(400);
+  const attentionTitles = () => evaluate(`[...document.querySelectorAll('.approval-panel .approval-item b')].map(b=>b.textContent).join('|')`);
+  const before = await attentionTitles(), badgeBefore = Number(await evaluate(`document.querySelector('.approval-panel .count-badge').textContent`));
+  log.push('attention before: ' + before + ' (' + badgeBefore + ')');
+  if (!before.includes('Broken post')) { log.push('[exception] a failed post should be in Needs your attention'); return; }
+  if (!(await evaluate(`[...document.querySelectorAll('.approval-panel .approval-item')].every(item=>item.querySelector('[data-dismiss-attention]'))`))) log.push('[exception] every attention item should have a dismiss button');
+  await evaluate(`window.__opened=null;openPostDialog=id=>{__opened=id;};[...document.querySelectorAll('.approval-panel .approval-item')].find(i=>i.textContent.includes('Broken post')).querySelector('[data-dismiss-attention]').click()`); await wait(300);
+  const after = await attentionTitles(), badgeAfter = Number(await evaluate(`document.querySelector('.approval-panel .count-badge').textContent`));
+  log.push('attention after dismiss: ' + after + ' (' + badgeAfter + ')');
+  if (after.includes('Broken post') || badgeAfter !== badgeBefore - 1) log.push('[exception] dismissing should hide the item and lower the count');
+  if (await evaluate(`__opened`)) log.push('[exception] dismissing should not open the post');
+  if (!/Show 1 dismissed/.test(await evaluate(`document.querySelector('[data-show-dismissed]')?.textContent||''`))) log.push('[exception] it should offer to show dismissed items');
+  await evaluate(`undoNow()`); await wait(200);
+  if (!(await attentionTitles()).includes('Broken post')) log.push('[exception] Undo should bring the item back');
+  await evaluate(`[...document.querySelectorAll('.approval-panel .approval-item')].find(i=>i.textContent.includes('Broken post')).querySelector('[data-dismiss-attention]').click()`); await wait(200);
+  await evaluate(`flushUndo();drawCommandCenter()`); await wait(200);
+  if ((await attentionTitles()).includes('Broken post')) log.push('[exception] a dismissed item should stay hidden after redrawing');
+  // A new failure on the same post is a change, so it comes back.
+  await evaluate(`serverPosts.find(p=>p.id==='p9').jobs[0].attempts=2;drawCommandCenter()`); await wait(200);
+  if (!(await attentionTitles()).includes('Broken post')) log.push('[exception] a dismissed item should return when it changes');
+  await evaluate(`[...document.querySelectorAll('.approval-panel .approval-item')].find(i=>i.textContent.includes('Broken post')).querySelector('[data-dismiss-attention]').click();flushUndo();document.querySelector('[data-show-dismissed]').click()`); await wait(200);
+  if (!(await attentionTitles()).includes('Broken post') || await evaluate(`Boolean(document.querySelector('[data-show-dismissed]'))`)) log.push('[exception] Show dismissed should bring everything back');
+  if (out) { await evaluate(`showView('overview');drawCommandCenter();document.querySelector('.approval-panel').scrollIntoView({block:'start'})`); await wait(200); const shot = await send('Page.captureScreenshot', { format: 'png' }); const data = shot?.result?.data || shot?.data; if (data) fs.writeFileSync(out + 'attention.png', Buffer.from(data, 'base64')); }
 };

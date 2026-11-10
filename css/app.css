@@ -1623,3 +1623,8 @@ button.calendar-list-row:hover,button.calendar-list-row:focus-visible{background
 .calendar-list-status{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-3);color:var(--text);white-space:nowrap}
 .calendar-list-status[data-status="Failed"]{background:var(--danger-soft,var(--surface-3));color:var(--danger,var(--text))}
 @media (max-width:620px){.calendar-list-row{grid-template-columns:60px 8px minmax(0,1fr)}.calendar-list-status{grid-column:3;justify-self:start}}
+/* Needs your attention: dismiss */
+.attention-dismiss{flex:none;margin-left:auto;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:none;color:var(--text-muted)}
+.attention-dismiss:hover,.attention-dismiss:focus-visible{background:var(--surface-3);color:var(--text)}
+.attention-dismiss .ico{width:15px;height:15px}
+.attention-show-dismissed{margin-top:8px}

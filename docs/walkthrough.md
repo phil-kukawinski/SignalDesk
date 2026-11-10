@@ -133,6 +133,8 @@ A new workspace also shows a slim **Finish setting up** bar on the Command Cente
 
 Press **?** anywhere for keyboard shortcuts: **N** starts a new post, **/** searches, and **G** then **C** jumps to the calendar (**H** home, **A** analytics, **S** social accounts).
 
+**Needs your attention** on the Command Center lists failed posts, approvals, accounts to reconnect, and dates with nothing planned. Select **×** to dismiss one; it comes back if something about it changes, and **Show dismissed** brings them all back. Dismissing only hides it on your own device and doesn't fix anything, so a dismissed failed post still needs a retry.
+
 With more than one client, use the picker at the top right of the Command Center or Analytics to show **All clients** or just one. Both pages share the choice: the numbers, upcoming posts, the attention list, goals, the performance chart, audience, link clicks, top posts and the exported report all follow it, and it's remembered on that device.
 
 ### Add a client
