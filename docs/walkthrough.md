@@ -186,7 +186,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 
 ### Calendar, approvals, and clients
 
-- **Content Calendar** has Day, Week, Month, and Grid views.
+- **Content Calendar** has Day, Week, Month, List, and Grid views. **List** shows every upcoming post for the next 12 months, soonest first; use **Filter** to narrow it by client, network, status, or campaign.
   - Drag a post or draft to reschedule it, then confirm. Day and Week views set the day and time; Month sets the day and keeps the time. Click a post for its details.
   - The gold bands are good times to post: general starter times at first, then based on your own results.
   - **Print** saves the visible range as a PDF.
