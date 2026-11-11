@@ -315,6 +315,23 @@ assert.equal(new Date((await q(`select run_at from publish_jobs where post_id='$
 r = await call({ action: 'reschedule-post', postId: postId, scheduleDate: new Date(future).toISOString() });
 assert.equal(r.status, 409, 'published posts cannot move');
 
+// --- A scheduled video post's cover can change (or go back to the first frame) until it starts publishing ---
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Cover later', platforms: ['facebook'], mediaUrls: ['https://cdn.example.com/clip.mp4'], scheduleDate: new Date(future + 10800000).toISOString() });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+const coverPostId = r.payload.post.id;
+r = await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/cover.jpg' });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.deepEqual((await q(`select options from scheduled_posts where id='${coverPostId}'`))[0].options.cover, { url: 'https://cdn.example.com/cover.jpg' });
+assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/other.mp4' })).status, 400, 'a cover must be an image');
+assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'http://insecure.example.com/c.jpg' })).status, 400);
+assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/c.jpg' }, 'user')).status, 403, 'members can’t change covers');
+r = await call({ action: 'set-cover', postId: coverPostId, url: null });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.equal((await q(`select options from scheduled_posts where id='${coverPostId}'`))[0].options.cover, undefined);
+assert.equal((await call({ action: 'set-cover', postId: heldId, url: 'https://cdn.example.com/c.jpg' })).status, 400, 'only video posts have covers');
+assert.equal((await call({ action: 'set-cover', postId, url: 'https://cdn.example.com/c.jpg' })).status, 409, 'published posts keep their cover');
+await call({ action: 'cancel-post', postId: coverPostId });
+
 // --- Failures: auth error, temporary error, unknown outcome ---
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Failure test', platforms: ['facebook', 'pinterest', 'linkedin'], mediaUrls: ['https://cdn.example.com/kit.jpg'] });
 assert.equal(r.status, 200, JSON.stringify(r.payload));

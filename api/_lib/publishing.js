@@ -818,6 +818,27 @@ async function reschedulePost(workspaceId, postId, when) {
   return { scheduledFor: new Date(when).toISOString() };
 }
 
+// A video post's cover image, changed (or removed with null) after scheduling. The worker reads it at publish time.
+const COVER_VIDEO = /\.(mp4|mov|m4v|webm)(?:[?#]|$)/i;
+async function setPostCover(workspaceId, postId, url) {
+  const post = await getPost(workspaceId, postId);
+  if (!['pending_approval', 'scheduled'].includes(post.status) || post.publish_jobs.some((job) => ['publishing', 'published'].includes(job.status))) {
+    throw httpError(409, 'Only posts that haven’t started publishing can change their cover.');
+  }
+  const media = [...(post.content?.media || []), ...Object.values(post.content?.platformContent || {}).flatMap((item) => (Array.isArray(item?.media) ? item.media : []))];
+  if (!media.some((item) => typeof item === 'string' && COVER_VIDEO.test(item))) throw httpError(400, 'Only posts with a video can have a cover.');
+  if (url !== null && (typeof url !== 'string' || url.length > 2000 || !/^https:\/\/\S+$/i.test(url) || COVER_VIDEO.test(url))) throw httpError(400, 'The cover must be an uploaded image.');
+  const ids = await familyIds(workspaceId, post);
+  const rows = await databaseRequest(`scheduled_posts?id=in.(${ids.join(',')})&select=id,status,options`) || [];
+  for (const row of rows) {
+    if (!['pending_approval', 'scheduled'].includes(row.status)) continue;
+    const { cover, ...rest } = row.options || {}; // eslint-disable-line no-unused-vars
+    const options = url ? { ...rest, cover: { url } } : rest;
+    await databaseRequest(`scheduled_posts?id=eq.${row.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ options, updated_at: nowIso() }) });
+  }
+  return { cover: url ? { url } : null, previous: post.options?.cover?.url || null };
+}
+
 async function retryJob(workspaceId, jobId, { confirmed = false } = {}) {
   if (typeof jobId !== 'string' || !/^[0-9a-f-]{36}$/i.test(jobId)) throw httpError(400, 'Choose a network to retry.');
   const rows = await databaseRequest(`publish_jobs?workspace_id=eq.${workspaceId}&id=eq.${jobId}&select=id,status,connection_id,provider`);
@@ -1389,5 +1410,5 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 module.exports = {
   assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
-  reschedulePost, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
+  reschedulePost, setPostCover, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

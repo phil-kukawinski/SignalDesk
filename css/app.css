@@ -570,7 +570,7 @@ label.settings-toggle input{width:18px;height:18px;accent-color:var(--accent);fl
 .csv-table th,.csv-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
 .csv-table tr.error td,.csv-table tr.failed td{color:var(--danger-text)}
 .csv-table tr.done td{color:var(--success-text)}
-.file-button{display:inline-flex;align-items:center;cursor:pointer}
+.file-button{display:inline-flex;align-items:center;cursor:pointer}.auth-form label.file-button{display:inline-flex;align-items:center;justify-content:center;margin:0;font-weight:700;color:var(--text);line-height:1.2}
 .post-history-section{border-top:1px solid var(--border-strong);margin-top:12px;padding-top:8px}
 .post-history-section summary{font-weight:700;font-size:14px;cursor:pointer}
 .history-row{display:grid;gap:1px;padding:8px 0;border-bottom:1px solid var(--border)}
@@ -1316,11 +1316,12 @@ html[data-theme="dark"] .lp-shot-light{display:none!important}
 .lp-maker a{color:var(--accent-text)}
 
 /* Video cover picker and media format alerts */
-.cover-picker{display:flex;gap:14px;align-items:flex-start;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)}
+.cover-picker,.post-cover{display:flex;gap:14px;align-items:flex-start;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-2)}
 .cover-thumb{flex:none;width:72px;height:96px;border-radius:var(--radius);overflow:hidden;background:#000}
 .cover-thumb img,.cover-thumb video{width:100%;height:100%;object-fit:cover;display:block}
 .cover-body{min-width:0;flex:1}.cover-body b{display:block;font-size:var(--text-sm)}.cover-body small{color:var(--text-muted)}
 .cover-body .option-hint{margin:4px 0 0}
+.post-cover{margin:12px 0}
 .cover-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .cover-dialog{width:min(560px,calc(100vw - 32px))}
 .cover-stage{display:grid;place-items:center;background:#000;border-radius:var(--radius);overflow:hidden;margin:12px 0}

@@ -11,7 +11,7 @@ const {
 const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
-  cancelPost, reschedulePost, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
+  cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
   nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
   allRows, openComments, setCommentState
 } = require('./_lib/publishing');
@@ -43,7 +43,7 @@ const WORKSPACE_ACTIONS = new Set([
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
-  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
+  'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'set-cover', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
@@ -848,6 +848,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const result = await reschedulePost(workspaceId, body.postId, Date.parse(body.scheduleDate));
     await addHistory(workspaceId, body.postId, 'rescheduled', { actorName: membership.name, detail: { from: before.scheduled_for, to: result.scheduledFor } });
     return send(res, 200, result);
+  }
+
+  if (action === 'set-cover') {
+    const result = await setPostCover(workspaceId, body.postId, body.url === null ? null : body.url);
+    await addHistory(workspaceId, body.postId, 'edited', { actorName: membership.name, detail: { cover: result.cover ? 'changed' : 'removed' } });
+    return send(res, 200, { cover: result.cover });
   }
 
   if (action === 'retry-job') {

@@ -117,6 +117,12 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  L('csvCover',coverStatus+' | '+drafted+' | payload:'+payload+' | kept:'+kept);
  if(coverStatus!=='ready,error(a cover needs a video in media_url),error(the cover must be an image)'||drafted!=='Video:https://cdn.test/2-cover.png'||payload!=='https://cdn.test/2-cover.png'||kept!=='https://cdn.test/kept.png')setTimeout(()=>{throw new Error('the cover column should attach an image cover to video posts only: '+coverStatus+' | '+drafted+' | '+payload+' | '+kept)});
  uploadToStorage=realUpload;csvFiles.clear();csvUploaded.clear();}
+ // The status shows again under the buttons once there's a table between them, and follows every change.
+ {csvRows=parseCsv(csv).slice(1).map(validateCsvRow);renderCsvPreview();document.querySelector('#csv-message').textContent='Uploading media 1 of 3…';await wait(30);
+ const b=document.querySelector('#csv-message-bottom'),shown=b.hidden+':'+b.textContent;document.querySelector('#csv-message').textContent='';await wait(30);const cleared=String(b.hidden);
+ csvRows=[];renderCsvPreview();document.querySelector('#csv-message').textContent='Pick a file';await wait(30);const noTable=String(b.hidden);
+ L('csvBottom',shown+' | '+cleared+' | '+noTable);
+ if(shown!=='false:Uploading media 1 of 3…'||cleared!=='true'||noTable!=='true')setTimeout(()=>{throw new Error('the status should repeat under the buttons: '+shown+' | '+cleared+' | '+noTable)});document.querySelector('#csv-message').textContent='';}
  // The template: every column in the header, and every example row valid once its files are added.
  {const rows=parseCsv(csvTemplateText()),head=rows[0];csvLayout=Object.fromEntries([...CSV_COLUMNS,'id'].map(c=>[c,head.indexOf(c)]).filter(([,p])=>p>=0));
  const bare=rows.slice(1).map(validateCsvRow).map(r=>r.status).join(',');
