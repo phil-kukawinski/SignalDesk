@@ -820,7 +820,7 @@ async function reschedulePost(workspaceId, postId, when) {
 
 // A video post's cover image, changed (or removed with null) after scheduling. The worker reads it at publish time.
 const COVER_VIDEO = /\.(mp4|mov|m4v|webm)(?:[?#]|$)/i;
-async function setPostCover(workspaceId, postId, url) {
+async function setPostCover(workspaceId, postId, url, offsetMs = null) {
   const post = await getPost(workspaceId, postId);
   if (!['pending_approval', 'scheduled'].includes(post.status) || post.publish_jobs.some((job) => ['publishing', 'published'].includes(job.status))) {
     throw httpError(409, 'Only posts that haven’t started publishing can change their cover.');
@@ -828,15 +828,17 @@ async function setPostCover(workspaceId, postId, url) {
   const media = [...(post.content?.media || []), ...Object.values(post.content?.platformContent || {}).flatMap((item) => (Array.isArray(item?.media) ? item.media : []))];
   if (!media.some((item) => typeof item === 'string' && COVER_VIDEO.test(item))) throw httpError(400, 'Only posts with a video can have a cover.');
   if (url !== null && (typeof url !== 'string' || url.length > 2000 || !/^https:\/\/\S+$/i.test(url) || COVER_VIDEO.test(url))) throw httpError(400, 'The cover must be an uploaded image.');
+  if (offsetMs !== null && (!Number.isInteger(offsetMs) || offsetMs < 0 || offsetMs > 4 * 3600000)) throw httpError(400, 'Choose a cover frame from within the video.');
+  const next = { ...(url ? { url } : {}), ...(offsetMs !== null ? { offsetMs } : {}) };
   const ids = await familyIds(workspaceId, post);
   const rows = await databaseRequest(`scheduled_posts?id=in.(${ids.join(',')})&select=id,status,options`) || [];
   for (const row of rows) {
     if (!['pending_approval', 'scheduled'].includes(row.status)) continue;
     const { cover, ...rest } = row.options || {}; // eslint-disable-line no-unused-vars
-    const options = url ? { ...rest, cover: { url } } : rest;
+    const options = Object.keys(next).length ? { ...rest, cover: next } : rest;
     await databaseRequest(`scheduled_posts?id=eq.${row.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ options, updated_at: nowIso() }) });
   }
-  return { cover: url ? { url } : null, previous: post.options?.cover?.url || null };
+  return { cover: Object.keys(next).length ? next : null };
 }
 
 async function retryJob(workspaceId, jobId, { confirmed = false } = {}) {

@@ -325,6 +325,10 @@ assert.deepEqual((await q(`select options from scheduled_posts where id='${cover
 assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/other.mp4' })).status, 400, 'a cover must be an image');
 assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'http://insecure.example.com/c.jpg' })).status, 400);
 assert.equal((await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/c.jpg' }, 'user')).status, 403, 'members can’t change covers');
+r = await call({ action: 'set-cover', postId: coverPostId, url: 'https://cdn.example.com/frame.jpg', offsetMs: 1500 });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.deepEqual((await q(`select options from scheduled_posts where id='${coverPostId}'`))[0].options.cover, { url: 'https://cdn.example.com/frame.jpg', offsetMs: 1500 });
+assert.equal((await call({ action: 'set-cover', postId: coverPostId, offsetMs: -5 })).status, 400, 'the frame must be within the video');
 r = await call({ action: 'set-cover', postId: coverPostId, url: null });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 assert.equal((await q(`select options from scheduled_posts where id='${coverPostId}'`))[0].options.cover, undefined);

@@ -851,7 +851,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'set-cover') {
-    const result = await setPostCover(workspaceId, body.postId, body.url === null ? null : body.url);
+    const result = await setPostCover(workspaceId, body.postId, body.url ?? null, body.offsetMs ?? null);
     await addHistory(workspaceId, body.postId, 'edited', { actorName: membership.name, detail: { cover: result.cover ? 'changed' : 'removed' } });
     return send(res, 200, { cover: result.cover });
   }
