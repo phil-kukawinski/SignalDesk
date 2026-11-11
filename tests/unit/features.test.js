@@ -86,13 +86,14 @@ const future = new Date(Date.now() + 86400000).toISOString();
   const claude = calls.filter((c) => c.url.startsWith('https://api.anthropic.com/v1/messages'));
   assert.equal(claude.length, 2); const req = claude[0].body;
   assert.equal(req.model, 'claude-sonnet-5-5'); assert.equal(req.fallbacks, 'default'); assert.deepEqual(req.output_config, { effort: 'medium' });
-  assert.equal(req.tools[0].type, 'web_search_20260209'); assert.equal(req.tools[1].strict, true); assert.deepEqual(req.tool_choice, { type: 'auto' });
+  assert.equal(req.tools[0].type, 'web_search_20260209'); assert.equal(req.tools[0].max_uses, 6, 'six searches per scan'); assert.equal(req.tools[1].strict, true); assert.deepEqual(req.tool_choice, { type: 'auto' });
   const headers = calls.find((c) => c.url.startsWith('https://api.anthropic.com')).headers; const h = headers instanceof Headers ? Object.fromEntries(headers) : headers;
   assert.match(JSON.stringify(h), /server-side-fallback-2026-07-01/);
   assert.equal(claude[1].body.messages.length, 2); assert.equal(claude[1].body.messages[1].role, 'assistant');
   assert.match(req.messages[0].content, /PK Works: Creative studio/);
+  assert.match(req.messages[0].content, /report for: Instagram, TikTok\. They're listed most widely used first/, 'networks go most widely used first');
   const saved = calls.find((c) => c.url.endsWith('/rest/v1/trend_reports') && c.method === 'POST').body;
-  assert.deepEqual(saved.platforms, ['tiktok', 'instagram']); assert.deepEqual(saved.data.hashtags[0].sourceUrls, ['https://ads.tiktok.com/trend']); assert.equal(saved.data.topPosts[0].url, '');
+  assert.deepEqual(saved.platforms, ['instagram', 'tiktok'], 'saved most widely used first'); assert.deepEqual(saved.data.hashtags[0].sourceUrls, ['https://ads.tiktok.com/trend']); assert.equal(saved.data.topPosts[0].url, '');
   r = await call({ action: 'trends-refresh', focus: 'custom', customFocus: '', platforms: ['tiktok'] }); assert.equal(r.status, 400);
   // One scan a week: the same focus shows that report, anything else waits, and neither calls the AI.
   const scanned = new Date(Date.now() - 2 * 86400000).toISOString();

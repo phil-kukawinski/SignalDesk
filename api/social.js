@@ -21,7 +21,7 @@ const { pushConfigured } = require('./_lib/push');
 const { reportTotals, reportHighlights } = require('./_lib/reports');
 const { notify, emailConfigured } = require('./_lib/notify');
 const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/reports');
-const { TREND_PLATFORMS, generateTrendReport } = require('./_lib/trends');
+const { TREND_PLATFORMS, byPopularity, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
 const { systemStatus } = require('./_lib/health');
 const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
@@ -490,7 +490,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'trends-refresh') {
-    const platforms = Array.isArray(body.platforms) ? [...new Set(body.platforms)].filter((platform) => TREND_PLATFORMS[platform]) : [];
+    const platforms = Array.isArray(body.platforms) ? byPopularity([...new Set(body.platforms)].filter((platform) => TREND_PLATFORMS[platform])) : [];
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const focus = await trendFocus(workspaceId, body);
     const focusLabel = `${focus.key}|${[...platforms].sort().join(',')}`;

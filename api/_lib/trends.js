@@ -1,10 +1,14 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
 
 const TREND_MODEL = 'claude-sonnet-5-5';
+// Most widely used by small businesses and agency clients first. Scans cover them in this order, so if
+// searches run short, the networks most clients use are the ones covered.
 const TREND_PLATFORMS = {
-  tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn',
-  twitter: 'X', youtube: 'YouTube', threads: 'Threads', pinterest: 'Pinterest'
+  facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube',
+  tiktok: 'TikTok', twitter: 'X', pinterest: 'Pinterest', threads: 'Threads'
 };
+const TREND_SEARCHES = 6;
+const byPopularity = (platforms) => [...platforms].sort((a, b) => Object.keys(TREND_PLATFORMS).indexOf(a) - Object.keys(TREND_PLATFORMS).indexOf(b));
 const MAX_CONTINUATIONS = 4;
 
 const stringList = { type: 'array', items: { type: 'string' } };
@@ -131,12 +135,12 @@ async function generateTrendReport({ clients, focus, platforms, today, watchTerm
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Trend research is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
   const client = new Anthropic();
   const clientLines = clients.map((item) => `- ${item.name}: ${item.desc || 'No description yet.'}`).join('\n') || '- No clients yet.';
-  const platformNames = platforms.map((platform) => TREND_PLATFORMS[platform]).join(', ');
+  const platformNames = byPopularity(platforms).map((platform) => TREND_PLATFORMS[platform]).join(', ');
   const messages = [{
     role: 'user',
-    content: `Today is ${today}. Build this week's trend report for: ${platformNames}.\n\nFocus: ${focus}\n\nClients:\n${clientLines}\n\n${watchTerms.length ? `Watched terms (brand names, hashtags, competitors): ${watchTerms.join(', ')}. Also search for notable public posts or coverage from the past week that mention them, and report those in mentions.` : 'There are no watched terms, so leave mentions empty.'}`
+    content: `Today is ${today}. Build this week's trend report for: ${platformNames}. They're listed most widely used first, so cover them in that order and spread your searches across them.\n\nFocus: ${focus}\n\nClients:\n${clientLines}\n\n${watchTerms.length ? `Watched terms (brand names, hashtags, competitors): ${watchTerms.join(', ')}. Also search for notable public posts or coverage from the past week that mention them, and report those in mentions.` : 'There are no watched terms, so leave mentions empty.'}`
   }];
-  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }, submitTool()];
+  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: TREND_SEARCHES }, submitTool()];
   const sources = new Map();
   for (let turn = 0; turn <= MAX_CONTINUATIONS; turn += 1) {
     const response = await client.beta.messages.create({
@@ -164,4 +168,4 @@ async function generateTrendReport({ clients, focus, platforms, today, watchTerm
   throw new Error('Trend research did not finish. Try again in a few minutes.');
 }
 
-module.exports = { TREND_PLATFORMS, TREND_MODEL, generateTrendReport };
+module.exports = { TREND_PLATFORMS, TREND_MODEL, TREND_SEARCHES, byPopularity, generateTrendReport };
