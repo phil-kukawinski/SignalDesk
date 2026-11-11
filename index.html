@@ -430,9 +430,11 @@
   <dialog id="csv-dialog" class="auth-dialog csv-dialog">
     <div class="auth-form">
       <h2>Import posts from a spreadsheet</h2>
-      <p>Save a spreadsheet as CSV with these columns: <code>date</code> (2026-11-03 or 11/3/2026), <code>time</code> (14:30 or 2:30 PM, your local time), <code>client</code>, <code>networks</code> (separated by semicolons, e.g. Facebook;LinkedIn), <code>text</code>, and optionally <code>media_url</code> (separate several with spaces) and <code>campaign</code>. Other columns are ignored.</p>
+      <p>Save a spreadsheet as CSV with these columns: <code>date</code> (2026-11-03 or 11/3/2026), <code>time</code> (14:30 or 2:30 PM, your local time), <code>client</code>, <code>networks</code> (separated by semicolons, e.g. Facebook;LinkedIn), <code>text</code>, and optionally <code>media_url</code>, <code>campaign</code>, and <code>cover</code>. Other columns are ignored.</p>
+      <p class="option-hint"><b>Media:</b> in <code>media_url</code>, put a link starting with https://, or the name of a file you add below with <b>Add media files</b>, such as <code>1.png</code>. Separate several with <code>|</code> for a carousel. For a video post, <code>cover</code> takes an image the same way (such as <code>1-cover.png</code>) to use as its thumbnail instead of the first frame. Files upload when you import.</p>
       <p class="option-hint">Schedule them right away, or import them as drafts, which wait in Campaigns and Saved drafts. A file exported from a campaign has an <code>id</code> column, so importing it again updates those posts instead of adding new ones.</p>
-      <div class="auth-actions"><label class="secondary-button file-button">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label><button class="text-button" type="button" id="csv-template">Download a template</button></div>
+      <div class="auth-actions"><label class="secondary-button file-button">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label><label class="secondary-button file-button">Add media files<input type="file" id="csv-media" accept="image/*,video/*" multiple hidden></label><button class="text-button" type="button" id="csv-template">Download a template</button></div>
+      <p class="option-hint" id="csv-media-count" role="status"></p>
       <p class="auth-message" id="csv-message" role="status"></p>
       <div class="table-scroll" id="csv-preview"></div>
       <div class="auth-actions"><button class="primary-button" type="button" id="csv-schedule" disabled>Schedule posts</button><button class="secondary-button" type="button" id="csv-drafts" disabled>Import as drafts</button><button class="primary-button" type="button" id="csv-show-drafts" hidden>Show drafts</button><button class="primary-button" type="button" id="csv-update" hidden>Save changes</button><button class="secondary-button" type="button" id="csv-close">Close</button></div>
@@ -503,7 +505,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=5a721fd319'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=c656e76220'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

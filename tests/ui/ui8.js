@@ -90,6 +90,33 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  if(opened!=='pk-works/Fall'||document.querySelector('#csv-dialog').open||!document.querySelector('#view-campaigns').classList.contains('active'))setTimeout(()=>{throw new Error('Show drafts should open the Fall campaign: '+opened)});
  showView('composer');savedDrafts=[];csvRows=parseCsv(csv).slice(1).map(validateCsvRow);document.querySelector('#csv-open').click();await wait(20);csvRows=parseCsv(csv).slice(1).map(validateCsvRow);renderCsvPreview();document.querySelector('#csv-drafts').click();await wait(80);
  if(draftButtons!=='Import 2 as drafts / Schedule 1 post'||savedDrafts.length!==2||savedDrafts[0].title!=='Hello, "world"'||savedDrafts[0].time!=='09:30'||savedDrafts[0].state.postOptions.campaign!=='Fall'||calls.filter(c=>c.action==='publish').length!==publishesBefore)setTimeout(()=>{throw new Error('CSV import as drafts went wrong: '+draftButtons+' -> '+imported);});
+ // Media files added in the import window: media_url names a file instead of a link; each file uploads once.
+ {const realUpload=uploadToStorage,uploads=[];uploadToStorage=async file=>{uploads.push(file.name);return{path:'u/'+file.name,url:'https://cdn.test/'+file.name,name:file.name,type:file.type,size:file.size};};
+ document.querySelector('#csv-close').click();document.querySelector('#csv-open').click();await wait(20);savedDrafts=[];
+ const mediaCsv=`date,time,client,networks,text,media_url\n${tomorrow},9:30,PK Works,Instagram,"One",1.png\n${tomorrow},10:30,PK Works,Instagram,"Carousel",1.png|2.MP4\n${tomorrow},11:30,PK Works,Instagram,"Missing",3.png\n${tomorrow},12:30,PK Works,Facebook,"Link",https://example.com/a.jpg\n`;
+ csvRows=parseCsv(mediaCsv).slice(1).map(validateCsvRow);renderCsvPreview();
+ const before=csvRows.map(r=>r.status).join(',');
+ const pick=names=>{const box=new DataTransfer();names.forEach(([name,type])=>box.items.add(new File(['x'],name,{type})));const input=document.querySelector('#csv-media');input.files=box.files;input.dispatchEvent(new Event('change'));};
+ pick([['1.png','image/png'],['2.mp4','video/mp4']]);await wait(80);
+ const after=csvRows.map(r=>r.status+(r.errors.length?'('+r.errors[0]+')':'')).join(',');
+ document.querySelector('#csv-drafts').click();await wait(120);
+ const media=savedDrafts.map(d=>d.title+':'+d.state.uploadedMedia.map(m=>m.name+'@'+m.url).join('+')).join(' ; ');
+ L('csvMedia',before+' -> '+after+' | uploads:'+uploads.join(',')+' | '+media+' | count:'+document.querySelector('#csv-media-count').textContent);
+ if(before!=='error,error,error,ready'||!after.startsWith('ready,ready,error(add the file “3.png”')||uploads.join(',')!=='1.png,2.mp4'||!media.includes('One:1.png@https://cdn.test/1.png')||!media.includes('Carousel:1.png@https://cdn.test/1.png+2.mp4@https://cdn.test/2.mp4')||!media.includes('Link:a.jpg@https://example.com/a.jpg'))setTimeout(()=>{throw new Error('media files should match media_url by name and upload once: '+before+' -> '+after+' | '+uploads.join(',')+' | '+media)});
+ // A cover image for a video: same file matching, saved on the draft and sent when scheduling; only for video posts.
+ savedDrafts=[];uploads.length=0;csvUploaded.clear();
+ const coverCsv=`date,time,client,networks,text,media_url,campaign,cover\n${tomorrow},9:30,PK Works,Instagram,"Video",2.mp4,,2-cover.png\n${tomorrow},10:30,PK Works,Instagram,"Image with cover",1.png,,2-cover.png\n${tomorrow},11:30,PK Works,Instagram,"Video cover",2.mp4,,2.mp4\n`;
+ pick([['2-cover.png','image/png']]);await wait(40);
+ {const head=parseCsv(coverCsv)[0];csvLayout=Object.fromEntries([...CSV_COLUMNS,'id'].map(c=>[c,head.indexOf(c)]).filter(([,p])=>p>=0));}
+ csvRows=parseCsv(coverCsv).slice(1).map(validateCsvRow);renderCsvPreview();
+ const coverStatus=csvRows.map(r=>r.status+(r.errors.length?'('+r.errors[0]+')':'')).join(',');
+ document.querySelector('#csv-drafts').click();await wait(120);
+ const drafted=savedDrafts.map(d=>d.title+':'+(d.state.postOptions.cover?.url||'none')).join(' ; ');
+ const payload=(()=>{try{return draftPayload({...savedDrafts[0],date:tomorrow,time:'09:30'}).options?.cover?.url||'none';}catch(e){return 'error:'+e.message;}})();
+ const kept=optionsToComposer({cover:{url:'https://cdn.test/kept.png'}}).cover?.url;
+ L('csvCover',coverStatus+' | '+drafted+' | payload:'+payload+' | kept:'+kept);
+ if(coverStatus!=='ready,error(a cover needs a video in media_url),error(the cover must be an image)'||drafted!=='Video:https://cdn.test/2-cover.png'||payload!=='https://cdn.test/2-cover.png'||kept!=='https://cdn.test/kept.png')setTimeout(()=>{throw new Error('the cover column should attach an image cover to video posts only: '+coverStatus+' | '+drafted+' | '+payload+' | '+kept)});
+ uploadToStorage=realUpload;csvFiles.clear();csvUploaded.clear();}
  document.querySelector('#csv-close').click();
  // Search
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));await wait(20);const si=document.querySelector('#search-input');si.value='fall';si.dispatchEvent(new Event('input'));

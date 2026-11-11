@@ -44,7 +44,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // The spreadsheet has drafts and editable posts, with ids.
   const csv = await evaluate(`boardCsv()`);
   log.push('csv: ' + csv.split('\r\n')[0]);
-  if (!csv.startsWith('date,time,client,networks,text,media_url,campaign,id') || !csv.includes('draft:d1') || !csv.includes('post:11111111-0000-4000-8000-0000000000aa')) fail('the export should carry an id for each draft and post');
+  if (!csv.startsWith('date,time,client,networks,text,media_url,campaign,cover,id') || !csv.includes('draft:d1') || !csv.includes('post:11111111-0000-4000-8000-0000000000aa')) fail('the export should carry an id for each draft and post');
 
   // Re-import: a changed post and a changed draft update in place; an unchanged row does nothing; a new row stays new. Dates as Excel saves them.
   const usDate = await evaluate(`(()=>{const at=new Date(Date.now()+5*86400000);return (at.getMonth()+1)+'/'+at.getDate()+'/'+at.getFullYear();})()`);
