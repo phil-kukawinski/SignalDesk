@@ -117,6 +117,13 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  L('csvCover',coverStatus+' | '+drafted+' | payload:'+payload+' | kept:'+kept);
  if(coverStatus!=='ready,error(a cover needs a video in media_url),error(the cover must be an image)'||drafted!=='Video:https://cdn.test/2-cover.png'||payload!=='https://cdn.test/2-cover.png'||kept!=='https://cdn.test/kept.png')setTimeout(()=>{throw new Error('the cover column should attach an image cover to video posts only: '+coverStatus+' | '+drafted+' | '+payload+' | '+kept)});
  uploadToStorage=realUpload;csvFiles.clear();csvUploaded.clear();}
+ // The template: every column in the header, and every example row valid once its files are added.
+ {const rows=parseCsv(csvTemplateText()),head=rows[0];csvLayout=Object.fromEntries([...CSV_COLUMNS,'id'].map(c=>[c,head.indexOf(c)]).filter(([,p])=>p>=0));
+ const bare=rows.slice(1).map(validateCsvRow).map(r=>r.status).join(',');
+ ['1.png','2.png','3-cover.png'].forEach(n=>csvFiles.set(n,new File(['x'],n,{type:'image/png'})));csvFiles.set('3.mp4',new File(['x'],'3.mp4',{type:'video/mp4'}));
+ const filled=rows.slice(1).map(validateCsvRow).map(r=>r.status+(r.errors.length?'('+r.errors[0]+')':'')).join(',');csvFiles.clear();
+ L('csvTemplate',head.join('|')+' | bare:'+bare+' | filled:'+filled);
+ if(head.join(',')!==CSV_COLUMNS.join(',')||rows.slice(1).some(r=>r.length!==head.length)||bare!=='error,error'||filled!=='ready,ready')setTimeout(()=>{throw new Error('the template should list every column and valid examples: '+head.join(',')+' | '+bare+' | '+filled)});}
  document.querySelector('#csv-close').click();
  // Search
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));await wait(20);const si=document.querySelector('#search-input');si.value='fall';si.dispatchEvent(new Event('input'));
