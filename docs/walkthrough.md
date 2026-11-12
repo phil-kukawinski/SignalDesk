@@ -200,10 +200,10 @@ The brand kit opens after you add a client. You can also open it any time from t
 
 - **Post details** show each network's status, a **View** link, and link clicks.
 - **Social Inbox → Comments on your posts:** read and reply to comments on Facebook, Instagram, and LinkedIn.
-- **Analytics & Reports:**
-  - 30-day reach, engagements, engagement rate, and published posts.
-  - **Top Posts** and **Link clicks** by network.
-  - **Client report:** a branded PDF.
+- **Analytics & Reports**, in three tabs:
+  - **Overview:** reach, engagements, engagement rate, published posts, and engagement over time.
+  - **Posts:** **Top posts**, **When posts do best**, and **Link clicks** by network.
+  - **Reports:** **Client report** (a branded PDF), **Weekly Top Posts**, and **Campaigns**.
   - **Export report:** a CSV.
 - Monthly client report emails can be turned on in each brand kit.
 

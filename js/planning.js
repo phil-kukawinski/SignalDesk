@@ -67,3 +67,7 @@ document.addEventListener('change',event=>{if(event.target.id==='plan-client'){p
 function addPlanningAttention(items){if(!cloudFeaturesAvailable()||!serverPostsLoadedAt)return;const scope=homeClientId();upcomingObservances(localIsoDate(new Date()),14,{scope:'major'}).filter(item=>!item.lead&&item.kind!=='month'&&item.daysAway>=2).forEach(item=>{if(!plannedFor(item.date,scope))items.push({key:`date:${item.date}:${item.name}`,kind:'view',view:'calendar',title:`Nothing planned for ${item.name}`,detail:`${planDayParts(item.date).label} · ${leadPhrase(item.daysAway)}`,meta:item.tip,tone:'pending'});});}
 
 function refreshPlanPanel(){renderPlanPanel();if(!planningPrefs&&cloudFeaturesAvailable())loadPlanningPrefs().then(renderPlanPanel);}
+
+// On a phone, Home puts what needs action first; Plan ahead and Performance fold down to their headers until tapped.
+const HOME_FOLDS='#plan-panel,#view-overview .performance-panel';
+document.addEventListener('click',event=>{if(window.innerWidth>620)return;const header=event.target.closest('.panel-header');if(!header||event.target.closest('button,a,select,input,label'))return;const panel=header.parentElement;if(!panel?.matches(HOME_FOLDS))return;panel.classList.toggle('open');header.setAttribute('aria-expanded',String(panel.classList.contains('open')));});

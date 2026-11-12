@@ -9,7 +9,7 @@ async function fetchHealth(force=false){const panel=$('#health-panel'),link=$('[
 function loadHealth(force){renderAccountPanel();loadBeta();return fetchHealth(force);}
 $('#health-refresh')?.addEventListener('click',()=>loadHealth(true));
 $('#health-body')?.addEventListener('click',event=>{const open=event.target.closest('[data-open-post]');if(open)openPostDialog(open.dataset.openPost);});
-$('.settings-nav')?.addEventListener('click',event=>{const link=event.target.closest('[data-settings-go="health"]');if(!link)return;event.preventDefault();event.stopImmediatePropagation();$$('.settings-nav [data-settings-go]').forEach(item=>item.classList.toggle('selected',item===link));loadHealth(true);$('#health-panel')?.scrollIntoView({behavior:'smooth',block:'start'});},true);
+$('.settings-nav')?.addEventListener('click',event=>{const link=event.target.closest('[data-settings-go="health"]');if(!link)return;event.preventDefault();event.stopImmediatePropagation();$$('.settings-nav [data-settings-go]').forEach(item=>item.classList.toggle('selected',item===link));loadHealth(true);showSettingsSection('health');},true);
 loadHealth();
 
 RETRY_HANDLERS.health=()=>loadHealth(true);

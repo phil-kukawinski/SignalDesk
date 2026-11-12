@@ -39,7 +39,7 @@ $('#auth-close')?.addEventListener('click',()=>{if(!authLocked())$('#auth-dialog
 $('#auth-dialog')?.addEventListener('click',event=>{if(event.target===$('#auth-dialog')&&!authLocked())$('#auth-dialog').close();});
 $('#auth-dialog')?.addEventListener('cancel',event=>{if(authLocked())event.preventDefault();});
 $('#auth-sign-out')?.addEventListener('click',async()=>{const{error}=await supabaseClient.auth.signOut();if(error){authNotice(error.message);return;}location.reload();});
-$('#auth-account-settings')?.addEventListener('click',()=>{$('#auth-dialog').close();showView('settings');setTimeout(()=>$('#account-panel')?.scrollIntoView({behavior:'smooth',block:'start'}),200);});
+$('#auth-account-settings')?.addEventListener('click',()=>{$('#auth-dialog').close();showView('settings');showSettingsSection('account');});
 // Invite links look like /?invite=CODE; remember the code for the sign-up form. Team invite emails
 // link to /?join=EMAIL, which opens sign-up with that address filled in.
 const JOIN_KEY='signaldesk-join';
