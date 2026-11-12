@@ -21,7 +21,7 @@
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.min.css?v=263d4b6ab5">
+  <link rel="stylesheet" href="css/app.min.css?v=8925f31454">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -238,7 +238,7 @@
           <div class="page-heading"><div><div class="eyebrow">CONNECTED CHANNELS</div><h1>Social accounts</h1><p class="subheading">Connect and manage each client’s social profiles.</p></div><div class="account-actions"><button class="secondary-button" id="refresh-social-accounts" type="button" title="Refresh connections"><i data-icon="refresh"></i>Refresh</button><button class="secondary-button" id="connect-social-accounts" type="button" hidden><i data-icon="plus"></i>Connect via Ayrshare</button></div></div>
           <div class="accounts-toolbar"><label class="field-label" for="accounts-client-select">Client workspace</label><select id="accounts-client-select" class="field"></select><span id="social-accounts-status" role="status">Sign in and configure the provider to connect social profiles.</span></div>
           <div class="social-account-grid" id="social-account-grid"></div>
-          <p class="integration-note">Each network connects directly through its own sign-in. Instagram Stories use the Instagram connection.</p>
+          <p class="integration-note">Each network connects directly through its own sign-in. Facebook and Instagram Stories use those same connections.</p>
         </section>
 
         <section class="page" id="view-approvals">
@@ -506,7 +506,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=07f486d055'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=55ef8868d9'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

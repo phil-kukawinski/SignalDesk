@@ -1713,3 +1713,8 @@ button.calendar-list-row:hover,button.calendar-list-row:focus-visible{background
 /* Clients: search and sort */
 .client-tools{display:flex;gap:9px;margin-bottom:16px;flex-wrap:wrap}.client-tools .search-field{max-width:340px;margin-right:auto}.client-tools .calendar-filter{width:auto}
 .approval-post .client-avatar{flex:none}
+/* Add a network: a network with two connect options (LinkedIn) puts them on their own line */
+.social-add-item{flex-wrap:wrap}.social-add-item b{flex:1 0 auto;min-width:0}
+.social-add-item .social-account-buttons{flex-wrap:wrap;margin-left:auto;justify-content:flex-end}
+.social-add-item:has(.social-account-buttons>:nth-child(2)) .social-account-buttons{flex-basis:100%;justify-content:flex-start;margin-left:38px}
+.social-add-grid{align-items:start}

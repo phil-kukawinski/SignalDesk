@@ -9,6 +9,8 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await sampleData();
   await evaluate(axe);
   await evaluate(`document.querySelector('#auth-dialog')?.open&&document.querySelector('#auth-dialog').close();cloudFeaturesAvailable=()=>true;activeUser={id:'u',email:'owner@pkworks.co'};currentRole='admin';callSocialApi=async()=>{throw new Error('offline in this test')};`);
+  // Colors fade when the theme changes; checking mid-fade on a busy machine reads the old colors, so skip the fade.
+  await evaluate(`document.head.insertAdjacentHTML('beforeend','<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>')`);
   const seen = new Map();
   const check = async (where) => {
     const found = JSON.parse(await evaluate(`(async()=>{const r=await axe.run(document,{resultTypes:['violations'],runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}});return JSON.stringify(r.violations.filter(v=>['serious','critical'].includes(v.impact)).map(v=>({id:v.id,impact:v.impact,help:v.help,nodes:v.nodes.slice(0,4).map(n=>n.target.join(' ')+(n.any?.[0]?.message?' — '+n.any[0].message:''))})));})()`));
