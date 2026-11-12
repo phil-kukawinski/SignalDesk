@@ -191,8 +191,15 @@ r = await call({ action: 'oauth-finish', sessionId: pinSession, selections: [{ k
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 r = await call({ action: 'accounts', clientId: 'pk-works' });
 const linked = r.payload.accounts.filter((a) => a.linked);
-assert.deepEqual(linked.map((a) => `${a.platform}:${a.provider}`), ['facebook:direct', 'instagram:direct', 'instagram_story:direct', 'linkedin:direct', 'pinterest:direct']);
+assert.deepEqual(linked.map((a) => `${a.platform}:${a.provider}`), ['facebook:direct', 'facebook_story:direct', 'instagram:direct', 'instagram_story:direct', 'linkedin:direct', 'pinterest:direct']);
 assert.equal(r.payload.accounts.find((a) => a.platform === 'pinterest').boardId, 'b2');
+// A Facebook Story uses the Facebook connection and needs no text, but does need an image or video.
+r = await call({ action: 'publish', clientId: 'pk-works', text: '', platforms: ['facebook_story'], mediaUrls: ['https://cdn.example.com/story.jpg'], scheduleDate: new Date(Date.now() + 7200000).toISOString() });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+const storyJob = (await q(`select j.platform, j.provider, c.platform as via from publish_jobs j join social_connections c on c.id = j.connection_id where j.post_id='${r.payload.post.id}'`))[0];
+assert.deepEqual([storyJob.platform, storyJob.provider, storyJob.via], ['facebook_story', 'direct', 'facebook']);
+assert.equal((await call({ action: 'publish', clientId: 'pk-works', text: 'No media', platforms: ['facebook_story'], scheduleDate: new Date(Date.now() + 7200000).toISOString() })).status, 400, 'a Story needs an image or video');
+await q(`delete from publish_jobs where post_id='${r.payload.post.id}'`); await q(`delete from post_history where post_id='${r.payload.post.id}'`).catch(() => {}); await q(`delete from scheduled_posts where id='${r.payload.post.id}'`);
 
 // --- Schedule a post to all four, with comments and a repost ---
 const future = Date.now() + 3600000;

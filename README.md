@@ -26,7 +26,7 @@ To point a copy of SignalDesk at a Supabase project:
 Cloud sync uses team workspaces. The first person to sign in becomes the workspace **Admin**. Admins invite teammates in **Settings → Team members** as **Admin** or **User**; the invitee joins automatically after creating a SignalDesk account with that email and confirming it.
 
 - **Admins** manage team members, clients, social accounts, settings, Autopilot, the calendar, inbox, analytics, and approvals.
-- **Users** see the Command Center, Content Library, and Publishing Studio. Every post a User submits is held until an Admin approves it in **Team & Approvals**.
+- **Users** see the Command Center, Content Library, and Publishing Studio. Every post a User submits is held until an Admin approves it in **Approvals**.
 
 Running SignalDesk on your own? Turn on **Settings → Personal mode** to hide the Social Inbox and team members.
 
@@ -48,7 +48,7 @@ SignalDesk publishes posts itself. When you schedule a post, `/api/social` saves
 - Expired or revoked sign-ins mark the account **Reconnect needed** and notify admins.
 - If the connection drops after a post was sent, the job is marked **Check the account** instead of retrying, so nothing is posted twice. After checking, an admin can post it again from the post's details.
 
-Facebook Pages, Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinterest, X, YouTube, and TikTok connect **directly** through each network's official API, with no publishing-provider fee. Other networks can still go through Ayrshare if you add an Ayrshare key; direct connections always take priority.
+Facebook Pages (posts and Stories), Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinterest, X, YouTube, and TikTok connect **directly** through each network's official API, with no publishing-provider fee. Other networks can still go through Ayrshare if you add an Ayrshare key; direct connections always take priority.
 
 1. **Supabase.** Run `supabase/schema.sql` in the SQL editor and set `url` and `anonKey` in `js/config.js`. Those two values are browser-visible; never put the service-role key there. The schema creates a public `social-media` bucket for uploads, because networks download media from a public link.
 2. **Server settings.** Add the variables in `.env.example` to the Vercel project's Environment Variables:
@@ -80,6 +80,7 @@ Facebook Pages, Instagram (posts, Reels, and Stories), Threads, LinkedIn, Pinter
    - **TikTok:** at developers.tiktok.com create an app with **Login Kit** and the **Content Posting API** (Direct Post), scopes `user.info.basic`, `video.upload`, `video.publish`. Set `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`. Until TikTok audits the app, videos post as private. Videos only, up to 250 MB.
    - **Threads:** in your Meta app, add the **Access the Threads API** use case with `threads_basic`, `threads_content_publish`, and `threads_manage_insights` (post stats), add the redirect URL, and set `THREADS_APP_ID` and `THREADS_APP_SECRET` (the Threads app ID and secret, which differ from `META_APP_ID`). Posts: up to 500 characters, text, images, video, or carousels.
    - **Instagram Stories** use the client's Instagram connection, with no extra setup. Choose **Instagram Story** in the Publishing Studio; images are converted to a 9:16 JPEG.
+   - **Facebook Stories** use the client's Facebook Page connection, with no extra setup. Choose **Facebook Story** in the Publishing Studio. One image or video (up to 60 seconds, 9:16 is best). Stories show no caption, so the post text isn't sent. Pages only, not personal profiles.
 7. **Legal pages.** Meta, LinkedIn, and Pinterest ask for a privacy policy, terms, and data deletion instructions. SignalDesk serves them at `/privacy`, `/terms`, and `/data-deletion`. Set `LEGAL_CONTACT_EMAIL` (shown on all three pages) and `LEGAL_OPERATOR_NAME` (your name or business), plus optionally `LEGAL_GOVERNING_LAW` (for example `the State of New York, USA`). The privacy policy lists only the outside services this deployment has turned on, such as Resend or Anthropic. When someone removes SignalDesk in their Facebook settings, Meta calls the deletion callback, SignalDesk deletes that person's Facebook and Instagram connections, and Meta shows them a confirmation code they can look up at `/data-deletion`. Have a lawyer review the pages before offering SignalDesk to other businesses.
 8. **Connect accounts.** In **Social Accounts**, choose a client and select **Connect** on a network. Sign in on the network's own page, then choose which Page, Instagram account, LinkedIn profile or Page, or Pinterest account (and board) belongs to that client. Tokens stay on the server, encrypted; the browser never sees them.
 9. **Optional: Ayrshare** for other networks, the Social Inbox, and account-level analytics. Set `AYRSHARE_API_KEY` and use **Connect via Ayrshare**. For X, also create an X Developer App and set the two `X_TWITTER_*` variables.
@@ -163,7 +164,7 @@ Local static-file or Live Server previews can't run the API; use a Vercel deploy
 - Facebook and Instagram are connected and publishing on the live site. Pinterest refuses live Pins until Standard access is approved, so it's disconnected for now. LinkedIn publishing hasn't been tried against the live API yet, so expect small fixes on the first real posts.
 - Instagram only accepts JPEG images between 4:5 and 1.91:1. When a post publishes, SignalDesk converts other images (PNG, WebP, very tall or wide shapes) with `sharp`: transparent areas become white and the image is padded, not cropped, using its dominant color. The converted copy is stored under `system/instagram/` in the media bucket. The composer preview notes when this will happen.
 - Links get preview cards: Facebook receives the post's first link as the post link, and LinkedIn gets a card built from the page's Open Graph title, description, and image (SignalDesk reads the page, since LinkedIn's API doesn't). If the page can't be read, LinkedIn shows a plain card.
-- Direct publishing supports text, images, and video on Facebook, Instagram (Reels, Stories, and carousels of up to 10 items), LinkedIn, Pinterest (video Pins, or the video's cover as an image Pin), Threads, and X, and video on YouTube and TikTok. A chosen video cover is used by Instagram Reels, Facebook, YouTube, TikTok (frame only), Pinterest, and LinkedIn.
+- Direct publishing supports text, images, and video on Facebook (and Facebook Page Stories), Instagram (Reels, Stories, and carousels of up to 10 items), LinkedIn, Pinterest (video Pins, or the video's cover as an image Pin), Threads, and X, and video on YouTube and TikTok. A chosen video cover is used by Instagram Reels, Facebook, YouTube, TikTok (frame only), Pinterest, and LinkedIn.
 - Posts go out within about a minute of their time when the every-minute scheduler is running. A post approved after its time publishes on the next run.
 - Shared workspace state is a single JSON row; saves merge with the latest copy, but changes from teammates appear after a reload, not live. The app checks about once a minute and shows a notice with a **Reload** button when someone else has saved.
 - Autopilot skips articles already in a feed when it's connected (optionally queuing the newest one), checks feeds only when `/api/cron` runs, and does not post to YouTube. Instagram, Pinterest, and TikTok only receive articles that include an image. Removing a feed doesn't cancel posts it already scheduled; cancel them from the calendar.
@@ -228,7 +229,7 @@ The interface and browser checks need Google Chrome installed (set `CHROME` to i
 - `sw.js`, `manifest.webmanifest`, `icons/` — the installable app. `icons/logo.svg` is the SD mark and `icons/icon.svg` the app icon; the PNG icons, `img/og.png`, and the landing screenshots are rendered from them
 - `api/cron.js` — scheduled worker: publishing queue, Autopilot, comments, token upkeep, reports, and digests
 - `api/_lib/publishing.js` — the publishing queue, connections, and post management
-- `api/_lib/platforms.js` — direct Facebook, Instagram (including Stories), LinkedIn, and Pinterest connectors
+- `api/_lib/platforms.js` — direct Facebook and Instagram (including Stories), LinkedIn, and Pinterest connectors
 - `api/_lib/networks.js` — direct X, YouTube, TikTok, and Threads connectors
 - `api/_lib/media.js` — daily cleanup of unused uploads
 - `api/_lib/images.js` — converts images Instagram won't accept into JPEGs it will

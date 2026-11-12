@@ -12,11 +12,11 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const VIDEO_PATTERN = /\.(mp4|mov|m4v|webm)(?:[?#]|$)/i;
 
 const DIRECT_PLATFORMS = {
-  facebook: 'meta', instagram: 'meta', instagram_story: 'meta', linkedin: 'linkedin', pinterest: 'pinterest',
+  facebook: 'meta', facebook_story: 'meta', instagram: 'meta', instagram_story: 'meta', linkedin: 'linkedin', pinterest: 'pinterest',
   twitter: 'x', youtube: 'google', tiktok: 'tiktok', threads: 'threads'
 };
 // Instagram Stories post through the client's Instagram connection.
-const CONNECTION_PLATFORM = { instagram_story: 'instagram' };
+const CONNECTION_PLATFORM = { instagram_story: 'instagram', facebook_story: 'facebook' };
 
 class PublishError extends Error {
   // kind: auth (reconnect needed), rate_limit and temporary (retry), invalid (fix the post), unknown (may have posted)
@@ -218,6 +218,7 @@ const meta = {
 
   async publish(ctx) {
     if (ctx.job.platform === 'instagram_story') return publishInstagramStory(ctx);
+    if (ctx.job.platform === 'facebook_story') return publishFacebookStory(ctx);
     return ctx.job.platform === 'instagram' ? publishInstagram(ctx) : publishFacebook(ctx);
   },
 
@@ -246,7 +247,7 @@ const meta = {
 
   async metrics({ connection, job }) {
     // Story insights disappear after 24 hours, so they aren't tracked.
-    if (job.platform === 'instagram_story') return {};
+    if (job.platform === 'instagram_story' || job.platform === 'facebook_story') return {};
     if (job.platform === 'instagram') {
       const insights = await graph(`${job.external_id}/insights`, { token: connection.token, params: { metric: 'views,reach,likes,comments,shares,saved,total_interactions' } });
       const value = (name) => insights.data?.find((item) => item.name === name)?.values?.[0]?.value ?? null;
@@ -419,6 +420,50 @@ async function publishInstagramStory({ connection, job, content, stage, saveStag
   await markSent();
   const published = await graph(`${account}/media_publish`, { method: 'POST', token: connection.token, params: { creation_id: container }, sending: true });
   return { externalId: published.id, url: connection.username ? `https://www.instagram.com/stories/${connection.username}/` : '' };
+}
+
+// Facebook Page Stories: a photo is uploaded unpublished, then published as a Story. A video is started, fetched by
+// Facebook from its link, then finished. Stories have no caption, so the post text isn't sent.
+async function publishFacebookStory({ connection, content, stage, saveStage, markSent }) {
+  const page = connection.external_id;
+  const url = content.media[0];
+  if (!url) throw new PublishError('invalid', 'Facebook Stories need an image or video.');
+  if (content.media.length > 1) throw new PublishError('invalid', 'A Facebook Story takes one image or video. Schedule each one as its own Story.');
+  const storyUrl = `https://www.facebook.com/${page}`;
+  if (mediaKind(url) !== 'video') {
+    let photoId = stage.storyPhotoId;
+    if (!photoId) {
+      photoId = (await graph(`${page}/photos`, { method: 'POST', token: connection.token, params: { url, published: false } })).id;
+      await saveStage({ storyPhotoId: photoId });
+    }
+    await markSent();
+    const result = await graph(`${page}/photo_stories`, { method: 'POST', token: connection.token, params: { photo_id: photoId }, sending: true });
+    return { externalId: result.post_id ? String(result.post_id) : photoId, url: storyUrl };
+  }
+  let videoId = stage.storyVideoId;
+  if (!videoId) {
+    const start = await graph(`${page}/video_stories`, { method: 'POST', token: connection.token, params: { upload_phase: 'start' } });
+    if (!start.video_id || !/^https:\/\/rupload\.facebook\.com\//.test(start.upload_url || '')) throw new PublishError('temporary', 'Facebook didn’t start the Story upload. Trying again shortly.');
+    const { response, body } = await request(start.upload_url, { method: 'POST', headers: { authorization: `OAuth ${connection.token}`, file_url: url } });
+    if (!response.ok || body.error || body.success === false) throw metaError(body, response.status);
+    videoId = start.video_id;
+    const since = new Date().toISOString();
+    await saveStage({ storyVideoId: videoId, processingSince: since });
+    stage = { ...stage, storyVideoId: videoId, processingSince: since };
+  }
+  const status = (await graph(videoId, { token: connection.token, params: { fields: 'status' } })).status || {};
+  if (['error', 'expired'].includes(status.video_status) || status.uploading_phase?.status === 'error' || status.processing_phase?.status === 'error') {
+    await saveStage({ storyVideoId: null });
+    const reason = status.processing_phase?.error?.message || status.uploading_phase?.error?.message;
+    throw new PublishError('invalid', `Facebook couldn't process the Story video${reason ? `: ${reason}` : '.'}`);
+  }
+  if (status.uploading_phase?.status && status.uploading_phase.status !== 'complete') {
+    if (Date.now() - Date.parse(stage.processingSince) > IG_PROCESSING_LIMIT_MS) throw new PublishError('invalid', 'Facebook was still receiving the Story video after 30 minutes.');
+    return { pending: true, retryInSeconds: 45 };
+  }
+  await markSent();
+  const result = await graph(`${page}/video_stories`, { method: 'POST', token: connection.token, params: { upload_phase: 'finish', video_id: videoId }, sending: true });
+  return { externalId: result.post_id ? String(result.post_id) : videoId, url: storyUrl };
 }
 
 // --- LinkedIn: personal profiles and Pages ---

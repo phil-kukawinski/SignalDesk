@@ -919,7 +919,8 @@ function validatePublishInput(body) {
     const override = overrides[platform] || {};
     const postText = typeof override.text === 'string' ? override.text.trim() : text;
     const postMedia = override.mediaUrls === undefined ? mediaUrls : override.mediaUrls;
-    if (!postText) throw httpError(400, `Write post copy for ${platform} before publishing.`);
+    // Stories have no caption, so they can go out without text.
+    if (!postText && !['instagram_story', 'facebook_story'].includes(platform)) throw httpError(400, `Write post copy for ${platform} before publishing.`);
     if (postText.length > 10000) throw httpError(400, `Post copy for ${platform} must be 10,000 characters or fewer.`);
     if (!isMediaList(postMedia)) throw httpError(400, 'Media must use publicly accessible HTTPS URLs.');
     if (MEDIA_REQUIRED_PLATFORMS.has(platform) && !postMedia.length) {

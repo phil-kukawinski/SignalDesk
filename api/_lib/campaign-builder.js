@@ -24,6 +24,7 @@ const FORMAT_NOTES = {
   facebook: 'text, images, or one video (not both).',
   instagram: 'needs an image or video: 4:5 or 1:1 images, carousels of up to 10, Reels at 9:16 from 3 seconds to 15 minutes.',
   instagram_story: 'one 9:16 image or video of 3 to 60 seconds.',
+  facebook_story: 'one 9:16 image or video of up to 60 seconds, with no caption.',
   linkedin: 'text, images, or one video of 3 seconds to 30 minutes.',
   pinterest: 'needs a 2:3 image (up to 5) or one video of 4 seconds to 15 minutes.',
   tiktok: 'video only, 9:16, 3 seconds to 10 minutes.',

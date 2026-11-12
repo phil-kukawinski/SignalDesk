@@ -150,6 +150,40 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   assert.match(create.url + String(create.body || ''), /STORIES/);
   await assert.rejects(PROVIDERS.meta.publish(ctx({ job: { id: 'j', platform: 'instagram_story' }, connection: { token: 'pt', external_id: 'ig1' }, content: { text: '', media: ['https://cdn.test/a.mp4', 'https://cdn.test/b.mp4'] } })), /one image or video/);
 
+  // --- Facebook Page Stories: a photo is uploaded unpublished then published as a Story; a video is started,
+  // fetched by Facebook from its link, checked, then finished. No caption is sent.
+  calls.length = 0;
+  routes = [
+    [/graph\.facebook\.com\/v23\.0\/page1\/photos/, json({ id: 'photo-9' })],
+    [/graph\.facebook\.com\/v23\.0\/page1\/photo_stories/, json({ success: true, post_id: 4321 })]
+  ];
+  c = ctx({ job: { id: 'job-fs', platform: 'facebook_story' }, connection: { token: 'pt', external_id: 'page1' }, content: { text: 'Not shown', media: ['https://cdn.test/kit.jpg'] } });
+  out = await PROVIDERS.meta.publish(c);
+  assert.deepEqual(out, { externalId: '4321', url: 'https://www.facebook.com/page1' });
+  const upload = JSON.parse(calls.find((call) => /page1\/photos/.test(call.url)).body);
+  assert.equal(upload.published, false); assert.equal(upload.url, 'https://cdn.test/kit.jpg'); assert.equal(upload.message, undefined, 'stories carry no caption');
+  assert.equal(JSON.parse(calls.find((call) => /photo_stories/.test(call.url)).body).photo_id, 'photo-9');
+  assert.equal(c.stage.storyPhotoId, 'photo-9');
+  calls.length = 0;
+  let uploading = 'in_progress';
+  routes = [
+    [/graph\.facebook\.com\/v23\.0\/page1\/video_stories/, (url, init) => JSON.parse(init.body).upload_phase === 'start' ? json({ video_id: 'v77', upload_url: 'https://rupload.facebook.com/video-upload/v23.0/v77' }) : json({ success: true, post_id: 'vs-1' })],
+    [/rupload\.facebook\.com\/video-upload\/v23\.0\/v77/, json({ success: true })],
+    [/graph\.facebook\.com\/v23\.0\/v77/, () => json({ status: { video_status: 'processing', uploading_phase: { status: uploading } } })]
+  ];
+  c = ctx({ job: { id: 'job-fv', platform: 'facebook_story' }, connection: { token: 'pt', external_id: 'page1' }, content: { text: '', media: ['https://cdn.test/clip.mp4'] } });
+  out = await PROVIDERS.meta.publish(c);
+  assert.deepEqual(out, { pending: true, retryInSeconds: 45 }, 'waits while Facebook is still receiving the video');
+  const rupload = calls.find((call) => /rupload/.test(call.url));
+  assert.equal(rupload.headers.file_url, 'https://cdn.test/clip.mp4'); assert.equal(rupload.headers.authorization, 'OAuth pt');
+  uploading = 'complete';
+  out = await PROVIDERS.meta.publish(c);
+  assert.deepEqual(out, { externalId: 'vs-1', url: 'https://www.facebook.com/page1' });
+  assert.equal(calls.filter((call) => /rupload/.test(call.url)).length, 1, 'the video is sent once');
+  assert.equal(JSON.parse(calls.filter((call) => /video_stories/.test(call.url)).pop().body).video_id, 'v77');
+  await assert.rejects(PROVIDERS.meta.publish(ctx({ job: { id: 'j', platform: 'facebook_story' }, connection: { token: 'pt', external_id: 'page1' }, content: { text: '', media: ['https://cdn.test/a.jpg', 'https://cdn.test/b.jpg'] } })), /one image or video/);
+  assert.equal(CONNECTION_PLATFORM.facebook_story, 'facebook'); assert.equal(adapterFor('facebook_story'), PROVIDERS.meta);
+
   // --- Video covers: TikTok takes the frame time, YouTube the uploaded image, Reels either
   calls.length = 0;
   statusReplies = ['PUBLISH_COMPLETE'];

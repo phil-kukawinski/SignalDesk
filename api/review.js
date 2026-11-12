@@ -11,7 +11,7 @@ const LOOKAHEAD_DAYS = 60;
 // A link opened on one campaign shows all of it, however far ahead it runs.
 const CAMPAIGN_LOOKAHEAD_DAYS = 365;
 const MAX_BATCH = 25;
-const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'X', threads: 'Threads', bluesky: 'Bluesky', gmb: 'Google Business Profile', reddit: 'Reddit', telegram: 'Telegram', snapchat: 'Snapchat', whatsapp: 'WhatsApp' };
+const PLATFORM_LABELS = { facebook: 'Facebook', facebook_story: 'Facebook Story', instagram: 'Instagram', instagram_story: 'Instagram Story', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', youtube: 'YouTube', twitter: 'X', threads: 'Threads', bluesky: 'Bluesky', gmb: 'Google Business Profile', reddit: 'Reddit', telegram: 'Telegram', snapchat: 'Snapchat', whatsapp: 'WhatsApp' };
 
 async function findLink(token) {
   if (typeof token !== 'string' || !/^[\w-]{40,64}$/.test(token)) return null;

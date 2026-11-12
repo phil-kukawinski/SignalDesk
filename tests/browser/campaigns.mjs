@@ -189,7 +189,9 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
 
   // Review page: approve a whole campaign, in chunks, with one notification at the end.
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__review=[];window.fetch=async(url,init)=>{const body=JSON.parse(init.body);window.__review.push(body);const posts=Array.from({length:30},(_,i)=>({id:String(i).padStart(36,'0'),title:'Post '+i,scheduledFor:new Date(Date.now()+864e5*(i+1)).toISOString(),status:'waiting',clientStatus:i===0?'changes_requested':null,campaign:'Launch',versions:[{platform:'facebook',label:'Facebook',text:'Hello '+i,media:[]}],notes:[]}));const result=body.action==='load'?{client:{name:'PK Works',initials:'PK',color:'#336699',logo:''},workspace:'Studio',expiresAt:new Date(Date.now()+864e6).toISOString(),campaign:body.campaign,posts}:{ok:true,approved:body.postIds?.length||1,released:body.postIds?.length||0};return{ok:true,json:async()=>result};};` });
-  await send('Page.navigate', { url: new URL('../../review.html', import.meta.url).href + '#t=' + 'a'.repeat(43) + '&campaign=Launch' }); await wait(1200);
+  await send('Page.navigate', { url: new URL('../../review.html', import.meta.url).href + '#t=' + 'a'.repeat(43) + '&campaign=Launch' }); await wait(600);
+  // Under a busy machine the page can take longer to load; wait for its first request rather than a fixed time.
+  for (let i = 0; i < 40 && !(await evaluate(`Boolean(window.__review?.length&&document.querySelector('#review-approve-all')?.textContent)`)); i++) await wait(150);
   const first = await json(`{load:__review[0],intro:document.querySelector('#review-intro').textContent,button:document.querySelector('#review-approve-all').textContent}`);
   log.push('review: ' + first.intro + ' | ' + first.button);
   if (first.load.campaign !== 'Launch' || !/^Launch: 30 upcoming/.test(first.intro) || first.button !== 'Approve all 29') fail('the review page should open on the campaign and offer to approve what’s undecided');

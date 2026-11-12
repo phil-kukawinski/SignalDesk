@@ -159,7 +159,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 2. Sign in on the network's own page and choose the Page, account, or board for this client.
 3. If a connection fails, open **Settings → Setup & health → Recent problems** to see the network's exact reason.
 
-**Instagram Stories** use the Instagram connection: pick **Instagram Story** in the Publishing Studio (images are converted to 9:16). Any network that isn't connected can still use a **reminder**: SignalDesk notifies you at the scheduled time with the copy ready to paste.
+**Instagram Stories** use the Instagram connection: pick **Instagram Story** in the Publishing Studio (images are converted to 9:16). **Facebook Stories** use the Facebook Page connection: pick **Facebook Story** (one image or video up to 60 seconds; Stories show no caption). Any network that isn't connected can still use a **reminder**: SignalDesk notifies you at the scheduled time with the copy ready to paste.
 
 ### Create a post (Publishing Studio)
 
@@ -192,7 +192,7 @@ The brand kit opens after you add a client. You can also open it any time from t
   - Drag a post or draft to reschedule it, then confirm. Day and Week views set the day and time; Month sets the day and keeps the time. Click a post for its details.
   - The gold bands are good times to post: general starter times at first, then based on your own results.
   - **Print** saves the visible range as a PDF.
-- **Team & Approvals:** posts from members with the User role wait here for an admin to approve.
+- **Approvals:** posts from members with the User role wait here for an admin to approve.
 - **Client review links** (client card → **Review link**): clients approve or request changes without an account, and can subscribe to a calendar feed.
 - **Link in bio** (client card): a public page at `/b/client-name`.
 

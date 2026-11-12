@@ -21,7 +21,7 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')closeMoreAct
 let studioTimes={key:'',loading:'',points:[],weeks:0};
 async function loadStudioTimes(){const client=selectedClient('#client-select');if(!client||!cloudFeaturesAvailable()||currentRole!=='admin'||studioTimes.key===client.id||studioTimes.loading===client.id)return;studioTimes.loading=client.id;try{const data=await callSocialApi({action:'best-times',clientId:client.id});studioTimes={key:client.id,loading:'',points:data.points||[],weeks:data.weeks||0};}catch(error){console.error('Best times failed:',error);studioTimes={key:client.id,loading:'',points:[],weeks:0};}renderSuggestedTimes();}
 function studioTimeSource(){
-  const client=selectedClient('#client-select'),points=client&&studioTimes.key===client.id?studioTimes.points:[],networks=[...new Set(selectedPlatforms().map(platform=>platform==='instagram_story'?'instagram':platform))];
+  const client=selectedClient('#client-select'),points=client&&studioTimes.key===client.id?studioTimes.points:[],networks=[...new Set(selectedPlatforms().map(platform=>platform==='instagram_story'?'instagram':platform==='facebook_story'?'facebook':platform))];
   const own=networks.length?points.filter(point=>networks.includes(point.platform)):[];
   let result=own.length?computeBestTimes(own):{enough:false};
   if(result.enough)return{windows:result.windows,kind:'network',sample:result.sample,networks:[...new Set(own.map(point=>point.platform))],client};
