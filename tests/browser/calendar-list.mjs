@@ -14,7 +14,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
     const pk=clients[0].id,other=clients[1].id;
     serverPosts=[post('p1',pk,'Tomorrow on Facebook',1,['facebook']),post('p2',other,'Instagram for the other client',3,['instagram'],'pending_approval'),post('p0',pk,'Already out',-2,['facebook'],'published')];serverPostsLoadedAt=Date.now();
     window.__far=post('p9',pk,'Far ahead on X',200,['twitter']);window.__calls=[];
-    callSocialApi=async(body)=>{__calls.push(body);if(body.action==='posts'){const from=Date.parse(body.from),to=Date.parse(body.to),t=Date.parse(__far.scheduledFor);return{posts:t>=from&&t<to?[__far]:[],now:new Date().toISOString()};}if(body.action==='autopilot')return{feeds:[],items:[]};return{};};
+    window.__store=[...serverPosts,__far];callSocialApi=async(body)=>{__calls.push(body);if(body.action==='posts'){const from=Date.parse(body.from),to=Date.parse(body.to);return{posts:__store.filter(p=>{const t=Date.parse(p.scheduledFor);return t>=from&&t<to;}),now:new Date().toISOString()};}if(body.action==='autopilot')return{feeds:[],items:[]};return{};};
     window.__clients=[pk,other];
   })()`);
   await evaluate(`showView('calendar');document.querySelector('[data-cal-view="list"]').click()`); await wait(600);
@@ -22,7 +22,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('list: ' + JSON.stringify(all));
   if (JSON.stringify(all.titles) !== JSON.stringify(['Tomorrow on Facebook', 'Instagram for the other client', 'Far ahead on X'])) fail('the list should show upcoming posts soonest first, including ones months ahead: ' + all.titles);
   if (!/^3 upcoming posts/.test(all.count || '') || all.label !== 'Upcoming posts' || !all.arrows || !all.timeline || !all.print) fail('the list should replace the timeline and hide the date arrows and Print');
-  if (all.pages !== 4) fail('a year ahead should load in four 100-day windows: ' + all.pages);
+  if (all.pages !== 5) fail('35 days back to a year ahead should load in five 98-day windows: ' + all.pages);
   // Filters: client, then network.
   await evaluate(`(()=>{const s=document.querySelector('#calendar-client');s.value=__clients[1];s.dispatchEvent(new Event('change',{bubbles:true}));})()`); await wait(200);
   const byClient = await json(`[...document.querySelectorAll('.calendar-list-row b')].map(el=>el.textContent)`);
@@ -33,6 +33,18 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`(()=>{const n=document.querySelector('#calendar-network');n.value='tiktok';n.dispatchEvent(new Event('change',{bubbles:true}));})()`); await wait(200);
   if (!/No upcoming posts match/.test(await evaluate(`document.querySelector('#calendar-list').textContent`))) fail('an empty result should say so');
   await evaluate(`(()=>{const n=document.querySelector('#calendar-network');n.value='';n.dispatchEvent(new Event('change',{bubbles:true}));})()`); await wait(200);
+  // A post months ahead opens with its details, not “no longer on the calendar”.
+  await evaluate(`document.querySelector('.calendar-list-row[data-open-post="p9"]').click()`); await wait(300);
+  const far = await json(`{title:document.querySelector('#post-dialog-body h2')?.textContent||'',body:document.querySelector('#post-dialog-body')?.textContent.slice(0,80)}`);
+  if (far.title !== 'Far ahead on X') fail('a post months ahead should open: ' + JSON.stringify(far));
+  await evaluate(`document.querySelector('#post-dialog').close()`); await wait(100);
+  // The month view, paged past the first two months, loads those months and shows their posts.
+  await evaluate(`serverPostsUntil=0;serverPostsLoadedThrough=0;serverPosts=serverPosts.filter(p=>p.id!=='p9');__calls.length=0;document.querySelector('[data-cal-view="month"]').click()`); await wait(300);
+  await evaluate(`(async()=>{const target=new Date(Date.parse(__far.scheduledFor));while(calCursor.getFullYear()*12+calCursor.getMonth()<target.getFullYear()*12+target.getMonth()){document.querySelector('#next-month').click();await new Promise(r=>setTimeout(r,30));}})()`); await wait(800);
+  const month = await json(`{events:document.querySelector('#calendar-grid').textContent.includes('Far ahead on X'),loaded:serverPosts.some(p=>p.id==='p9'),pages:__calls.filter(c=>c.action==='posts').length}`);
+  log.push('month far: ' + JSON.stringify(month));
+  if (!month.events || !month.loaded) fail('paging the month view months ahead should load and show those posts: ' + JSON.stringify(month));
+  await evaluate(`document.querySelector('[data-cal-view="list"]').click()`); await wait(300);
   // A row opens the post.
   await evaluate(`window.__opened=null;openPostDialog=id=>{__opened=id;};document.querySelector('.calendar-list-row[data-open-post="p1"]').click()`); await wait(200);
   if (await evaluate(`__opened`) !== 'p1') fail('selecting a row should open the post');
