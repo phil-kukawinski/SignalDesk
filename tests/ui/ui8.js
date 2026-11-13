@@ -99,6 +99,7 @@ window.addEventListener('load',()=>setTimeout(async()=>{const log=[];const L=(k,
  const pick=names=>{const box=new DataTransfer();names.forEach(([name,type])=>box.items.add(new File(['x'],name,{type})));const input=document.querySelector('#csv-media');input.files=box.files;input.dispatchEvent(new Event('change'));};
  pick([['1.png','image/png'],['2.mp4','video/mp4']]);await wait(80);
  const after=csvRows.map(r=>r.status+(r.errors.length?'('+r.errors[0]+')':'')).join(',');
+ {const count=document.querySelector('#csv-media-count').textContent;if(!count.startsWith('2 media files added: 1.png, 2.mp4')||!count.includes('Still needed: 1 file the spreadsheet names (3.png)'))setTimeout(()=>{throw new Error('the count should name the files still needed: '+count)});}
  document.querySelector('#csv-drafts').click();await wait(120);
  const media=savedDrafts.map(d=>d.title+':'+d.state.uploadedMedia.map(m=>m.name+'@'+m.url).join('+')).join(' ; ');
  L('csvMedia',before+' -> '+after+' | uploads:'+uploads.join(',')+' | '+media+' | count:'+document.querySelector('#csv-media-count').textContent);
