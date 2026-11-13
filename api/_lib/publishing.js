@@ -1024,6 +1024,8 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
   const points = Math.ceil(range / step);
   const days = Array.from({ length: points }, (_, index) => dayKey(now - ((points - 1 - index) * step + step - 1) * 86400000));
   const daily = Object.fromEntries(days.map((day) => [day, 0]));
+  // The same points split by network, so the chart can compare networks.
+  const dailyByPlatform = Object.fromEntries(days.map((day) => [day, {}]));
   const bucketFor = (time) => days[Math.min(points - 1, Math.max(0, points - 1 - Math.floor((now - time) / (step * 86400000))))];
   const byPlatform = {};
   // Per client, for goals: engagement rate counts only posts that report an audience.
@@ -1040,7 +1042,7 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
       entry.posts += 1;
       if (row.audience) { entry.engagements += row.engagements; entry.audience += row.audience; reach += row.audience; rated += row.engagements; }
       const key = step === 1 ? dayKey(row.at) : bucketFor(row.at);
-      if (key in daily) daily[key] += row.engagements;
+      if (key in daily) { daily[key] += row.engagements; dailyByPlatform[key][row.platform] = (dailyByPlatform[key][row.platform] || 0) + row.engagements; }
     } else if (row.at >= windowStart) {
       previous += row.engagements;
       // The same point one time frame earlier, so the chart can show both.
@@ -1050,7 +1052,7 @@ async function overviewData(workspaceId, timeZone, clientId = null, rangeDays = 
   }
   return {
     clientId, clicks, audience, published, range, step,
-    engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day, index) => ({ day, engagements: daily[day], previous: previousDaily[index] })), byPlatform },
+    engagement: { total, previous, measured, reach, rate: reach ? Math.round(rated / reach * 10000) / 100 : null, daily: days.map((day, index) => ({ day, engagements: daily[day], previous: previousDaily[index], platforms: dailyByPlatform[day] })), byPlatform },
     clients: Object.fromEntries(Object.entries(byClient).map(([id, entry]) => [id, { posts: entry.posts, engagementRate: entry.audience ? Math.round(entry.engagements / entry.audience * 10000) / 100 : null }])),
     connections: {
       active: connections.filter((item) => item.status === 'active').length,

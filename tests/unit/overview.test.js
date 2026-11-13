@@ -35,6 +35,8 @@ const { overviewData } = require(ROOT + '/api/_lib/publishing.js');
   range = await overviewData('w1', 'America/New_York', null, 365);
   assert.deepEqual([range.step, range.engagement.total, range.engagement.previous, range.engagement.daily.length], [7, 17, 1, 53]);
   assert.equal(range.engagement.daily.reduce((sum, point) => sum + point.engagements, 0), 17, 'every post lands in a week');
+  for (const point of range.engagement.daily) assert.equal(Object.values(point.platforms).reduce((sum, value) => sum + value, 0), point.engagements, 'each point splits fully by network');
+  assert.deepEqual(Object.keys(range.engagement.byPlatform).sort(), [...new Set(range.engagement.daily.flatMap((point) => Object.keys(point.platforms)))].sort(), 'the same networks appear in the split');
   assert.equal((await overviewData('w1', 'America/New_York', null, 12345)).range, 30, 'unknown time frames fall back to 30 days');
   const { insightsNote } = require(ROOT + '/api/_lib/sync.js');
   const blank = Array.from({ length: 4 }, () => ({ metrics: { likes: 2, reach: null, views: null } }));

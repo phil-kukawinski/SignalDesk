@@ -1818,3 +1818,15 @@ button.profile:hover .chevron{background:var(--surface-2)}
 .profile-menu-theme button{border:0;background:transparent;color:var(--text-muted);font-size:var(--text-xs);font-weight:600;padding:4px 8px;border-radius:6px}
 .profile-menu-theme button[aria-checked="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
 .profile-menu-theme button:focus-visible{outline:2px solid var(--accent-border)}
+
+/* Analytics: Engagement over time, by network */
+.trend-mode{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:2px;flex:none}
+.trend-mode button{border:0;background:transparent;color:var(--text-muted);font-size:var(--text-sm);font-weight:600;padding:5px 12px;border-radius:8px;white-space:nowrap}
+.trend-mode button[aria-checked="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+.trend-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.trend-key{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);border-radius:999px;padding:4px 11px;font-size:var(--text-xs);font-weight:600}
+.trend-key i{width:12px;height:3px;border-radius:2px;flex:none}
+.trend-key[aria-pressed="false"]{color:var(--text-faint);background:transparent;border-style:dashed}
+.trend-key[aria-pressed="false"] i{opacity:.3}
+.trend-key:hover{border-color:var(--border-strong)}
+@media(max-width:620px){.analytics-trend-panel .panel-header{flex-wrap:wrap}.trend-mode{width:100%}.trend-mode button{flex:1}}
