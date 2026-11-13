@@ -33,12 +33,16 @@ function withDefaults(row) {
   return { ...DEFAULT_PREFERENCES, ...(row || {}) };
 }
 
+// Network colors, matching the charts in SignalDesk.
+const NETWORK_COLORS = { facebook: '#2563eb', facebook_story: '#60a5fa', instagram: '#db2777', instagram_story: '#f472b6', linkedin: '#0d9488', threads: '#7c3aed', twitter: '#d97706', pinterest: '#dc2626', youtube: '#ea580c', tiktok: '#0891b2' };
+const safeColor = (value) => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#8d95a3';
 function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these in SignalDesk under Settings → Notifications.' }) {
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#101828;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
-    ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;border-radius:10px;padding:12px 14px;margin:0 0 8px">
-      <div style="font:700 13px Arial,sans-serif;color:#101828">${escapeHtml(item.title)}</div>
+    ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;${item.color ? `border-left:4px solid ${safeColor(item.color)};` : ''}border-radius:10px;padding:12px 14px;margin:0 0 8px">
+      <div style="font:700 13px Arial,sans-serif;color:#101828">${item.color ? `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${safeColor(item.color)};margin-right:6px"></span>` : ''}${escapeHtml(item.title)}</div>
+      ${item.bar !== undefined ? `<div style="background:#eef0f3;border-radius:4px;height:8px;margin-top:8px"><div style="width:${Math.max(2, Math.min(100, Math.round(item.bar)))}%;background:${safeColor(item.color || '#0b5fdc')};height:8px;border-radius:4px"></div></div>` : ''}
       ${item.body ? `<div style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin-top:4px">${escapeHtml(item.body)}</div>` : ''}
       ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
@@ -275,11 +279,15 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
         const monthLabel = new Date(Date.UTC(previous.year, previous.month - 1, 15)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
         const totals = report.totals;
         const top = [...report.rows].sort((a, b) => (b.metrics.engagements || 0) - (a.metrics.engagements || 0)).slice(0, 5);
+        const { PLATFORM_LABELS } = require('./publishing');
+        const label = (platform) => PLATFORM_LABELS[platform] || platform;
+        const networks = Object.entries(report.rows.reduce((all, item) => { const entry = all[item.platform] ||= { posts: 0, engagements: 0, views: 0 }; entry.posts += 1; entry.engagements += item.metrics.engagements || 0; entry.views += item.metrics.views || 0; return all; }, {})).sort((a, b) => b[1].engagements - a[1].engagements);
+        const bestNetwork = Math.max(1, ...networks.map(([, entry]) => entry.engagements));
         const content = renderEmail({
           eyebrow: (row.state?.settings?.name || 'Your social media team').toUpperCase(),
           heading: `${client.name} social report: ${monthLabel}`,
           intro: `${report.postCount} post${report.postCount === 1 ? '' : 's'} published · ${formatNumber(totals.views)} views${vs(totals.views, prior?.totals?.views)} · ${formatNumber(totals.engagements)} engagements${vs(totals.engagements, prior?.totals?.engagements)}${totals.engagementRate !== null ? ` · ${totals.engagementRate}% engagement rate` : ''}.`,
-          sections: [...(highlights.length ? [{ title: 'Highlights', items: highlights.map((line) => ({ title: line })) }] : []), ...(top.length ? [{ title: 'Top posts', items: top.map((item) => ({ title: `${item.platform} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [])],
+          sections: [...(highlights.length ? [{ title: 'Highlights', items: highlights.map((line) => ({ title: line })) }] : []), ...(networks.length > 1 ? [{ title: 'By network', items: networks.map(([platform, entry]) => ({ title: `${label(platform)}: ${formatNumber(entry.engagements)} engagements`, meta: `${entry.posts} post${entry.posts === 1 ? '' : 's'} · ${formatNumber(entry.views)} views`, color: NETWORK_COLORS[platform], bar: entry.engagements / bestNetwork * 100 })) }] : []), ...(top.length ? [{ title: 'Top posts', items: top.map((item) => ({ color: NETWORK_COLORS[item.platform], title: `${label(item.platform)} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [])],
           showCta: false,
           footer: 'Metrics come from each network and may change slightly as they update.'
         });
@@ -295,4 +303,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { NETWORK_COLORS, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

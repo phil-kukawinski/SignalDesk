@@ -1830,3 +1830,13 @@ button.profile:hover .chevron{background:var(--surface-2)}
 .trend-key[aria-pressed="false"] i{opacity:.3}
 .trend-key:hover{border-color:var(--border-strong)}
 @media(max-width:620px){.analytics-trend-panel .panel-header{flex-wrap:wrap}.trend-mode{width:100%}.trend-mode button{flex:1}}
+
+/* Network colors in tables, heatmap, and charts */
+.net-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;flex:none}
+tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
+.net-cell{white-space:nowrap}
+.best-times-panel .heat-cell{background:color-mix(in srgb,var(--heat-color,var(--accent)) calc(var(--heat) * 100%),var(--surface-2))}
+.best-times-panel .heat-cell.empty{background:var(--surface-2)}
+.heat-network{display:inline-flex;align-items:center;gap:2px;flex:none}
+.heat-network select{min-width:150px}
+#view-overview .performance-panel .panel-header{flex-wrap:wrap}

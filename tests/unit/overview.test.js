@@ -38,6 +38,15 @@ const { overviewData } = require(ROOT + '/api/_lib/publishing.js');
   for (const point of range.engagement.daily) assert.equal(Object.values(point.platforms).reduce((sum, value) => sum + value, 0), point.engagements, 'each point splits fully by network');
   assert.deepEqual(Object.keys(range.engagement.byPlatform).sort(), [...new Set(range.engagement.daily.flatMap((point) => Object.keys(point.platforms)))].sort(), 'the same networks appear in the split');
   assert.equal((await overviewData('w1', 'America/New_York', null, 12345)).range, 30, 'unknown time frames fall back to 30 days');
+  {
+    const { NETWORK_COLORS, renderEmail } = require('../../api/_lib/notify.js');
+    const app = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../js/overview.js'), 'utf8');
+    for (const [platform, color] of Object.entries(NETWORK_COLORS)) assert.ok(app.includes(`${platform}:'${color}'`), `${platform} has the same color in the app and in emails`);
+    const email = renderEmail({ heading: 'H', intro: 'I', sections: [{ title: 'By network', items: [{ title: 'Facebook', color: '#2563eb', bar: 50 }, { title: 'Bad', color: 'red;x:y', bar: 500 }] }] });
+    assert.match(email.html, /border-left:4px solid #2563eb/);
+    assert.match(email.html, /width:50%;background:#2563eb/);
+    assert.ok(!email.html.includes('red;x:y') && email.html.includes('width:100%'), 'colors are checked and bars capped');
+  }
   const { insightsNote } = require(ROOT + '/api/_lib/sync.js');
   const blank = Array.from({ length: 4 }, () => ({ metrics: { likes: 2, reach: null, views: null } }));
   assert.match(insightsNote('facebook', blank), /Reconnect Facebook/);
