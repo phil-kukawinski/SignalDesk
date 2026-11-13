@@ -24,6 +24,11 @@ const darkQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
 function storedTheme(){try{return localStorage.getItem(THEME_KEY)||'system';}catch{return 'system';}}
 function applyTheme(){const choice=storedTheme(),dark=choice==='dark'||(choice==='system'&&darkQuery?.matches);document.documentElement.dataset.theme=dark?'dark':'light';const select=$('#theme-select');if(select)select.value=choice;$('meta[name="theme-color"]')?.setAttribute('content',dark?'#000000':'#5b8db8');}
 $('#theme-select')?.addEventListener('change',event=>{try{localStorage.setItem(THEME_KEY,event.target.value);}catch{}applyTheme();});
+// Text size and density, per browser like the theme. The page applies them before it draws (see index.html).
+const DISPLAY_PREFS=[['text','signaldesk-text','#text-size-select',['normal','large','larger']],['density','signaldesk-density','#density-select',['comfortable','compact']]];
+function applyDisplayPrefs(){DISPLAY_PREFS.forEach(([key,storage,selector,values])=>{let value=values[0];try{value=localStorage.getItem(storage)||value;}catch{}if(!values.includes(value))value=values[0];document.documentElement.dataset[key]=value;const select=$(selector);if(select)select.value=value;});}
+DISPLAY_PREFS.forEach(([key,storage,selector])=>$(selector)?.addEventListener('change',event=>{try{localStorage.setItem(storage,event.target.value);}catch{}applyDisplayPrefs();if(typeof timelineKey!=='undefined')timelineKey=null;if(typeof renderCalendar==='function')renderCalendar();}));
+applyDisplayPrefs();
 darkQuery?.addEventListener?.('change',applyTheme);
 applyTheme();
 
