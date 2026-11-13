@@ -1,12 +1,18 @@
 # SignalDesk: your task list
 
-Last updated November 5, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 12, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
 Copy-ready answers and screencast scripts for the reviews are in [app-review.md](app-review.md).
 
 ## A few minutes each
+
+- [x] **New: reconnect X.** Done November 12. Its connection expires November 12. In Social Accounts, choose PK Works and select **Switch** on the X card.
+- [ ] **New: test a Facebook Story.** In the Publishing Studio, pick **Facebook Story** and schedule one photo and one short video (under 60 seconds, 9:16). If the video fails, send me the error from the post's panel.
+- [x] **New: try the video cover tools on real posts.** Looked good, November 12. On a scheduled video in the calendar, use **Choose a frame**. Also import a CSV that uses media file names and the `cover` column.
+- [ ] **New: send the usage export after the November 17 trend scan,** to confirm what a 6-search scan costs.
+- [x] **New: delete the old `signaldesk` Anthropic key.** Done November 12; `signaldesk-new` is the only key.
 
 - [x] **0. Run the latest database update. Do this first.** Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health will flag a missing table, Activity shows post events only, and the database's double-booking check stays off.
 - [ ] **1. Ask Google to index the home page.** In Search Console, paste `https://socialsignaldesk.com/` into URL Inspection and click Request indexing.
@@ -22,7 +28,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [ ] **8. Apply for Unsplash production access.** Make sure your Access Key is in Vercel as `UNSPLASH_ACCESS_KEY`. Then search for a photo in the Publishing Studio, attach it, and take a screenshot showing "Photo by [name] on Unsplash" for the application. Demo access allows 50 requests an hour.
 - [ ] **9. Create the reviewer login.** Follow "Before you submit" in [app-review.md](app-review.md). The Meta, LinkedIn, and Pinterest reviews all use it.
 - [ ] **10. Watch for LinkedIn's reply on app 2 (company Pages).** LinkedIn denied the Community Management API request with "Business verification failed," and you sent a vetting appeal on November 3, 2026. Watch your Gmail and any `pkworks.co` inboxes for a request for documents. Have proof of your business ready, and make sure the business name, address, website, and LinkedIn Page all match.
-- [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pinterest refuses to create live Pins, so scheduled Pins fail. Facebook and Instagram aren't affected. The answers are in [app-review.md](app-review.md).
+- [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pinterest refuses to create live Pins, so scheduled Pins fail, and the website lists Pinterest as coming soon. Tell me when it's approved so I can update the website. The answers are in [app-review.md](app-review.md).
 - [ ] **12. Upgrade to Vercel Pro and Supabase Pro.** This is quick but costs money, so wait until just before you invite anyone else. Check what backups Supabase Pro includes while you're there, since task A depends on them.
 
 ## About an hour each
@@ -41,7 +47,7 @@ Added November 5, 2026, from the outside review.
   - Upload a file over 50 MB and a video the network won't accept. Each should be refused before scheduling.
 - [ ] **C. Check that a repeat post keeps its local time across a clock change.** Daylight saving ended November 1, so the next real change is March 14, 2027. Set a weekly repeat that spans it and check its times on the calendar.
 - [ ] **D. Confirm that one workspace can't see another's data.** Use a second real workspace with a test client, before any paying customer signs up. Sign in to each one and confirm neither shows the other's clients, posts, or files. Create only this one test account, because of Supabase's email limit.
-- [ ] **E. Check how the Threads and X test post went out.** Open the PK Works test post's details and see whether those two were direct posts or reminders. Tell me which, so the docs and the report can say for sure.
+- [x] **E. Check how the Threads and X test post went out.** Both published directly (November 12). The website now lists them as direct networks. Open the PK Works test post's details and see whether those two were direct posts or reminders. Tell me which, so the docs and the report can say for sure.
 
 ## Half a day or more, with waiting
 
@@ -51,10 +57,10 @@ Added November 5, 2026, from the outside review.
 
 ## Optional: the other four networks
 
-SignalDesk can connect to these directly, but the website now advertises them as reminders only. Do these only if you want to post to them automatically, and tell me when one is ready so I can update the website.
+SignalDesk can connect to these directly. Threads and X now publish directly and the website says so; YouTube and TikTok are still advertised as reminders. Tell me when either is ready so I can update the website.
 
-- [ ] **18. Threads.** Add the **Access the Threads API** use case to the Meta app. It goes through App Review with task 17.
-- [ ] **19. X.** No review is needed, but posting through the API needs an X plan that includes writes.
+- [x] **18. Threads.** Publishing works for PK Works (November 12). Other people can connect only after Meta's App Review (task 17) and the app going Live (task 22).
+- [x] **19. X.** Publishing works (November 12). X connections expire, so reconnect when Social Accounts says to.
 - [ ] **20. YouTube.** Needs Google verification of the app and a YouTube API audit. Uploads stay private until the audit passes.
 - [ ] **21. TikTok.** Needs the Content Posting API audit and a screen recording. Posts stay private until the audit passes.
 

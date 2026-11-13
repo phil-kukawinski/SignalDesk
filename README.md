@@ -2,7 +2,7 @@
 
 SignalDesk is a product of [PK Works](https://www.pkworks.co).
 
-A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, LinkedIn, and Pinterest, and reminders for Threads, X, YouTube, and TikTok. Direct connectors for those four exist but need each network's own setup. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
+A responsive, browser-based workspace for planning, approving, scheduling, and publishing social media posts across multiple clients, with direct publishing to Facebook, Instagram, Threads, X, and LinkedIn, Pinterest coming soon (it publishes once Pinterest approves Standard access), and reminders for YouTube and TikTok. Direct connectors for those two exist but need each network's own audit. It is an original project inspired by common social media management workflows, not a copy of Social News Desk.
 
 Live site: https://socialsignaldesk.com
 
