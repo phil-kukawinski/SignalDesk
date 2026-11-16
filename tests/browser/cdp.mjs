@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const ROOT = path.resolve(new URL('.', import.meta.url).pathname, '../..');
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=9333', '--user-data-dir=' + (process.env.PROFILE || fs.mkdtempSync(path.join(os.tmpdir(), 'signaldesk-chrome-'))), '--window-size=1400,1000', 'about:blank'], { stdio: 'ignore' });
+const PROFILE = process.env.PROFILE || fs.mkdtempSync(path.join(os.tmpdir(), 'signaldesk-chrome-'));
+// Downloads go into the throwaway profile, not ~/Downloads.
+if (!process.env.PROFILE) { fs.mkdirSync(path.join(PROFILE, 'Default'), { recursive: true }); fs.writeFileSync(path.join(PROFILE, 'Default', 'Preferences'), JSON.stringify({ download: { default_directory: path.join(PROFILE, 'downloads'), prompt_for_download: false } })); }
+const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=9333', '--user-data-dir=' + PROFILE, '--window-size=1400,1000', 'about:blank'], { stdio: 'ignore' });
 let ws;
 for (let i = 0; i < 50 && !ws; i++) { try { const list = await (await fetch('http://127.0.0.1:9333/json')).json(); const page = list.find((t) => t.type === 'page'); if (page) ws = new WebSocket(page.webSocketDebuggerUrl); } catch {} if (!ws) await new Promise((r) => setTimeout(r, 200)); }
 await new Promise((r) => ws.addEventListener('open', r));
