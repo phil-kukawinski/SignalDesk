@@ -818,7 +818,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (post.created_by && post.created_by !== user.id) {
       await notify({
         workspaceId, audience: 'users', userIds: [post.created_by], type: 'approval_decided', category: 'approvals',
-        title: 'Your post needs changes', body: `“${post.title || 'Your post'}” wasn’t approved${note ? `: ${note}` : '.'}`, view: 'composer', data: { postId: post.id }
+        level: 'attention', title: 'Your post needs changes', body: `“${post.title || 'Your post'}” wasn’t approved${note ? `: ${note}` : '.'}`, view: 'composer', data: { postId: post.id }
       });
     }
     return send(res, 200, { rejected: true });

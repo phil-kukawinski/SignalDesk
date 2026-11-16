@@ -42,7 +42,7 @@ global.fetch = async (input, opts = {}) => {
   if (url.includes('/rest/v1/social_profiles?')) return ok([{ client_id: 'pk-works', ayrshare_ref_id: 'r', profile_key_ciphertext: enc('pk') }]);
   if (url.includes('/rest/v1/notification_preferences?user_id=in.')) return ok(prefsRows);
   if (url.includes('/rest/v1/post_submissions?workspace_id=eq.ws-1&provider_post_id=eq.post-1&select')) return ok([{ submitted_by: U, title: 'Fall kits are here', decided_at: null }]);
-  if (url.includes('/rest/v1/notifications?') && method === 'GET') return ok([{ title: 'New post awaiting approval', body: 'x', category: 'approvals', created_at: new Date().toISOString() }]);
+  if (url.includes('/rest/v1/notifications?') && method === 'GET') return ok(global.__digestRows || [{ title: 'New post awaiting approval', body: 'x', category: 'approvals', created_at: new Date().toISOString() }]);
   if (url.includes('/rest/v1/weekly_reports?') && method === 'GET') return ok([]);
   if (url.includes('/rest/v1/network_posts?') && method === 'GET' && url.includes('job_id=is.null')) return ok([]);
   if (url.includes('/rest/v1/network_posts?') && method === 'GET') return ok(url.includes('offset=0') || !url.includes('offset=') ? [{ client_id: 'pk-works', platform: 'instagram', text: 'Fall kits', url: 'https://instagram.com/p/9', published_at: '2026-10-20T14:00:00Z', metrics: { views: 900, engagements: 70 } }] : []);
@@ -152,7 +152,30 @@ const future = new Date(Date.now() + 86400000).toISOString();
   await notifyNow({ workspaceId: 'ws-1', audience: 'all', type: 'publish_failed', category: 'publishing', title: 'Post failed' });
   await notifyNow({ workspaceId: 'ws-1', audience: 'all', type: 'approval_requested', category: 'approvals', title: 'Please review' });
   const sentNow = calls.filter((c) => c.url === 'https://api.resend.com/emails');
-  assert.deepEqual(sentNow.map((c) => [c.body.to[0], c.body.subject]), [['admin@x.com', 'Post failed']], 'only the urgent one, and not to someone with email off');
+  assert.deepEqual(sentNow.map((c) => [c.body.to[0], c.body.subject]), [['admin@x.com', 'Warning: Post failed']], 'only the urgent one, and not to someone with email off; the subject says how serious');
+  assert.match(sentNow[0].body.html, /border-top:6px solid #dc2626/); assert.match(sentNow[0].body.html, />WARNING</); assert.match(sentNow[0].body.text, /^\[WARNING\] Post failed/);
+  {
+    const stored = calls.filter((c) => c.url.endsWith('/rest/v1/notifications') && c.method === 'POST').map((c) => c.body[0].data.level);
+    assert.deepEqual(stored, ['warning', 'attention'], 'each notification keeps its level for the wrap-ups');
+    const { levelFor } = require(R + 'notify.js');
+    assert.equal(levelFor('worker_stalled'), 'emergency'); assert.equal(levelFor('approval_decided', 'attention'), 'attention'); assert.equal(levelFor('post_note'), 'info'); assert.equal(levelFor('publish_failed', 'bogus'), 'warning');
+  }
   assert.equal(calls.find((c) => c.url.endsWith('/rest/v1/notifications') && c.method === 'POST').body[0].data.urgent, true, 'marked so wrap-ups skip it');
+  // Wrap-ups put the most serious updates first, colored, with a legend; plain updates stay uncolored.
+  {
+    const at = new Date().toISOString();
+    global.__digestRows = [
+      { title: 'A note on your post', body: 'n', category: 'approvals', type: 'post_note', data: {}, created_at: at },
+      { title: 'Acme approved it', body: 'g', category: 'approvals', type: 'client_review', data: { level: 'good' }, created_at: at },
+      { title: 'Acme asked for changes', body: 'c', category: 'approvals', type: 'client_review', data: { level: 'attention' }, created_at: at }
+    ];
+    prefsRows = [{ user_id: A, email_frequency: 'daily', email_categories: ['approvals'], last_digest_at: null }];
+    calls.length = 0;
+    assert.equal((await processEmailDigests({ now: new Date('2026-10-16T13:00:00Z') })).sent, 1);
+    const wrap = calls.filter((c) => c.url === 'https://api.resend.com/emails').pop().body;
+    assert.match(wrap.text, /\[ATTENTION\] Acme asked for changes[\s\S]*\[GOOD\] Acme approved it[\s\S]*- A note on your post/);
+    assert.match(wrap.html, /border-left:4px solid #ca8a04/); assert.ok(wrap.html.includes('</span>Good</span>') && wrap.html.includes('</span>Attention</span>') && !wrap.html.includes('</span>Emergency</span>') && !wrap.html.includes('</span>Update</span>'), 'the legend lists only the levels shown');
+    delete global.__digestRows;
+  }
   console.log('feature tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

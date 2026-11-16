@@ -1,7 +1,7 @@
 const { databaseRequest } = require('./core');
 const { lastWorkerRun, recordWorkerRun } = require('./publishing');
 const crypto = require('crypto');
-const { emailConfigured, sendEmail, renderEmail, appUrl } = require('./notify');
+const { emailConfigured, sendEmail, renderEmail, appUrl, STATUS_LEVELS } = require('./notify');
 const { platformAdmins } = require('./platform');
 const { missingFromDatabase } = require('./health');
 
@@ -16,18 +16,29 @@ const WORKER_STALE_MS = 60 * 60000;
 // Resend's test address: mail to it is accepted and thrown away, so the check reaches no one's inbox.
 const AUTH_EMAIL_TEST_ADDRESS = 'delivered@resend.dev';
 
-const pass = (title, body) => ({ ok: true, title, body });
-const fail = (title, body) => ({ ok: false, title, body });
+// How serious each result is, worst first. Emergency: posts or sign-in are stopped now. Warning: something
+// is broken and will hurt soon. Attention: worth a look, nothing is down.
+const LEVELS = {
+  emergency: { ...STATUS_LEVELS.emergency, section: 'Emergency: fix now' },
+  warning: { ...STATUS_LEVELS.warning, section: 'Warning: broken' },
+  attention: { ...STATUS_LEVELS.attention, section: 'Needs attention' },
+  ok: { ...STATUS_LEVELS.good, section: 'Working' }
+};
+const LEVEL_ORDER = ['emergency', 'warning', 'attention', 'ok'];
+const pass = (title, body) => ({ ok: true, level: 'ok', title, body });
+const fail = (title, body, level = 'warning') => ({ ok: false, level, title, body });
+const emergency = (title, body) => fail(title, body, 'emergency');
+const attention = (title, body) => fail(title, body, 'attention');
 
 async function databaseCheck() {
   const missing = await missingFromDatabase();
-  return missing.length ? fail('Database', `Missing: ${missing.join(', ')}. Run the latest supabase/schema.sql.`) : pass('Database', 'Every table and column is in place.');
+  return missing.length ? emergency('Database', `Missing: ${missing.join(', ')}. Run the latest supabase/schema.sql.`) : pass('Database', 'Every table and column is in place.');
 }
 
 async function schedulerCheck(now) {
   const [publish, worker] = await Promise.all([lastWorkerRun('publish'), lastWorkerRun('worker')]);
   const age = (iso) => (iso ? now - Date.parse(iso) : Infinity);
-  if (age(publish) > PUBLISH_STALE_MS) return fail('Publishing schedule', `The publishing run last finished ${publish ? new Date(publish).toUTCString() : 'never'}. Check the pg_cron jobs in Supabase.`);
+  if (age(publish) > PUBLISH_STALE_MS) return emergency('Publishing schedule', `The publishing run last finished ${publish ? new Date(publish).toUTCString() : 'never'}. Check the pg_cron jobs in Supabase.`);
   if (age(worker) > WORKER_STALE_MS) return fail('Background work', `Reports, reminders, and token upkeep last ran ${worker ? new Date(worker).toUTCString() : 'never'}. Check the pg_cron jobs in Supabase.`);
   return pass('Schedule', 'Publishing and background work are both running.');
 }
@@ -36,26 +47,26 @@ async function schedulerCheck(now) {
 // also blocks the scheduler when it's on.
 async function siteCheck() {
   const base = appUrl().replace(/\/+$/, '');
-  if (!base) return fail('Live site', 'APP_URL isn’t set.');
+  if (!base) return emergency('Live site', 'APP_URL isn’t set.');
   try {
     const page = await fetch(`${base}/`, { signal: AbortSignal.timeout(10000) });
-    if (page.status === 403) return fail('Live site', 'The site refused this check (HTTP 403). Vercel’s bot checkpoint may be on, which also stops scheduled posts. Check Firewall in the Vercel dashboard.');
-    if (!page.ok) return fail('Live site', `The site returned HTTP ${page.status}.`);
+    if (page.status === 403) return emergency('Live site', 'The site refused this check (HTTP 403). Vercel’s bot checkpoint may be on, which also stops scheduled posts. Check Firewall in the Vercel dashboard.');
+    if (!page.ok) return emergency('Live site', `The site returned HTTP ${page.status}.`);
     const script = /js\/app\.min\.js\?v=[a-z0-9]+/.exec(await page.text())?.[0];
-    if (!script) return fail('Live site', 'The page loaded, but without the app’s script.');
+    if (!script) return emergency('Live site', 'The page loaded, but without the app’s script.');
     const bundle = await fetch(`${base}/${script}`, { signal: AbortSignal.timeout(10000) });
-    return bundle.ok ? pass('Live site', `${base} and its script load.`) : fail('Live site', `The page loaded, but its script returned HTTP ${bundle.status}.`);
+    return bundle.ok ? pass('Live site', `${base} and its script load.`) : emergency('Live site', `The page loaded, but its script returned HTTP ${bundle.status}.`);
   } catch (error) {
-    return fail('Live site', `Couldn’t reach ${base}: ${error.message}`);
+    return emergency('Live site', `Couldn’t reach ${base}: ${error.message}`);
   }
 }
 
 async function signInCheck() {
   try {
     const response = await fetch(`${process.env.SUPABASE_URL}/auth/v1/health`, { headers: { apikey: process.env.SUPABASE_ANON_KEY || '' }, signal: AbortSignal.timeout(10000) });
-    return response.ok ? pass('Sign-in', 'Supabase Auth is up.') : fail('Sign-in', `Supabase Auth returned HTTP ${response.status}.`);
+    return response.ok ? pass('Sign-in', 'Supabase Auth is up.') : emergency('Sign-in', `Supabase Auth returned HTTP ${response.status}.`);
   } catch (error) {
-    return fail('Sign-in', `Couldn’t reach Supabase Auth: ${error.message}`);
+    return emergency('Sign-in', `Couldn’t reach Supabase Auth: ${error.message}`);
   }
 }
 
@@ -65,10 +76,10 @@ async function authEmailCheck() {
   const base = process.env.SUPABASE_URL, anon = process.env.SUPABASE_ANON_KEY || '', service = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const reason = async (response) => { const text = await response.text(); try { const body = JSON.parse(text); return body.msg || body.message || body.error_description || text; } catch { return text || `HTTP ${response.status}`; } };
   const settings = await fetch(`${base}/auth/v1/settings`, { headers: { apikey: anon }, signal: AbortSignal.timeout(10000) });
-  if (!settings.ok) return fail('Sign-up emails', `Couldn’t read Supabase’s sign-in settings (HTTP ${settings.status}).`);
+  if (!settings.ok) return attention('Sign-up emails', `Couldn’t read Supabase’s sign-in settings (HTTP ${settings.status}).`);
   const { external, mailer_autoconfirm: autoconfirm } = await settings.json();
   if (external?.email === false) return fail('Sign-up emails', 'Email sign-in is turned off in Supabase, so people can’t sign up or reset a password.');
-  if (autoconfirm) return fail('Sign-up emails', 'Supabase has “Confirm email” turned off, so new accounts aren’t asked to confirm their address.');
+  if (autoconfirm) return attention('Sign-up emails', 'Supabase has “Confirm email” turned off, so new accounts aren’t asked to confirm their address.');
   const created = await fetch(`${base}/auth/v1/admin/users`, {
     method: 'POST', headers: { apikey: service, authorization: `Bearer ${service}`, 'content-type': 'application/json' }, signal: AbortSignal.timeout(10000),
     body: JSON.stringify({ email: AUTH_EMAIL_TEST_ADDRESS, password: crypto.randomBytes(32).toString('base64url'), email_confirm: true })
@@ -90,7 +101,7 @@ async function emailCheck() {
     if (!found) return fail('Email', `${domain} isn’t in the email provider’s account, so emails from it will be refused.`);
     return found.status === 'verified' ? pass('Email', `${domain} is verified.`) : fail('Email', `${domain} is ${found.status} at the email provider, so emails from it may be refused.`);
   } catch (error) {
-    return fail('Email', `Couldn’t reach the email provider: ${error.message}`);
+    return attention('Email', `Couldn’t reach the email provider: ${error.message}`);
   }
 }
 
@@ -106,15 +117,15 @@ async function weekInReview(now) {
   return {
     results: [
       failed ? fail('Failed posts', `${failed} post${failed === 1 ? '' : 's'} failed or couldn’t be confirmed this week, out of ${failed + published}.`) : pass('Posts', `${published} published this week, none failed.`),
-      reauth?.length ? fail('Accounts', `${reauth.length} account${reauth.length === 1 ? ' needs' : 's need'} reconnecting.`) : pass('Accounts', 'None need reconnecting.'),
-      errorCount ? fail('Server errors', `${errorCount} this week. See Settings → Beta invites.`) : pass('Server errors', 'None this week.')
+      reauth?.length ? attention('Accounts', `${reauth.length} account${reauth.length === 1 ? ' needs' : 's need'} reconnecting.`) : pass('Accounts', 'None need reconnecting.'),
+      errorCount ? attention('Server errors', `${errorCount} this week. See Settings → Beta invites.`) : pass('Server errors', 'None this week.')
     ]
   };
 }
 
 async function runWeeklyCheck({ now = Date.now() } = {}) {
-  const guard = (name, run) => run().catch((error) => fail(name, `The check itself failed: ${error.message}`));
-  const week = await weekInReview(now).catch((error) => ({ results: [fail('This week’s activity', `The check itself failed: ${error.message}`)] }));
+  const guard = (name, run) => run().catch((error) => attention(name, `The check itself failed: ${error.message}`));
+  const week = await weekInReview(now).catch((error) => ({ results: [attention('This week’s activity', `The check itself failed: ${error.message}`)] }));
   const results = [
     await guard('Database', databaseCheck),
     await guard('Schedule', () => schedulerCheck(now)),
@@ -124,20 +135,23 @@ async function runWeeklyCheck({ now = Date.now() } = {}) {
     await guard('Sign-up emails', authEmailCheck),
     ...week.results
   ];
-  const problems = results.filter((item) => !item.ok), working = results.filter((item) => item.ok);
-  const subject = problems.length ? `SignalDesk weekly check: ${problems.length} thing${problems.length === 1 ? '' : 's'} need${problems.length === 1 ? 's' : ''} a look` : 'SignalDesk weekly check: all good';
-  const toItem = ({ title, body }) => ({ title, body });
+  const problems = results.filter((item) => !item.ok);
+  const worst = LEVEL_ORDER.find((level) => results.some((item) => item.level === level));
+  const needs = `${problems.length} thing${problems.length === 1 ? '' : 's'} need${problems.length === 1 ? 's' : ''} a look`;
+  const subject = problems.length ? `SignalDesk weekly check: ${LEVELS[worst].label.toLowerCase()}, ${needs}` : 'SignalDesk weekly check: all good';
+  const toItem = ({ title, body, level }) => ({ title, body, color: LEVELS[level].color, badge: LEVELS[level].label });
   const content = renderEmail({
-    eyebrow: 'SIGNALDESK · WEEKLY CHECK', heading: problems.length ? `${problems.length} thing${problems.length === 1 ? '' : 's'} need${problems.length === 1 ? 's' : ''} a look` : 'All good',
-    intro: problems.length ? 'The weekly check found problems. Everything it looked at is below.' : 'Everything the weekly check looks at is working.',
-    sections: [...(problems.length ? [{ title: 'Needs a look', items: problems.map(toItem) }] : []), { title: 'Working', items: working.map(toItem) }],
+    eyebrow: 'SIGNALDESK · WEEKLY CHECK', status: LEVELS[worst], heading: problems.length ? needs : 'All good',
+    intro: problems.length ? 'The weekly check found problems. Everything it looked at is below, most serious first.' : 'Everything the weekly check looks at is working.',
+    legend: [...LEVEL_ORDER].reverse().map((level) => [LEVELS[level].label, LEVELS[level].color]),
+    sections: LEVEL_ORDER.map((level) => ({ title: LEVELS[level].section, items: results.filter((item) => item.level === level).map(toItem) })).filter((section) => section.items.length),
     ctaLabel: 'Open Setup & health', ctaUrl: `${appUrl().replace(/\/+$/, '')}/#view=settings`,
     footer: 'You get this because your email is in PLATFORM_ADMIN_EMAILS.'
   });
   let sent = 0;
   if (emailConfigured()) for (const admin of platformAdmins()) if (await sendEmail(admin, subject, content).catch(() => false)) sent += 1;
   await recordWorkerRun('weekly-check', { problems: problems.map((item) => item.title), sent });
-  return { sent, problems: problems.length, results };
+  return { sent, problems: problems.length, worst, results };
 }
 
 // Runs on Mondays, whichever scheduled run gets there first.

@@ -7,6 +7,28 @@ const DIGEST_HOUR = 8;
 // Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
 // category is unticked) and left out of digests so they don't arrive twice.
 const URGENT_TYPES = new Set(['publish_failed', 'publish_unknown', 'connection_expired', 'connection_expiring', 'connection_signed_out', 'posts_at_risk', 'manual_due', 'worker_stalled', 'comment_failed']);
+// Status colors shared by every email: green good, yellow attention, red warning, dark red emergency,
+// blue for plain updates. LEVEL_ORDER is most serious first.
+const STATUS_LEVELS = {
+  emergency: { label: 'Emergency', color: '#7f1d1d' },
+  warning: { label: 'Warning', color: '#dc2626' },
+  attention: { label: 'Attention', color: '#ca8a04' },
+  good: { label: 'Good', color: '#16a34a' },
+  info: { label: 'Update', color: '#0b5fdc' }
+};
+const LEVEL_ORDER = ['emergency', 'warning', 'attention', 'good', 'info'];
+// Emergency: posts are failing or about to fail with no way around it. Warning: something broke.
+// Attention: needs someone, nothing is down. Good: a step went through.
+const TYPE_LEVELS = {
+  worker_stalled: 'emergency', posts_at_risk: 'emergency',
+  publish_failed: 'warning', connection_expired: 'warning', connection_signed_out: 'warning', comment_failed: 'warning', autopilot_error: 'warning',
+  publish_unknown: 'attention', connection_expiring: 'attention', manual_due: 'attention', review_overdue: 'attention', approval_requested: 'attention', autopilot_review: 'attention',
+  approval_decided: 'good', client_review: 'good'
+};
+const levelFor = (type, level) => (STATUS_LEVELS[level] ? level : TYPE_LEVELS[type] || 'info');
+const levelRank = (level) => LEVEL_ORDER.indexOf(STATUS_LEVELS[level] ? level : 'info');
+// A legend of the colored levels that appear (plain updates aren't colored), most serious last so it reads like a scale.
+const levelLegend = (levels) => [...LEVEL_ORDER].reverse().filter((level) => level !== 'info' && levels.includes(level)).map((level) => [STATUS_LEVELS[level].label, STATUS_LEVELS[level].color]);
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const CATEGORY_LABELS = { approvals: 'Approvals', autopilot: 'Autopilot', reports: 'Reports', team: 'Team', publishing: 'Publishing', planning: 'Planning' };
@@ -36,27 +58,29 @@ function withDefaults(row) {
 // Network colors, matching the charts in SignalDesk.
 const NETWORK_COLORS = { facebook: '#2563eb', facebook_story: '#60a5fa', instagram: '#db2777', instagram_story: '#f472b6', linkedin: '#0d9488', threads: '#7c3aed', twitter: '#d97706', pinterest: '#dc2626', youtube: '#ea580c', tiktok: '#0891b2' };
 const safeColor = (value) => /^#[0-9a-f]{3,8}$/i.test(String(value)) ? value : '#8d95a3';
-function renderEmail({ heading, intro, sections, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these in SignalDesk under Settings → Notifications.' }) {
+function renderEmail({ heading, intro, sections, legend = [], status = null, ctaLabel = 'Open SignalDesk', ctaUrl = '', eyebrow = 'SIGNALDESK', showCta = true, footer = 'Change how often you get these in SignalDesk under Settings → Notifications.' }) {
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#101828;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
     ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;${item.color ? `border-left:4px solid ${safeColor(item.color)};` : ''}border-radius:10px;padding:12px 14px;margin:0 0 8px">
-      <div style="font:700 13px Arial,sans-serif;color:#101828">${item.color ? `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${safeColor(item.color)};margin-right:6px"></span>` : ''}${escapeHtml(item.title)}</div>
+      <div style="font:700 13px Arial,sans-serif;color:#101828">${item.color ? `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${safeColor(item.color)};margin-right:6px"></span>` : ''}${escapeHtml(item.title)}${item.badge ? ` <span style="display:inline-block;margin-left:6px;padding:2px 8px;border-radius:10px;background:${safeColor(item.color || '#5d6676')};color:#fff;font:700 10px Arial,sans-serif;letter-spacing:.04em;vertical-align:1px">${escapeHtml(item.badge.toUpperCase())}</span>` : ''}</div>
       ${item.bar !== undefined ? `<div style="background:#eef0f3;border-radius:4px;height:8px;margin-top:8px"><div style="width:${Math.max(2, Math.min(100, Math.round(item.bar)))}%;background:${safeColor(item.color || '#0b5fdc')};height:8px;border-radius:4px"></div></div>` : ''}
       ${item.body ? `<div style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin-top:4px">${escapeHtml(item.body)}</div>` : ''}
       ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
-  const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
+  const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;${status ? `border-top:6px solid ${safeColor(status.color)};` : ''}border-radius:16px;padding:28px">
     <div style="margin:0 0 18px"><img src="https://socialsignaldesk.com/icons/icon-192.png" width="28" height="28" alt="" style="vertical-align:middle;border:0;border-radius:7px"> <span style="vertical-align:middle;font:700 16px Arial,sans-serif;color:#001d51">Signal<span style="color:#0469fa">Desk</span></span></div>
     <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#0b5fdc">${escapeHtml(eyebrow)}</div>
+    ${status ? `<div style="margin:12px 0 0"><span style="display:inline-block;padding:3px 10px;border-radius:10px;background:${safeColor(status.color)};color:#fff;font:700 10px Arial,sans-serif;letter-spacing:.06em">${escapeHtml(status.label.toUpperCase())}</span></div>` : ''}
     <h1 style="font:800 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">${escapeHtml(heading)}</h1>
     <p style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin:0">${escapeHtml(intro)}</p>
+    ${legend.length ? `<div style="margin:14px 0 0;font:11px Arial,sans-serif;color:#5d6676">${legend.map(([label, color]) => `<span style="display:inline-block;margin:0 12px 4px 0;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${safeColor(color)};margin-right:5px"></span>${escapeHtml(label)}</span>`).join('')}</div>` : ''}
     ${sectionHtml}
     ${url ? `<a href="${escapeHtml(url)}" style="display:inline-block;margin-top:20px;background:#0b5fdc;color:#fff;font:700 13px Arial,sans-serif;text-decoration:none;padding:10px 16px;border-radius:10px">${escapeHtml(ctaLabel)}</a>` : ''}
     ${footer ? `<p style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:24px">${escapeHtml(footer)}</p>` : ''}
     <p style="font:11px Arial,sans-serif;color:#8d95a3;margin:${footer ? '6px' : '24px'} 0 0">SignalDesk is a product of PK Works · <a href="https://socialsignaldesk.com" style="color:#8d95a3">socialsignaldesk.com</a></p>
   </div></div>`;
-  const text = [heading, '', intro, ...sections.flatMap((section) => ['', section.title.toUpperCase(), ...section.items.map((item) => `- ${item.title}${item.body ? `: ${item.body}` : ''}${item.meta ? ` (${item.meta})` : ''}`)]), '', url].join('\n');
+  const text = [`${status ? `[${status.label.toUpperCase()}] ` : ''}${heading}`, '', intro, ...sections.flatMap((section) => ['', section.title.toUpperCase(), ...section.items.map((item) => `- ${item.badge ? `[${item.badge.toUpperCase()}] ` : ''}${item.title}${item.body ? `: ${item.body}` : ''}${item.meta ? ` (${item.meta})` : ''}`)]), '', url].join('\n');
   return { html, text };
 }
 
@@ -73,9 +97,10 @@ async function sendEmail(to, subject, content) {
 
 // Creates in-app notifications and sends immediate emails. Never throws: a failed
 // notification must not undo the action that triggered it.
-async function notify({ workspaceId, audience = 'admins', userIds = [], excludeUserId, type, category, title, body = '', view = null, data = {}, cta = null }) {
+async function notify({ workspaceId, audience = 'admins', userIds = [], excludeUserId, type, category, title, body = '', view = null, data = {}, cta = null, level = null }) {
   const urgent = URGENT_TYPES.has(type);
-  if (urgent) data = { ...data, urgent: true };
+  const status = levelFor(type, level);
+  data = { ...data, level: status, ...(urgent ? { urgent: true } : {}) };
   try {
     const members = await databaseRequest(`workspace_members?workspace_id=eq.${workspaceId}&select=user_id,email,role`) || [];
     const recipients = members.filter((member) => member.user_id !== excludeUserId
@@ -92,7 +117,7 @@ async function notify({ workspaceId, audience = 'admins', userIds = [], excludeU
       for (const member of recipients) {
         const prefs = withDefaults(preferences.get(member.user_id));
         if (!(prefs.email_frequency === 'immediate' || (urgent && prefs.email_frequency !== 'off')) || !prefs.email_categories.includes(category) || !member.email) continue;
-        await sendEmail(member.email, title, renderEmail({ heading: title, intro: body || 'There is new activity in your SignalDesk workspace.', sections: [], ...(cta ? { ctaLabel: cta.label, ctaUrl: cta.url } : {}) }))
+        await sendEmail(member.email, ['emergency', 'warning'].includes(status) ? `${STATUS_LEVELS[status].label}: ${title}` : title, renderEmail({ heading: title, intro: body || 'There is new activity in your SignalDesk workspace.', sections: [], status: status === 'info' ? null : STATUS_LEVELS[status], ...(cta ? { ctaLabel: cta.label, ctaUrl: cta.url } : {}) }))
           .catch((error) => console.error('Immediate email failed:', error.message));
       }
     }
@@ -112,6 +137,7 @@ function formatNumber(value) {
   return typeof value === 'number' ? value.toLocaleString('en-US') : '—';
 }
 
+const networkLabel = (platform) => require('./publishing').PLATFORM_LABELS?.[platform] || platform;
 async function weeklyReportSection(workspaceId, clients) {
   const since = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
   const reports = await databaseRequest(`weekly_reports?workspace_id=eq.${workspaceId}&week_start=gte.${since}&select=client_id,week_start,data&order=week_start.desc`) || [];
@@ -122,7 +148,7 @@ async function weeklyReportSection(workspaceId, clients) {
     const name = clients.find((client) => client.id === report.client_id)?.name || report.client_id;
     const top = [...(report.data.rows || [])].sort((a, b) => (b.metrics.engagements || 0) - (a.metrics.engagements || 0)).slice(0, 3);
     top.forEach((row, index) => items.push({
-      title: `${name} · #${index + 1} on ${row.platform}`,
+      title: `${name} · #${index + 1} on ${networkLabel(row.platform)}`, color: NETWORK_COLORS[row.platform],
       body: row.text || '(no caption)',
       meta: `${formatNumber(row.metrics.views)} views · ${formatNumber(row.metrics.engagements)} engagements · ${formatNumber(row.metrics.comments)} comments · ${formatNumber(row.metrics.likes)} likes`
     }));
@@ -174,10 +200,11 @@ async function periodPostsSection(workspaceId, clients, since) {
   const sum = (list, key) => { const values = list.map((row) => row.metrics?.[key]).filter((value) => typeof value === 'number'); return values.length ? values.reduce((a, b) => a + b, 0) : null; };
   const byClient = new Map();
   rows.forEach((row) => byClient.set(row.client_id, [...(byClient.get(row.client_id) || []), row]));
-  const totals = [...byClient].map(([clientId, list]) => ({ title: `${nameOf(clientId)} · ${list.length} post${list.length === 1 ? '' : 's'} published`, body: `${formatNumber(sum(list, 'views'))} views · ${formatNumber(sum(list, 'engagements'))} engagements` }));
+  const colorOf = (id) => clients.find((client) => client.id === id)?.color;
+  const totals = [...byClient].map(([clientId, list]) => ({ color: colorOf(clientId), title: `${nameOf(clientId)} · ${list.length} post${list.length === 1 ? '' : 's'} published`, body: `${formatNumber(sum(list, 'views'))} views · ${formatNumber(sum(list, 'engagements'))} engagements` }));
   const top = rows.filter((row) => typeof row.metrics?.engagements === 'number').sort((a, b) => b.metrics.engagements - a.metrics.engagements).slice(0, 5);
   const sections = [{ title: 'Your posts', items: totals }];
-  if (top.length) sections.push({ title: 'Top posts', items: top.map((row, index) => ({ title: `#${index + 1} · ${nameOf(row.client_id)} on ${row.platform}`, body: row.text || '(no caption)', meta: `${formatNumber(row.metrics.views)} views · ${formatNumber(row.metrics.engagements)} engagements${row.url ? ` · ${row.url}` : ''}` })) });
+  if (top.length) sections.push({ title: 'Top posts', items: top.map((row, index) => ({ color: NETWORK_COLORS[row.platform], title: `#${index + 1} · ${nameOf(row.client_id)} on ${networkLabel(row.platform)}`, body: row.text || '(no caption)', meta: `${formatNumber(row.metrics.views)} views · ${formatNumber(row.metrics.engagements)} engagements${row.url ? ` · ${row.url}` : ''}` })) });
   return sections;
 }
 
@@ -199,10 +226,11 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
     if (!schedule.due) continue;
     const since = prefs.last_digest_at && Date.parse(prefs.last_digest_at) > schedule.start ? prefs.last_digest_at : schedule.start.toISOString();
     const short = ['daily', 'weekly'].includes(prefs.email_frequency);
-    const query = new URLSearchParams({ select: 'title,body,category,created_at', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, 'data->>urgent': 'is.null', type: 'neq.planning_reminder', order: 'created_at.desc', limit: short ? '50' : '1000' });
-    const notifications = await databaseRequest(`notifications?${query}`) || [];
+    const query = new URLSearchParams({ select: 'title,body,category,created_at,type,data', user_id: `eq.${member.user_id}`, created_at: `gt.${since}`, category: `in.(${prefs.email_categories.join(',')})`, 'data->>urgent': 'is.null', type: 'neq.planning_reminder', order: 'created_at.desc', limit: short ? '50' : '1000' });
+    const notifications = (await databaseRequest(`notifications?${query}`) || []).map((item) => ({ ...item, level: levelFor(item.type, item.data?.level) }))
+      .sort((a, b) => levelRank(a.level) - levelRank(b.level));
     const copy = digestCopy(prefs, schedule, notifications.length);
-    const listItem = (item) => ({ title: item.title, body: item.body, meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) });
+    const listItem = (item) => ({ title: item.title, body: item.body, ...(item.level === 'info' ? {} : { color: STATUS_LEVELS[item.level].color, badge: STATUS_LEVELS[item.level].label }), meta: new Date(item.created_at).toLocaleString('en-US', { timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) });
     const sections = [];
     if (notifications.length && short) sections.push({ title: copy.listTitle, items: notifications.map(listItem) });
     if (notifications.length && !short) {
@@ -226,7 +254,8 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
     }
     try {
       if (sections.length) {
-        await sendEmail(member.email, copy.subject, renderEmail({ heading: copy.heading, intro: copy.intro, sections }));
+        const shown = (short ? notifications : notifications.slice(0, 8)).map((item) => item.level);
+        await sendEmail(member.email, copy.subject, renderEmail({ heading: copy.heading, intro: copy.intro, sections, legend: shown.some((level) => level !== 'info') ? levelLegend(shown) : [] }));
         sent += 1;
       }
       await databaseRequest('notification_preferences?on_conflict=user_id', {
@@ -303,4 +332,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { NETWORK_COLORS, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { NETWORK_COLORS, STATUS_LEVELS, LEVEL_ORDER, levelFor, levelLegend, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };

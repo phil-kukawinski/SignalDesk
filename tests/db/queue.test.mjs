@@ -1451,6 +1451,7 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
   mails.length = 0;
   const alert = await alertPlatformAdmins({});
   assert.equal(alert.sent, 1, JSON.stringify(alert)); assert.equal(mails[0].to[0], 'owner@x.com'); assert.match(mails[0].html, /Boom/);
+  assert.equal(mails[0].subject, 'SignalDesk warning: something needs a look', 'a few errors are a warning, not an emergency'); assert.match(mails[0].html, />WARNING</);
   assert.equal((await alertPlatformAdmins({ lastAlert: new Date().toISOString() })).reason, 'recently alerted');
   assert.equal((await q(`select count(*)::int as n from app_errors where alerted_at is null and source='api/test'`))[0].n, 0, 'alerted errors are marked');
   // --- Weekly check: reports problems, says when all is well, runs once on Mondays ---
@@ -1478,14 +1479,20 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     assert.equal(checkMails.length, 1);
     assert.equal(checkMails[0].subject, 'SignalDesk weekly check: all good');
     assert.ok(/test password email/.test(checkMails[0].text));
+    assert.equal(check.worst, 'ok');
+    assert.ok(/border-left:4px solid #16a34a/.test(checkMails[0].html) && />GOOD</.test(checkMails[0].html), 'working items are green');
+    assert.ok(['Good', 'Attention', 'Warning', 'Emergency'].every((label) => checkMails[0].html.includes(`</span>${label}</span>`)), 'the legend lists every level');
     // Supabase failing to send, or its confirmation emails being off, is a problem. An existing test account isn't.
     recoverStatus = 500;
     check = await runWeeklyCheck();
     assert.deepEqual(check.results.filter((item) => !item.ok).map((item) => item.title), ['Sign-up emails'], JSON.stringify(check.results));
     assert.ok(/Error sending recovery email/.test(checkMails[1].text) && /Authentication → SMTP/.test(checkMails[1].text));
+    assert.equal(check.worst, 'warning');
+    assert.ok(/^SignalDesk weekly check: warning, 1 thing needs a look$/.test(checkMails[1].subject) && /\[WARNING\] Sign-up emails/.test(checkMails[1].text) && /#dc2626/.test(checkMails[1].html));
     recoverStatus = 200; authSettings.mailer_autoconfirm = true;
     check = await runWeeklyCheck();
     assert.ok(check.results.some((item) => !item.ok && /Confirm email/.test(item.body)), JSON.stringify(check.results));
+    assert.equal(check.worst, 'attention', 'confirmation emails being off is worth a look, nothing is down');
     authSettings.mailer_autoconfirm = false;
     checkMails.length = 1;
     // A blocked site, a stale domain, and an out-of-date database are each reported, in one email.
@@ -1495,6 +1502,12 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     await db.exec(`alter table notification_preferences rename column planning_leads_old to planning_leads`);
     assert.equal(check.problems, 3, JSON.stringify(check.results));
     assert.ok(/3 things need a look/.test(checkMails[1].subject));
+    assert.equal(check.worst, 'emergency');
+    assert.ok(/^SignalDesk weekly check: emergency, 3 things/.test(checkMails[1].subject) && />EMERGENCY<\/span><\/div>\s*<h1[^>]*>3 things need a look</.test(checkMails[1].html) && /^\[EMERGENCY\] 3 things need a look/.test(checkMails[1].text) && /#7f1d1d/.test(checkMails[1].html));
+    {
+      const order = ['Emergency: fix now', 'Warning: broken', 'Working'].map((title) => checkMails[1].text.indexOf(title.toUpperCase()));
+      assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), 'most serious first: ' + order);
+    }
     assert.ok(/bot checkpoint/.test(checkMails[1].text) && /notification_preferences\.planning_leads/.test(checkMails[1].text) && /failed at the email provider/.test(checkMails[1].text));
     // Only on Mondays, and only once.
     const sent = checkMails.length, monday = Date.UTC(2030, 0, 7, 14), tuesday = Date.UTC(2030, 0, 8, 14);

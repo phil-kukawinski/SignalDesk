@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { databaseRequest, httpError } = require('./core');
-const { emailConfigured, sendEmail, renderEmail, appUrl } = require('./notify');
+const { emailConfigured, sendEmail, renderEmail, appUrl, STATUS_LEVELS, NETWORK_COLORS } = require('./notify');
 
 // Running SignalDesk as an invite-only beta: platform owners (PLATFORM_ADMIN_EMAILS) create invite
 // codes, choose whether sign-ups are open, and see server errors from every workspace.
@@ -122,17 +122,19 @@ async function alertPlatformAdmins({ lastAlert } = {}) {
   const failed = (await databaseRequest(`publish_jobs?status=in.(failed,unknown)&updated_at=gte.${since}&select=workspace_id,platform,last_error&limit=200`).catch(() => [])) || [];
   const failedWorkspaces = new Set(failed.map((job) => job.workspace_id)).size;
   if (!errors.length && failed.length < 5) return { sent: 0, reason: 'nothing to report' };
+  // Widespread failures (several workspaces, or many posts) are an emergency; the rest is a warning.
+  const status = failedWorkspaces >= 3 || failed.length >= 20 ? STATUS_LEVELS.emergency : STATUS_LEVELS.warning;
   const content = renderEmail({
-    eyebrow: 'SIGNALDESK · PLATFORM', heading: 'Something needs a look',
+    eyebrow: 'SIGNALDESK · PLATFORM', status, heading: 'Something needs a look',
     intro: `${errors.length} new server error${errors.length === 1 ? '' : 's'}${failed.length ? ` and ${failed.length} failed post${failed.length === 1 ? '' : 's'} across ${failedWorkspaces} workspace${failedWorkspaces === 1 ? '' : 's'}` : ''} in the last few hours.`,
     sections: [
-      ...(errors.length ? [{ title: 'Server errors', items: errors.map((row) => ({ title: row.source, body: row.message, meta: `${row.count}× · last ${new Date(row.last_seen).toUTCString()}` })) }] : []),
-      ...(failed.length ? [{ title: 'Failed posts', items: Object.entries(failed.reduce((sum, job) => ({ ...sum, [`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)]: (sum[`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)] || 0) + 1 }), {})).slice(0, 8).map(([title, count]) => ({ title, meta: `${count}×` })) }] : [])
+      ...(errors.length ? [{ title: 'Server errors', items: errors.map((row) => ({ color: STATUS_LEVELS.warning.color, title: row.source, body: row.message, meta: `${row.count}× · last ${new Date(row.last_seen).toUTCString()}` })) }] : []),
+      ...(failed.length ? [{ title: 'Failed posts', items: Object.entries(failed.reduce((sum, job) => ({ ...sum, [`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)]: (sum[`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)] || 0) + 1 }), {})).slice(0, 8).map(([title, count]) => ({ title, color: NETWORK_COLORS[title.split(':')[0]] || STATUS_LEVELS.warning.color, meta: `${count}×` })) }] : [])
     ],
     ctaLabel: 'Open Setup & health', footer: 'You get this because your email is in PLATFORM_ADMIN_EMAILS.'
   });
   let sent = 0;
-  for (const admin of admins) if (await sendEmail(admin, 'SignalDesk: something needs a look', content).catch(() => false)) sent += 1;
+  for (const admin of admins) if (await sendEmail(admin, `SignalDesk ${status.label.toLowerCase()}: something needs a look`, content).catch(() => false)) sent += 1;
   if (errors.length) await databaseRequest(`app_errors?id=in.(${errors.map((row) => row.id).join(',')})`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ alerted_at: new Date().toISOString() }) }).catch(() => {});
   return { sent, errors: errors.length, failed: failed.length };
 }

@@ -156,7 +156,7 @@ module.exports = async function handler(req, res) {
         released = true;
       }
       await notify({
-        workspaceId: link.workspace_id, audience: 'admins', type: 'client_review', category: 'approvals',
+        workspaceId: link.workspace_id, audience: 'admins', type: 'client_review', category: 'approvals', level: body.decision === 'approved' ? 'good' : 'attention',
         title: body.decision === 'approved' ? `${client.name} approved “${post.title || 'a post'}”` : `${client.name} asked for changes to “${post.title || 'a post'}”`,
         body: `${name}${comment ? `: ${comment.slice(0, 200)}` : ''}${released ? ' It’s now scheduled.' : ''}`, view: 'calendar', data: { postId: post.id }
       });
