@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 12, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 16, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -15,11 +15,11 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [x] **New: delete the old `signaldesk` Anthropic key.** Done November 12; `signaldesk-new` is the only key.
 
 - [x] **0. Run the latest database update. Do this first.** Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health will flag a missing table, Activity shows post events only, and the database's double-booking check stays off.
-- [ ] **1. Ask Google to index the home page.** In Search Console, paste `https://socialsignaldesk.com/` into URL Inspection and click Request indexing.
+- [ ] **1. Ask Google to index the home page.** In Search Console, paste `https://socialsignaldesk.com/` into URL Inspection and click Request indexing. Checked November 16: the site is set up correctly (search engines allowed, sitemap lists all four pages, nothing blocks indexing), but no pages show in search yet, so this is still worth doing.
 - [ ] **2. Add your name and photo.** Settings → Your account.
 - [ ] **3. Add OpenID Connect to LinkedIn app 1.** Add the **Sign In with LinkedIn using OpenID Connect** product. It's self-serve and instant.
 - [ ] **4. Replace any Meta, LinkedIn, or Pinterest answers you've already copied.** I corrected them in [app-review.md](app-review.md), including who can use SignalDesk and that blog feeds can schedule posts automatically, so older copies are out of date. Skip this if you haven't copied any.
-- [ ] **5. Check the first Monday email on November 9.** It should arrive after 8 AM Eastern. Tell me if it doesn't.
+- [x] **5. Check the first Monday email on November 9.** Arrived ("All good"). It should arrive after 8 AM Eastern. Tell me if it doesn't.
 - [ ] **6. Check Google's indexing around November 10.** In Search Console, open Indexing → Pages and look for your four pages. Results can take days to weeks to appear.
 
 ## 10 to 30 minutes each
@@ -41,12 +41,10 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 Added November 5, 2026, from the outside review.
 
 - [ ] **A. Turn on automated backups and test a restore.** Needs Supabase Pro (task 12). Restore a backup into a separate, temporary Supabase project, never the live one, and confirm clients, posts, and connections came back. About half a day. A backup that's never been restored isn't proven.
-- [ ] **B. Try real failures on your own accounts.** Each should show a clear message, and none should post twice. About an hour, spread out:
-  - Revoke SignalDesk's access on a network, with a post scheduled soon. It should say Reconnect needed, then publish on retry after reconnecting.
-  - Schedule several posts for the same minute across networks. Each should publish once.
-  - Upload a file over 50 MB and a video the network won't accept. Each should be refused before scheduling.
+- [ ] **B. Try one real failure on your own accounts.** About 15 minutes. Revoke SignalDesk's access on one network (in that network's settings, under connected apps), with a post scheduled soon. It should say Reconnect needed; reconnect, then **Retry**, and it should publish once.
+  - Covered by automated tests since November 16, so no need to try by hand: a signed-out account is flagged and blocks retry until reconnected, and retry works after reconnecting; a post can't be picked up twice, and one that may already be live asks before retrying; uploads over 50 MB or that aren't images or video are refused by the storage itself; videos a network won't accept are flagged before scheduling.
 - [ ] **C. Check that a repeat post keeps its local time across a clock change.** Daylight saving ended November 1, so the next real change is March 14, 2027. Set a weekly repeat that spans it and check its times on the calendar.
-- [ ] **D. Confirm that one workspace can't see another's data.** Use a second real workspace with a test client, before any paying customer signs up. Sign in to each one and confirm neither shows the other's clients, posts, or files. Create only this one test account, because of Supabase's email limit.
+- [ ] **D. Confirm that one workspace can't see another's data.** Mostly done: since November 16 an automated test sets up two workspaces (even with the same client ID) and tries to read, change, and delete across them, directly in the database, through 25 server actions, and through uploaded files. All of it is blocked, and it runs with every change. What's left is a 5-minute look on the live site before any paying customer signs up: sign in to a second real workspace with a test client and confirm neither shows the other's clients or posts. Create only this one test account, because of Supabase's email limit.
 - [x] **E. Check how the Threads and X test post went out.** Both published directly (November 12). The website now lists them as direct networks. Open the PK Works test post's details and see whether those two were direct posts or reminders. Tell me which, so the docs and the report can say for sure.
 
 ## Half a day or more, with waiting

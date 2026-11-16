@@ -384,6 +384,11 @@ update publish_jobs set status='publishing', locked_at=now()-interval '20 minute
 await q(`select * from claim_publish_jobs(0, gen_random_uuid())`);
 jobs = await q(`select platform, status from publish_jobs where post_id='${failId}' order by platform`);
 assert.deepEqual(jobs.map((j) => `${j.platform}:${j.status}`), ['facebook:failed', 'linkedin:unknown', 'pinterest:queued']);
+// Reconnecting updates the same connection, so the failed post can then be retried.
+await db.exec(`update social_connections set status='active', last_error=null where platform='facebook'`);
+r = await call({ action: 'retry-job', jobId: fbJob });
+assert.equal(r.status, 200, 'retry works once the account is reconnected: ' + JSON.stringify(r.payload));
+assert.equal((await q(`select status from publish_jobs where id='${fbJob}'`))[0].status, 'queued');
 
 // --- Instagram video waits for processing without using attempts ---
 await db.exec(`update social_connections set status='active'`);
