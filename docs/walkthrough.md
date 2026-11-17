@@ -3,7 +3,7 @@
 Your guide to running SignalDesk: what's set up, what's left, how to use it day to day, and what to do when something breaks.
 
 Live site: **https://socialsignaldesk.com**
-Last updated: November 5, 2026
+Last updated: November 17, 2026
 
 ---
 
@@ -23,12 +23,12 @@ Last updated: November 5, 2026
 
 | Service | What it does | Where to manage it |
 |---|---|---|
-| **Vercel** (project `signaldesk`) | Hosts the site and the server code. Every push to `main` deploys automatically. | vercel.com → myatmoapp → signaldesk |
-| **Supabase** project **`zuckwjjzhrcesrzbfdak`** | Database, sign-in, uploaded media, and the scheduler. | supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak |
-| **GitHub** `phil-kukawinski/SignalDesk` | The code. | github.com/phil-kukawinski/SignalDesk |
-| **Resend** | Sends emails: invites, notifications, reports, and (once set up) sign-up confirmations. | resend.com |
-| **Namecheap** | DNS for `pkworks.co`. | Domain List → pkworks.co → Advanced DNS |
-| **Meta, LinkedIn, Pinterest developer apps** | Let SignalDesk publish to those networks. | developers.facebook.com, linkedin.com/developers, developers.pinterest.com |
+| **Vercel** (project `signaldesk`, **Pro plan**) | Hosts the site and the server code. Every push to `main` deploys automatically. | vercel.com → myatmoapp → signaldesk |
+| **Supabase** project **`zuckwjjzhrcesrzbfdak`** (free plan) | Database, sign-in, uploaded media, and the scheduler. | supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak |
+| **GitHub** `phil-kukawinski/SignalDesk` (public) | The code. | github.com/phil-kukawinski/SignalDesk |
+| **Resend** | Sends every email from `hello@pkworks.co`: invites, notifications, reports, the Monday check, and sign-up confirmations. | resend.com |
+| **Namecheap** | DNS for `socialsignaldesk.com` and `pkworks.co`. | Domain List → the domain → Advanced DNS |
+| **Meta, Threads, LinkedIn, Pinterest, X developer apps** | Let SignalDesk publish to those networks. | developers.facebook.com, linkedin.com/developers, developers.pinterest.com, developer.x.com |
 | **Anthropic** | AI features: caption drafts, image descriptions, proofreading, trends, Fill from website. | console.anthropic.com |
 
 > **Important:** the Supabase project **`dfdpqxgkumzlbovzzawg` belongs to ATMO, not SignalDesk.** Always check the project ID in the address bar before running SQL. SignalDesk's is `zuckwjjzhrcesrzbfdak`.
@@ -47,75 +47,39 @@ These live in Vercel → signaldesk → Settings → Environment Variables. Afte
 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | LinkedIn | ✅ Set, waiting on products and review |
 | `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_SANDBOX` | Pinterest | ✅ Set |
 | `ANTHROPIC_API_KEY` | AI features | ✅ Set |
-| `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | Email (`SignalDesk <hello@pkworks.co>`) | ✅ Set; domain not verified yet |
+| `X_CLIENT_ID`, `X_CLIENT_SECRET` | X | ✅ Set, publishing directly |
+| `THREADS_APP_ID`, `THREADS_APP_SECRET` | Threads | ✅ Set, publishing directly for PK Works; others wait on Meta's review |
+| `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | Email (`SignalDesk <hello@pkworks.co>`) | ✅ Set and verified |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Push notifications | ✅ Set |
 | `PLATFORM_ADMIN_EMAILS` | Who sees Beta invites and gets error emails | ✅ Set to your email |
 | `LEGAL_CONTACT_EMAIL`, `LEGAL_OPERATOR_NAME`, `LEGAL_GOVERNING_LAW` | Shown on the privacy, terms, and data deletion pages | ✅ Set |
-| `UNSPLASH_ACCESS_KEY` | Stock photos | ⬜ Not set |
-| `LINKEDIN_PAGES_CLIENT_ID`, `LINKEDIN_PAGES_CLIENT_SECRET` | The second LinkedIn app, for company Pages | ⬜ Not set (create the app first) |
+| `UNSPLASH_ACCESS_KEY` | Stock photos | ✅ Set (demo access, 50 searches an hour) |
+| `LINKEDIN_PAGES_CLIENT_ID`, `LINKEDIN_PAGES_CLIENT_SECRET` | The second LinkedIn app, for company Pages | ⬜ Waiting on LinkedIn's Community Management approval |
 
 ---
 
 ## 2. What's left to set up
 
-Work through these in order. Each step says how to confirm it worked.
+The full, ranked to-do list lives in **[README-tasks.md](README-tasks.md)**. This is the short version.
 
-### ☐ 1. Verify `pkworks.co` in Resend (email)
+### Done
 
-Resend can't send to anyone but you until the domain is verified. Its last check **failed** because the DNS records aren't published yet.
+- **Email:** `pkworks.co` is verified in Resend, and Supabase's sign-in emails go through it from `hello@pkworks.co`. The old 2-emails-an-hour limit no longer applies.
+- **Domain:** `socialsignaldesk.com` is live, with the old `vercel.app` address redirecting to it.
+- **Stock photos:** Unsplash works on demo access (50 searches an hour).
+- **Direct publishing:** Facebook, Instagram, Threads, X, and LinkedIn (as yourself).
+- **Vercel Pro:** active.
 
-1. At **Namecheap → pkworks.co → Advanced DNS**, add these four records. Namecheap adds `.pkworks.co` automatically, so enter only the Host shown.
+### Still open
 
-   | Type | Host | Value | Priority |
-   |---|---|---|---|
-   | TXT | `resend._domainkey` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCiJpR6s49dL0mC0qs9JaiLAN/t1++vV02GdTMU4zPt8UxPhpiAJ4230Z0ht9DjF9jEo7bnUmcPu3+zQm7iZYHUC3cBqWcRlu2eUdrRc8hjkbCFeUD/gCh0keO17flTtZf/GXRqUE9qpod3V/rSRHtW3fmKfJjarD4yU3avalktcwIDAQAB` | |
-   | MX | `send` | `feedback-smtp.us-east-1.amazonses.com` | 10 |
-   | TXT | `send` | `v=spf1 include:amazonses.com ~all` | |
-   | CNAME | `rsend` | `send.forge.rmta.net` | |
-
-   - Add the MX record under **Mail Settings → Custom MX**. **Keep your existing Google MX record**; it's for your main inbox.
-   - These records only cover the `send` and `resend` subdomains, so your Google Workspace email isn't affected.
-2. In **Resend → Domains → pkworks.co**, select **Verify** (or **Restart verification**).
-3. ✅ **Done when** Resend shows **Verified**. It usually takes minutes, sometimes a few hours.
-
-### ☐ 2. Send Supabase's sign-in emails through Resend
-
-Supabase's built-in email sends only about **2 emails an hour**, so a third sign-up within an hour gets blocked. Do this right after step 1.
-
-1. Supabase (SignalDesk project) → **Authentication → Emails → SMTP Settings** → turn on **Enable custom SMTP**:
-
-   | Field | Value |
-   |---|---|
-   | Sender email | `hello@pkworks.co` |
-   | Sender name | `SignalDesk` |
-   | Host | `smtp.resend.com` |
-   | Port | `465` |
-   | Username | `resend` |
-   | Password | your Resend API key (in `.env.local` as `RESEND_API_KEY`) |
-
-2. **Authentication → Rate Limits** → raise **emails sent per hour** to about 30.
-3. ✅ **Done when** a test sign-up's confirmation email arrives from `hello@pkworks.co`.
-
-### ☐ 3. Unsplash stock photos (optional)
-
-1. Create a free app at **unsplash.com/developers** and copy its **Access Key**.
-2. Add `UNSPLASH_ACCESS_KEY` in Vercel, then redeploy.
-3. ✅ **Done when** Settings → Setup & health shows **Stock photos (Unsplash)** as OK.
-
-New Unsplash apps allow 50 searches an hour. Apply for production access in their dashboard for more.
-
-### ☐ 4. App reviews (Meta, LinkedIn, Pinterest)
-
-Until each network approves your app, SignalDesk can only connect accounts that have a role on that app (basically, yours). Full copy-paste answers and screen-recording scripts are in **`docs/app-review.md`**.
-
-1. **Meta:** start **Business Verification** first (Meta Business Settings → Security Center); it can take days. Then submit App Review for the 10 permissions.
-2. **LinkedIn:**
-   - **Your existing app:** add **Sign In with LinkedIn using OpenID Connect** (alongside Share on LinkedIn). Both are instant and let you post as yourself.
-   - **Company Pages need a second app:** LinkedIn requires the Community Management API to be alone on its app. Create **SignalDesk Pages**, verify it with the PK Works Page, request the Community Management API using a business email (not Gmail), then add `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET` in Vercel. Details are in `docs/app-review.md`.
-3. **Pinterest:** add `PINTEREST_APP_SECRET` in Vercel, then apply for **Standard** access.
-4. **Before submitting:** create a reviewer login. Reviewers need a SignalDesk account to sign in with. Create an invite (see section 4) and use it to make an account for them.
-5. **X, YouTube, TikTok, Threads** (optional, each on its own): create the developer app, add `https://socialsignaldesk.com/api/oauth` as the redirect URL, and put its keys in Vercel (`X_CLIENT_ID`/`X_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`, `THREADS_APP_ID`/`THREADS_APP_SECRET`). Steps for each are in the README under **Publishing setup → 6b**, and review notes are in `docs/app-review.md`. Re-run `supabase/schema.sql` once so the database accepts the new networks.
-6. ✅ **Done when** each network shows approved. Then connect your accounts and post a test to each (see section 3).
+1. **Supabase Pro.** Needed for backups you can restore (task A). Supabase wouldn't accept your card. Options: try another card, or ask Supabase support (Dashboard → Help) for another way to pay. Until then, use **Settings → Export** regularly (see section 5, Backups).
+2. **App reviews (Meta, LinkedIn, Pinterest).** Until each network approves the app, SignalDesk can only connect accounts that have a role on it (basically, yours). Copy-paste answers and screen-recording scripts are in **[app-review.md](app-review.md)**.
+   - **Meta:** Business Verification first, then App Review. Add `read_insights` before recording, so reach and views show.
+   - **LinkedIn:** app 1 needs the **Sign In with LinkedIn using OpenID Connect** product (instant). App 2, for company Pages, is waiting on LinkedIn's reply to your appeal.
+   - **Pinterest:** apply for **Standard** access. Until then Pinterest refuses live Pins, so the website lists it as coming soon.
+   - **Before submitting:** create a reviewer login (Settings → Team members, or an invite from section 4).
+3. **YouTube and TikTok.** Connected but posting privately until each network's audit passes; still advertised as reminders.
+4. **Unsplash production access**, for more than 50 searches an hour.
 
 ---
 
@@ -131,9 +95,13 @@ The first time someone signs in, SignalDesk shows a welcome screen and offers a 
 
 A new workspace also shows a slim **Finish setting up** bar on the Command Center with the next step and its button. **All steps** shows the full list, and **×** hides it.
 
+The sidebar is grouped into **Plan** (Home, calendar, Publishing Studio, Campaigns, Library), **Review** (Approvals, Social Inbox), **Measure** (Analytics), and **Manage** (Clients, Social Accounts, Settings). Your name at the bottom opens an account menu: your account, light or dark theme, shortcuts, feedback, and sign out. **Settings** also has **Text size** and **Density** if the screen feels cramped or too large.
+
+Times read the friendly way across lists and the post panel: "In 4 hours", "Tomorrow, 9:00 AM".
+
 Press **?** anywhere for keyboard shortcuts: **N** starts a new post, **/** searches, and **G** then **C** jumps to the calendar (**H** home, **A** analytics, **S** social accounts).
 
-**Needs your attention** on the Command Center lists failed posts, approvals, accounts to reconnect, and dates with nothing planned. Select **×** to dismiss one; it comes back if something about it changes, and **Show dismissed** brings them all back. Dismissing only hides it on your own device and doesn't fix anything, so a dismissed failed post still needs a retry.
+A **Needs attention** row at the top of the Command Center counts what's waiting (failed posts, approvals, accounts to reconnect); each count goes straight to the fix. Below it, **Needs your attention** lists failed posts, approvals, accounts to reconnect, and dates with nothing planned. Select **×** to dismiss one; it comes back if something about it changes, and **Show dismissed** brings them all back. Dismissing only hides it on your own device and doesn't fix anything, so a dismissed failed post still needs a retry.
 
 With more than one client, use the picker at the top right of the Command Center or Analytics to show **All clients** or just one. Both pages share the choice: the numbers, upcoming posts, the attention list, goals, the performance chart, audience, link clicks, top posts and the exported report all follow it, and it's remembered on that device.
 
@@ -168,6 +136,7 @@ The brand kit opens after you add a client. You can also open it any time from t
    - **✦ Draft with AI** writes a version for each network in the client's voice.
    - **Templates** and **Snippets** insert saved text.
    - The **network tabs** let you customize the copy or media for one network.
+   - **@mentions:** type **@** in the caption, a network's own copy, or the first comment. SignalDesk suggests accounts this client has tagged or mentioned before, and looks up a typed name on Instagram to show the account's picture and name. Only Instagram business and creator accounts can be looked up. The @ still goes out on every network: it links on Instagram, Threads, and X, and shows as plain text on Facebook and LinkedIn.
 3. **Add media:**
    - **Upload:** **Prep image** helps you crop to each network's shape.
    - **Stock photo:** **🔍 Find a free stock photo** searches Unsplash. You can add the photographer credit to the post.
@@ -179,17 +148,27 @@ The brand kit opens after you add a client. You can also open it any time from t
    - A **dot on the Instagram tab** means Instagram's copy of the image will be adjusted. Instagram only accepts JPEG images between 4:5 and 1.91:1, so SignalDesk converts and pads other images automatically, without cropping.
 5. **Post options:**
    - **Collaborators & tags:** type an Instagram username to look it up. The account's picture and name confirm you have the right one. **Open ↗** checks any account on Instagram.
-   - **Comments:** a first comment, plus follow-up comments.
+   - **Comments:** a first comment (posted right after the post goes live, good for hashtags), plus follow-up comments.
+   - **Video cover:** for video posts, **Choose a frame** picks the cover. You can change it later from the post panel in the calendar.
    - **Privacy, Pinterest settings, and Repeat:** repeat runs weekly, every 2 weeks, monthly, or every few days.
 6. **Publishing options:**
    - Pick a date and time, a campaign, and tracking options: UTM tags, or **short links** that count clicks per network.
    - Then choose **Schedule post**, **Post now**, **Send for approval**, or **Add to queue**.
 7. **After scheduling:** a confirmation lists each network and the time, and the Publishing Studio clears for the next post. **View in calendar** jumps to the post's date. If the post started as a saved draft, the draft is removed, since the scheduled post replaces it. Opened from a campaign, the confirmation also offers **Back to campaign drafts**.
 
+### Import many posts from a spreadsheet
+
+**Import CSV** in the Publishing Studio (or **Import spreadsheet** on Campaigns) takes up to 200 posts at a time. **Download a template** for the columns.
+
+- **Media by file name:** put file names in the spreadsheet's media column (and `cover` for a video's cover), then select **Add media files** and pick those files. You can add them in more than one batch; each batch joins the ones already added.
+- The import shows the range of files added (for example "1.png … 49.png, 50.png") and, under **Still needed**, any file the spreadsheet names that you haven't added yet.
+- **Import as drafts** sends each ready row to Saved drafts instead of scheduling it, so you can review or send them for approval first.
+
 ### Calendar, approvals, and clients
 
 - **Content Calendar** has Day, Week, Month, List, and Grid views. **List** shows every upcoming post for the next 12 months, soonest first; use **Filter** to narrow it by client, network, status, or campaign.
   - Drag a post or draft to reschedule it, then confirm. Day and Week views set the day and time; Month sets the day and keeps the time. Click a post for its details.
+  - Each post has a **status dot** (the legend under the calendar explains the colors), and busy Month days show network icons.
   - The gold bands are good times to post: general starter times at first, then based on your own results.
   - **Print** saves the visible range as a PDF.
 - **Approvals:** posts from members with the User role wait here for an admin to approve.
@@ -201,8 +180,9 @@ The brand kit opens after you add a client. You can also open it any time from t
 - **Post details** show each network's status, a **View** link, and link clicks.
 - **Social Inbox → Comments on your posts:** read and reply to comments on Facebook, Instagram, and LinkedIn.
 - **Analytics & Reports**, in three tabs:
-  - **Overview:** reach, engagements, engagement rate, published posts, and engagement over time.
-  - **Posts:** **Top posts**, **When posts do best**, and **Link clicks** by network.
+  - Each network keeps the **same color** everywhere: charts, tables, the client report, and the report emails. A one-line summary sits at the top of Overview and Posts.
+  - **Overview:** reach, engagements, engagement rate, published posts, and engagement over time. Switch the chart between **All networks** and **By network** (one line each); click a legend entry to hide or show it.
+  - **Posts:** **Top posts** (each row edged in its network's color), **When posts do best** (filter by network), and **Link clicks** by network.
   - **Reports:** **Client report** (a branded PDF), **Weekly Top Posts**, and **Campaigns**.
   - **Export report:** a CSV.
 - Monthly client report emails can be turned on in each brand kit.
@@ -267,9 +247,23 @@ Anyone can delete their own account under **Settings → Your account → Delete
 - **Connected accounts:** which need reconnecting, and whose sign-ins expire soon.
 - **Recent problems:** failed posts, failed network sign-ins, and failed comments from the last 14 days.
 
-### Emails you'll get as platform owner
+### Emails and their colors
 
-Once Resend is verified, you get an email, at most every 6 hours, when server errors are logged or several posts fail across workspaces. Settings → Beta invites → **Server errors in the last 24 hours** shows the same list.
+Every SignalDesk email is color coded by how urgent it is, with a colored bar across the top, a label above the heading, and a legend when an email mixes levels:
+
+| Color | Label | Means | Examples |
+|---|---|---|---|
+| Dark red | **Emergency** | Fix now | The scheduler stopped, posts about to miss their time, site or database down, many posts failing across workspaces |
+| Red | **Warning** | Something broke | A post failed, an account was signed out or expired, a comment failed |
+| Yellow | **Attention** | Needs a look | An account expiring soon, a post waiting for approval, a client asked for changes |
+| Green | **Good** | Went well | A client approved, an approval came through |
+
+Emergency and warning emails also start their subject with "Emergency:" or "Warning:". Digest emails list the most urgent items first. Network names in reports use the same colors as the app.
+
+**As platform owner** you also get:
+
+- **The Monday check** (after 8 AM Eastern): a health check of the site, database, scheduler, sign-in, accounts, and recent errors, grouped from Emergency down to Working. "All good" means nothing needs you.
+- **Problem alerts,** at most every 6 hours, when server errors are logged or posts fail across workspaces. Settings → Beta invites → **Server errors in the last 24 hours** shows the same list.
 
 ### The scheduler
 
@@ -291,7 +285,7 @@ select jobname, schedule from cron.job where jobname like 'signaldesk%';
 
 ### Backups
 
-Supabase's free plan has no backups you can restore yourself. Until you upgrade, use **Settings → Export** now and then to download a full copy (JSON) and a posts spreadsheet (CSV). Export isn't a restore plan: before taking customers, turn on automated backups and test a restore (tasks 12 and A in `docs/README-tasks.md`).
+Supabase's free plan has no backups you can restore yourself, and the upgrade is on hold until Supabase takes a payment method (section 2). Until then, use **Settings → Export** about once a week, and before any big change, to download a full copy (JSON) and a posts spreadsheet (CSV). Export isn't a restore plan: before taking customers, turn on automated backups and test a restore (tasks 12 and A in `docs/README-tasks.md`).
 
 ---
 
@@ -299,9 +293,10 @@ Supabase's free plan has no backups you can restore yourself. Until you upgrade,
 
 | What you see | Likely cause | Fix |
 |---|---|---|
-| Sign-up says "too many requests" or emails don't arrive | Supabase's 2-emails-an-hour limit | Finish section 2, steps 1 and 2 (Resend SMTP). Until then, wait an hour. |
+| Sign-up emails don't arrive | Supabase's email settings (Authentication → Emails → SMTP) changed or the sender address is wrong | Supabase → Logs → **Auth** shows the real reason. The sender must be `hello@pkworks.co` (`.co`, not `.com`). |
 | "SignalDesk is invite-only…" after signing in | No invite code on the account | Enter a code in the prompt, or create one in Beta invites. |
-| A network's Connect pop-up shows an error | The developer app is missing a permission or product | Setup & health → Recent problems shows the network's exact message. LinkedIn "unauthorized scope" means a product is missing (section 2, step 4). |
+| A network's Connect pop-up shows an error | The developer app is missing a permission or product | Setup & health → Recent problems shows the network's exact message. LinkedIn "unauthorized scope" means a product is missing (section 2). |
+| An @mention shows "can't be looked up" | It's a personal Instagram account, or the name is misspelled | Personal accounts can't be confirmed by any app. Check the name with **Open ↗**; the @ still goes out as typed. |
 | A post didn't go out | Scheduler stopped, account needs reconnecting, or the network refused it | Open the post's details for the reason; **Retry** once fixed. Check Setup & health → Scheduler. |
 | "Check the account" on a post | The connection dropped after sending; it may already be live | Look on the network before selecting Retry, to avoid posting twice. |
 | Instagram image rejected | Very rare now; SignalDesk converts images automatically | Setup & health → **Instagram image conversion** should be OK. Use Prep image to crop if needed. |
@@ -317,6 +312,6 @@ Supabase's free plan has no backups you can restore yourself. Until you upgrade,
 - **Run locally:**
   - **Interface only:** open `index.html` in a browser. It opens on the sign-in screen; there's no demo mode any more.
   - **Full app with the API:** run `npm install`, then `vercel dev`.
-- **Test:** run `npm test`. It covers the server tests, database tests (a real Postgres loaded with `supabase/schema.sql`), interface tests, and browser checks. Google Chrome is required. The tests never contact Supabase or the social networks.
+- **Test:** run `npm test`. It covers the server tests, database tests (a real Postgres loaded with `supabase/schema.sql`), interface tests, and browser checks. Google Chrome is required. The tests never contact Supabase or the social networks. They include a check that one workspace can't read, change, or delete another's data, through the database, the server, and uploaded files.
 - **Deploy:** push to `main`. If you changed `supabase/schema.sql`, run it in the SignalDesk project too.
 - **More detail:** `README.md` (setup and features) and `docs/app-review.md` (network reviews).

@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 16, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 17, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -29,7 +29,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [ ] **9. Create the reviewer login.** Follow "Before you submit" in [app-review.md](app-review.md). The Meta, LinkedIn, and Pinterest reviews all use it.
 - [ ] **10. Watch for LinkedIn's reply on app 2 (company Pages).** LinkedIn denied the Community Management API request with "Business verification failed," and you sent a vetting appeal on November 3, 2026. Watch your Gmail and any `pkworks.co` inboxes for a request for documents. Have proof of your business ready, and make sure the business name, address, website, and LinkedIn Page all match.
 - [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pinterest refuses to create live Pins, so scheduled Pins fail, and the website lists Pinterest as coming soon. Tell me when it's approved so I can update the website. The answers are in [app-review.md](app-review.md).
-- [ ] **12. Upgrade to Vercel Pro and Supabase Pro.** This is quick but costs money, so wait until just before you invite anyone else. Check what backups Supabase Pro includes while you're there, since task A depends on them.
+- [ ] **12. Upgrade to Supabase Pro.** Vercel Pro is done (November 17). Supabase didn't accept your card: try another card, or ask Supabase support (Dashboard → Help) for another way to pay. Check what backups Pro includes while you're there, since task A depends on them. Until then, download **Settings → Export** about once a week.
 
 ## About an hour each
 

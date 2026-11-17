@@ -383,7 +383,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'feed-delete') {
     if (typeof body.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.id)) return send(res, 400, { error: 'Choose a feed.' });
-    await databaseRequest(`autopilot_feeds?${scope}&id=eq.${body.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    const removed = await databaseRequest(`autopilot_feeds?${scope}&id=eq.${body.id}`, { method: 'DELETE', headers: { prefer: 'return=representation' } });
+    if (!removed?.length) return send(res, 404, { error: 'Feed not found.' });
     await recordActivity(workspaceId, membership.name, 'autopilot_deleted', {});
     return send(res, 200, { ok: true });
   }
@@ -746,7 +747,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
 
   if (action === 'revoke-review-link') {
     if (!validUuid(body.id)) return send(res, 400, { error: 'Choose a link.' });
-    await databaseRequest(`review_links?workspace_id=eq.${workspaceId}&id=eq.${body.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+    const revoked = await databaseRequest(`review_links?workspace_id=eq.${workspaceId}&id=eq.${body.id}`, { method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify({ revoked_at: new Date().toISOString() }) });
+    if (!revoked?.length) return send(res, 404, { error: 'Link not found.' });
     await recordActivity(workspaceId, membership.name, 'review_link_revoked', {});
     return send(res, 200, { revoked: true });
   }

@@ -164,9 +164,11 @@ const attempts = [
 ];
 for (const body of attempts) {
   const result = await call(body);
+  if (body.action === 'feed-delete' || body.action === 'revoke-review-link') assert.equal(result.status, 404, `${body.action} on A's item says not found: ${JSON.stringify(result)}`);
   const text = JSON.stringify(result.payload);
   assert.ok(!text.includes(SECRET) && !text.includes(POST_A) && !text.includes(JOB_A) && !text.includes(FEED_A) && !text.includes(LINK_A) && !text.includes('A Client'),
     `${body.action}: B's answer mentions nothing of A's (status ${result.status}): ${text.slice(0, 300)}`);
 }
 assert.equal(await snapshot(), before, 'nothing of A’s changed');
+assert.equal((await q(`select count(*)::int n from activity_log where workspace_id=$1 and action in ('autopilot_deleted','review_link_revoked')`, [WB]))[0].n, 0, 'blocked deletes and revokes leave no line in B’s activity log');
 console.log(`isolation tests passed (${attempts.length} server actions, ${tables.length} tables)`);
