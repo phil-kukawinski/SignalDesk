@@ -29,7 +29,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [ ] **9. Create the reviewer login.** Follow "Before you submit" in [app-review.md](app-review.md). The Meta, LinkedIn, and Pinterest reviews all use it.
 - [ ] **10. Watch for LinkedIn's reply on app 2 (company Pages).** LinkedIn denied the Community Management API request with "Business verification failed," and you sent a vetting appeal on November 3, 2026. Watch your Gmail and any `pkworks.co` inboxes for a request for documents. Have proof of your business ready, and make sure the business name, address, website, and LinkedIn Page all match.
 - [ ] **11. Apply for Pinterest Standard access.** Until it's approved, Pinterest refuses to create live Pins, so scheduled Pins fail, and the website lists Pinterest as coming soon. Tell me when it's approved so I can update the website. The answers are in [app-review.md](app-review.md).
-- [ ] **12. Upgrade to Supabase Pro.** Vercel Pro is done (November 17). Supabase didn't accept your card: try another card, or ask Supabase support (Dashboard → Help) for another way to pay. Check what backups Pro includes while you're there, since task A depends on them. Until then, download **Settings → Export** about once a week.
+- [ ] **12. Upgrade to Supabase Pro.** Vercel Pro is done (November 17). Supabase didn't accept your card: try another card, or ask Supabase support (Dashboard → Help) for another way to pay. SignalDesk now makes its own daily backups (November 18; walkthrough section 5, Backups), so this is no longer urgent. Pro still adds Supabase's own backups and removes the free plan's limits before launch.
 
 ## About an hour each
 
@@ -40,7 +40,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 
 Added November 5, 2026, from the outside review.
 
-- [ ] **A. Turn on automated backups and test a restore.** Needs Supabase Pro (task 12). Restore a backup into a separate, temporary Supabase project, never the live one, and confirm clients, posts, and connections came back. About half a day. A backup that's never been restored isn't proven.
+- [ ] **A. Test a restore.** Daily backups now run on the free plan (November 18). Download one from Settings → Usage & costs → Backups, and we'll restore it together into a separate, temporary free Supabase project, never the live one, and confirm clients, posts, and connections came back. About an hour. A backup that's never been restored isn't proven.
 - [ ] **B. Try one real failure on your own accounts.** About 15 minutes. Revoke SignalDesk's access on one network (in that network's settings, under connected apps), with a post scheduled soon. It should say Reconnect needed; reconnect, then **Retry**, and it should publish once.
   - Covered by automated tests since November 16, so no need to try by hand: a signed-out account is flagged and blocks retry until reconnected, and retry works after reconnecting; a post can't be picked up twice, and one that may already be live asks before retrying; uploads over 50 MB or that aren't images or video are refused by the storage itself; videos a network won't accept are flagged before scheduling.
 - [ ] **C. Check that a repeat post keeps its local time across a clock change.** Daylight saving ended November 1, so the next real change is March 14, 2027. Set a weekly repeat that spans it and check its times on the calendar.

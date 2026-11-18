@@ -13,7 +13,7 @@ const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
   nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
-  allRows, openComments, setCommentState
+  allRows, openComments, setCommentState, recordWorkerRun
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
 const { readDocument, askQuestions, writePlan, rewritePost, cleanRequest, cleanSchedule, cleanPostLimit } = require('./_lib/campaign-builder');
@@ -29,6 +29,7 @@ const { deletionPlan, deleteAccount } = require('./_lib/account');
 const { recordActivity, listActivity } = require('./_lib/activity');
 const { brandFromSite } = require('./_lib/brandsite');
 const { withAiUsage } = require('./_lib/ai');
+const { runBackup, listBackups, lastBackup, backupDownloadUrl } = require('./_lib/backup');
 const { DAILY_COUNTERS, workspaceAllowances } = require('./_lib/allowances');
 const { listNetworkPosts, syncClient } = require('./_lib/sync');
 const { latestPlanningNote, createPlanningNote, NOTE_MAX_AGE_DAYS } = require('./_lib/planning');
@@ -49,7 +50,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'platform-usage', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
+  'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
   'planning-note', 'open-comments', 'comment-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
@@ -598,12 +599,21 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, { slug, enabled: body.enabled !== false });
   }
 
-  if (['platform-status', 'platform-usage', 'create-invite', 'revoke-invite', 'set-invite-only'].includes(action)) {
+  if (['platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only'].includes(action)) {
     if (!isPlatformAdmin(user.email)) return send(res, 403, { error: 'Only SignalDesk platform owners can manage invites.' });
     if (action === 'create-invite') return send(res, 200, await createInvite({ label: body.label, maxUses: body.maxUses, days: body.days, email: body.email, createdBy: user.email }));
     if (action === 'revoke-invite') return send(res, 200, await revokeInvite(body.code));
     if (action === 'set-invite-only') return send(res, 200, { inviteOnly: await setInviteOnly(body.inviteOnly !== false) });
-    if (action === 'platform-usage') return send(res, 200, { ...await platformUsage({ days: [7, 30, 90].includes(body.days) ? body.days : 30 }), allowances: await workspaceAllowances(workspaceId) });
+    if (action === 'platform-usage') {
+      const [usage, allowances, backups, last] = await Promise.all([platformUsage({ days: [7, 30, 90].includes(body.days) ? body.days : 30 }), workspaceAllowances(workspaceId), listBackups(), lastBackup()]);
+      return send(res, 200, { ...usage, allowances, backups, lastBackup: last });
+    }
+    if (action === 'backup-download') return send(res, 200, { url: await backupDownloadUrl(body.path) });
+    if (action === 'backup-now') {
+      const result = await runBackup();
+      await recordWorkerRun('backup', result);
+      return send(res, 200, { backup: result });
+    }
     const [only, invites, errors] = await Promise.all([inviteOnly(), listInvites(), recentErrors(24)]);
     return send(res, 200, { inviteOnly: only, invites, errors });
   }

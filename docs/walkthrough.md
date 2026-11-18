@@ -72,7 +72,7 @@ The full, ranked to-do list lives in **[README-tasks.md](README-tasks.md)**. Thi
 
 ### Still open
 
-1. **Supabase Pro.** Needed for backups you can restore (task A). Supabase wouldn't accept your card. Options: try another card, or ask Supabase support (Dashboard → Help) for another way to pay. Until then, use **Settings → Export** regularly (see section 5, Backups).
+1. **Supabase Pro.** Supabase wouldn't accept your card. Options: try another card, ask Supabase support (Dashboard → Help) for another way to pay, or move the project to Vercel-billed Supabase near launch. Until then, SignalDesk makes its own daily backups (section 5, Backups).
 2. **App reviews (Meta, LinkedIn, Pinterest).** Until each network approves the app, SignalDesk can only connect accounts that have a role on it (basically, yours). Copy-paste answers and screen-recording scripts are in **[app-review.md](app-review.md)**.
    - **Meta:** Business Verification first, then App Review. Add `read_insights` before recording, so reach and views show.
    - **LinkedIn:** app 1 needs the **Sign In with LinkedIn using OpenID Connect** product (instant). App 2, for company Pages, is waiting on LinkedIn's reply to your appeal.
@@ -299,7 +299,19 @@ select jobname, schedule from cron.job where jobname like 'signaldesk%';
 
 ### Backups
 
-Supabase's free plan has no backups you can restore yourself, and the upgrade is on hold until Supabase takes a payment method (section 2). Until then, use **Settings → Export** about once a week, and before any big change, to download a full copy (JSON) and a posts spreadsheet (CSV). Export isn't a restore plan: before taking customers, turn on automated backups and test a restore (tasks 12 and A in `docs/README-tasks.md`).
+Supabase's free plan has no backups you can restore yourself, so SignalDesk makes its own:
+
+- **Every day,** the worker copies every table into one compressed file in a private `backups` bucket that only the server can reach. It keeps the last **7 daily copies plus 5 Monday copies**, so you can go back up to five weeks.
+- **What's in it:** all workspaces, clients, posts, connections (tokens stay encrypted), history, and settings, plus the list of sign-in accounts. **Not included:** passwords (Supabase never hands them out) and uploaded files (`media_files` lists them).
+- **Settings → Usage & costs → Backups** shows the last copy, lists every copy with **Download**, and has **Back up now** for right before a big change. Download one now and then and keep it somewhere of your own (it holds client data, so not a shared folder). The Monday check warns if no copy was made in two days.
+
+**Restoring.** Tell me what was lost and I'll do it with you. The steps:
+
+1. Download the copy from before the problem.
+2. Make the SQL: `node scripts/restore-backup.mjs daily-2026-11-18.json.gz --sql restore.sql`. Add `--table scheduled_posts --table publish_jobs` to restore only some tables. Without `--sql`, it just lists what's in the copy.
+3. Read it over, then run it in the **SignalDesk** SQL editor. Rows that still exist are left alone, so it only puts back what's missing, and running it twice does nothing extra.
+
+A full rebuild into a new project also needs `supabase/schema.sql` first and the sign-in accounts recreated (people then set a new password). **Settings → Export** still works as a second, per-workspace copy.
 
 ---
 

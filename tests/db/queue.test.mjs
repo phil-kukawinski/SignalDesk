@@ -56,6 +56,10 @@ global.fetch = async (input, options = {}) => {
     const token = (options.headers.authorization || '').replace('Bearer ', '');
     return token === 'admin' ? reply({ id: ADMIN, email: 'owner@x.com', user_metadata: globalThis.adminMeta || {} }) : token === 'user' ? reply({ id: USER, email: 'member@x.com' }) : reply({}, 401);
   }
+  // The worker's daily backup: sign-in accounts to list, and a private bucket that accepts the copy.
+  if (url.startsWith('https://sb.test/auth/v1/admin/users?page=')) return reply({ users: [] });
+  if (url === 'https://sb.test/storage/v1/bucket' || url.startsWith('https://sb.test/storage/v1/object/backups/')) return reply({ Key: 'x' });
+  if (url === 'https://sb.test/storage/v1/object/list/backups') return reply([]);
   const call = { url, method: options.method || 'GET', body: options.body, headers: options.headers || {} };
   external.push(call);
   return networkHandler(call);
@@ -1464,7 +1468,7 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     const { runWeeklyCheck, maybeRunWeeklyCheck } = require(`${ROOT}/api/_lib/weekly-check.js`);
     const { recordWorkerRun } = require(`${ROOT}/api/_lib/publishing.js`);
     await db.exec(`delete from app_errors; update social_connections set status='active'; delete from publish_jobs where status in ('failed','unknown')`);
-    await recordWorkerRun('publish'); await recordWorkerRun('worker');
+    await recordWorkerRun('publish'); await recordWorkerRun('worker'); await recordWorkerRun('backup', { bytes: 2000000, rows: 120 });
     let siteStatus = 200, domainStatus = 'verified', recoverStatus = 200, testAccounts = 0;
     const authSettings = { external: { email: true }, mailer_autoconfirm: false };
     const checkMails = [];

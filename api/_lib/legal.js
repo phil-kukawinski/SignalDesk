@@ -148,7 +148,8 @@ ${providers}
 <li>If you delete your account but your team’s workspace continues: your name, and your email address where it was recorded, stay on those activity log entries until they’re deleted, and your name stays on the history and notes of posts you worked on. This keeps a record of who did what for the team.</li>
 <li>Uploaded files that no post or draft uses anymore: deleted automatically after 30 days.</li>
 <li>Sign-in attempts with a network: expire after 15 minutes.</li>
-<li>Deletion requests: completed within 30 days. Copies in our database provider’s backups are removed when those backups expire.</li>
+<li>Backups: a copy of the database is made every day and kept privately for up to 5 weeks (daily copies for 7 days, plus one a week for 5 weeks), so data can be recovered after a mistake or failure. Something you delete stays in these copies until they expire. Backups don’t include passwords or uploaded files.</li>
+<li>Deletion requests: completed within 30 days. Copies in backups are removed when those backups expire, within 5 weeks.</li>
 </ul>
 <p>Deleting something from SignalDesk doesn’t remove posts already published on a social network. Delete those on the network itself.</p>
 

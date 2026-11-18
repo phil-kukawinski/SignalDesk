@@ -8,6 +8,7 @@ const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia, syncMediaFiles } = require('./_lib/media');
 const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
 const { maybeRunWeeklyCheck } = require('./_lib/weekly-check');
+const { maybeRunBackup } = require('./_lib/backup');
 
 const DAY_MS = 86400000;
 
@@ -52,6 +53,11 @@ module.exports = async function handler(req, res) {
     const planning = await processPlanningReminders().catch((error) => ({ error: error.message }));
     // "What to post next" notes take a while to write, so only when this run has time to spare.
     const planningNotes = Date.now() - started < 120000 ? await processPlanningNotes().catch((error) => ({ error: error.message })) : { skipped: true };
+    // The daily database copy (the free Supabase plan has no backups), when this run has time left.
+    const backup = Date.now() - started < 180000 ? await maybeRunBackup().catch(async (error) => {
+      await recordAppError('backup', error);
+      return { error: error.message };
+    }) : { skipped: true };
     let media = null;
     const lastCleanup = await lastWorkerRun('media-cleanup');
     if (!lastCleanup || Date.now() - Date.parse(lastCleanup) > DAY_MS) {
@@ -68,7 +74,7 @@ module.exports = async function handler(req, res) {
     const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
     if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, media, health });
+    return send(res, 200, { weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, backup, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);

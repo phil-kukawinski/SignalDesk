@@ -35,6 +35,15 @@ async function databaseCheck() {
   return missing.length ? emergency('Database', `Missing: ${missing.join(', ')}. Run the latest supabase/schema.sql.`) : pass('Database', 'Every table and column is in place.');
 }
 
+// The daily database copy (api/_lib/backup.js) ran in the last two days.
+async function backupCheck(now) {
+  const { lastBackup } = require('./backup');
+  const last = await lastBackup();
+  const size = last.bytes ? ` (${Math.max(0.1, last.bytes / 1048576).toFixed(1)} MB, ${last.rows} rows)` : '';
+  if (!last.at || now - Date.parse(last.at) > 2 * DAY_MS) return fail('Backups', `The last database copy was ${last.at ? new Date(last.at).toUTCString() : 'never'}${last.error ? `. The last try failed: ${last.error}` : ''}. Settings → Usage & costs → Back up now tries again.`);
+  return pass('Backups', `A database copy was made ${new Date(last.at).toUTCString()}${size}.`);
+}
+
 async function schedulerCheck(now) {
   const [publish, worker] = await Promise.all([lastWorkerRun('publish'), lastWorkerRun('worker')]);
   const age = (iso) => (iso ? now - Date.parse(iso) : Infinity);
@@ -129,6 +138,7 @@ async function runWeeklyCheck({ now = Date.now() } = {}) {
   const results = [
     await guard('Database', databaseCheck),
     await guard('Schedule', () => schedulerCheck(now)),
+    await guard('Backups', () => backupCheck(now)),
     await guard('Live site', siteCheck),
     await guard('Sign-in', signInCheck),
     await guard('Email', emailCheck),
