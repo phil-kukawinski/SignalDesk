@@ -25,6 +25,10 @@ async function call(url, { method = 'GET', body } = {}) {
   r = await call('/api/legal?page=terms'); assert.equal(r.status, 200); assert.match(r.sent, /Terms of Service/); assert.doesNotMatch(r.sent, /Governing law/);
   process.env.LEGAL_GOVERNING_LAW = 'the State of New York'; r = await call('/api/legal?page=terms'); assert.match(r.sent, /Governing law[\s\S]*State of New York/);
   r = await call('/api/legal?page=data-deletion'); assert.equal(r.status, 200); assert.doesNotMatch(r.sent, /class="status"/);
+  // The backups guide: what's copied, keeping your own copy privately, three ways back, and how to reach us.
+  r = await call('/api/legal?page=backups'); assert.equal(r.status, 200); assert.match(r.headers['content-type'], /text\/html/);
+  for (const text of [/Your backups/, /up to five weeks/, /Settings → General/, /Keep them private/, /Restore…/, /Import CSV/, /mailto:owner@studio\.test/, /aria-current="page">Backups/]) assert.match(r.sent, text);
+  assert.match(r.sent, /href="\/backups"/, 'every legal page links to the guide');
   r = await call('/api/legal?page=data-deletion&code=aaaaaaaaaaaaaaaaaaaaaaaa'); assert.match(r.sent, /Done\./); assert.equal(r.headers['cache-control'], 'no-store');
   r = await call('/api/legal?page=data-deletion&code=bbbbbbbbbbbbbbbbbbbbbbbb'); assert.match(r.sent, /couldn’t find/);
   r = await call('/api/legal?page=data-deletion&code=../../x'); assert.match(r.sent, /couldn’t find/);

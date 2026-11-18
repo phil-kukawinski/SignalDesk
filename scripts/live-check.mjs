@@ -33,7 +33,7 @@ if (page) {
     if (bundle && !bundle.ok) problems.push(`/${script}: HTTP ${bundle.status}`);
   }
 }
-for (const path of ['/privacy', '/terms', '/review.html', '/icons/icon.svg']) {
+for (const path of ['/privacy', '/terms', '/backups', '/review.html', '/icons/icon.svg']) {
   const response = await get(path);
   if (response && !response.ok) problems.push(`${path}: HTTP ${response.status}`);
 }

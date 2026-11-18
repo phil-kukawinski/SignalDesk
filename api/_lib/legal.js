@@ -39,7 +39,7 @@ function serviceProviders() {
 }
 
 function layout({ title, active, body }) {
-  const nav = [['privacy', 'Privacy'], ['terms', 'Terms'], ['data-deletion', 'Data deletion']]
+  const nav = [['privacy', 'Privacy'], ['terms', 'Terms'], ['data-deletion', 'Data deletion'], ['backups', 'Backups']]
     .map(([slug, label]) => `<a href="/${slug}"${slug === active ? ' aria-current="page"' : ''}>${label}</a>`).join('');
   return `<!doctype html>
 <html lang="en">
@@ -285,4 +285,56 @@ ${status}
   });
 }
 
-module.exports = { privacyPage, termsPage, deletionPage, escapeHtml };
+// /backups: what SignalDesk copies for you, how to keep a copy of your own, and how to get things back.
+function backupsPage() {
+  const s = settings();
+  return layout({
+    title: 'Your Backups', active: 'backups', body: `
+<h1>Your backups</h1>
+<p class="updated">How SignalDesk keeps your work safe, and how to keep a copy of your own</p>
+
+<h2>What SignalDesk does for you</h2>
+<p>Every day, SignalDesk makes a copy of every workspace: clients and brand kits, posts and schedules, settings, your team, and their history. We keep the copies for up to five weeks (one for each of the last 7 days, plus one a week for 5 weeks), somewhere private that only our server can reach.</p>
+<p>The copies don’t include passwords or the photos and videos you upload. Uploaded files stay where they are, and the copies remember which posts use them.</p>
+
+<h2>Keep a copy of your own</h2>
+<p>Our copies cover you if something goes wrong on our side. A copy of your own means you always have your work, whatever happens.</p>
+<ol>
+<li>In SignalDesk, open <b>Settings → General</b>. (Workspace admins can do this.)</li>
+<li>Select <b>Export</b>. Two files download:
+<ul>
+<li><b>signaldesk-<i>date</i>.json</b> holds everything in your workspace. This is the one you restore from.</li>
+<li><b>signaldesk-posts-<i>date</i>.csv</b> is a spreadsheet of your posts. It opens in Excel, Google Sheets, or Numbers.</li>
+</ul></li>
+<li>Save both in a folder of your own: on your computer, or in your own cloud storage such as iCloud Drive, Google Drive, or Dropbox.</li>
+</ol>
+<p><b>Keep them private.</b> They hold your clients’ posts, plans, and brand details, so don’t put them in a shared or public folder.</p>
+<p><b>How often:</b> once a month is plenty, and before any big change, such as removing a client. Keep the last few copies and delete older ones. If nobody in your workspace has made a copy in 30 days, admins get a reminder in their wrap-up email.</p>
+
+<h2>If something goes missing</h2>
+<h3>Restore it yourself</h3>
+<ol>
+<li>Open <b>Settings → General</b> and select <b>Restore…</b> (workspace admins can do this).</li>
+<li>Choose the <b>.json</b> file from your copy.</li>
+<li>SignalDesk compares it with your workspace and lists what’s missing, such as a deleted client, template, or upcoming post. Untick anything you don’t want back.</li>
+<li>Select <b>Restore</b>. Missing upcoming posts open in the import window, so you can check them before they’re scheduled.</li>
+</ol>
+<p>Only missing things come back. Nothing in your workspace now is changed, unless you also choose to replace the settings with the copy’s.</p>
+
+<h3>Just the posts</h3>
+<p>In the <b>Publishing Studio</b>, select <b>Import CSV</b> and choose the posts spreadsheet from your copy. Posts that still exist show “No change,” deleted upcoming posts are added back, and posts whose time has passed can only come back as drafts.</p>
+
+<h3>Ask us</h3>
+<p>Email ${s.contact} and tell us what went missing and roughly when. We can restore from our daily copies, up to five weeks back, even if you don’t have a copy of your own. The sooner you tell us, the more we can recover.</p>
+
+<h2>Good to know</h2>
+<ul>
+<li>Posts that already went out live on the social network. If one was deleted there, a restore can’t put it back on the network.</li>
+<li>Your copy doesn’t include sign-in tokens for your social accounts. If a connection was removed, connect the account again under <b>Social Accounts</b>.</li>
+<li>Photos and videos that no post or draft has used for 30 days are deleted automatically. If a restored post is missing its picture, add the file again.</li>
+</ul>
+<p>See also: <a href="/privacy">Privacy</a> for how long we keep data, and <a href="/data-deletion">Data deletion</a>.</p>`
+  });
+}
+
+module.exports = { privacyPage, termsPage, deletionPage, backupsPage, escapeHtml };

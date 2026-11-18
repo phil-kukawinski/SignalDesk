@@ -165,6 +165,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 - **Media by file name:** put file names in the spreadsheet's media column (and `cover` for a video's cover), then select **Add media files** and pick those files. You can add them in more than one batch; each batch joins the ones already added.
 - The import shows the range of files added (for example "1.png … 49.png, 50.png") and, under **Still needed**, any file the spreadsheet names that you haven't added yet.
 - **Import as drafts** sends each ready row to Saved drafts instead of scheduling it, so you can review or send them for approval first.
+- **The Export spreadsheet imports too.** Settings → Export's posts spreadsheet uses these same columns plus `id`, `status`, and `title`. Importing it shows existing posts as "No change," adds back upcoming posts that were deleted ("Ready (adds back a deleted post)"), and offers past ones only as drafts.
 
 ### Calendar, approvals, and clients
 
@@ -311,7 +312,12 @@ Supabase's free plan has no backups you can restore yourself, so SignalDesk make
 2. Make the SQL: `node scripts/restore-backup.mjs daily-2026-11-18.json.gz --sql restore.sql`. Add `--table scheduled_posts --table publish_jobs` to restore only some tables. Without `--sql`, it just lists what's in the copy.
 3. Read it over, then run it in the **SignalDesk** SQL editor. Rows that still exist are left alone, so it only puts back what's missing, and running it twice does nothing extra.
 
-A full rebuild into a new project also needs `supabase/schema.sql` first and the sign-in accounts recreated (people then set a new password). **Settings → Export** still works as a second, per-workspace copy.
+A full rebuild into a new project also needs `supabase/schema.sql` first and the sign-in accounts recreated (people then set a new password). **Each workspace's own copy.** Admins can keep their own copy and get things back without you:
+
+- **Settings → General → Export** downloads everything in the workspace (JSON) and a posts spreadsheet in the importer's format.
+- **Settings → General → Restore…** reads that JSON, lists only what's missing now (clients with their brand kits, saved posts, templates, snippets, library items, reply templates, and upcoming posts), and adds back what's ticked. Nothing current is overwritten; settings are replaced only if chosen. Missing upcoming posts open in the import window to check before scheduling. If the save fails, nothing is restored.
+- **The guide for users** is the public page **https://socialsignaldesk.com/backups** (linked from Settings, the Restore window, the reminder email, and the footer of the legal pages). It explains what SignalDesk copies, where to keep your own copy (a private folder of your own, not a shared one), the three ways back, and to email you for anything older.
+- **The reminder:** admins' wrap-up emails suggest a copy when nobody in the workspace has made one in 30 days, at most every four weeks, and never as an email of its own. Downloads show in Activity as "Downloaded a copy of the workspace."
 
 ---
 

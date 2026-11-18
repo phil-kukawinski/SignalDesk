@@ -25,6 +25,7 @@
   "js/insights.js",
   "js/ai.js",
   "js/composer-extras.js",
+  "js/restore.js",
   "js/history.js",
   "js/activity.js",
   "js/search.js",

@@ -5,7 +5,7 @@ const { databaseRequest } = require('./core');
 const ACTIVITY_GROUPS = {
   team: ['member_invited', 'member_role_changed', 'member_removed', 'invite_removed'],
   accounts: ['account_connected', 'account_disconnected'],
-  workspace: ['client_added', 'client_updated', 'client_removed', 'settings_changed', 'autopilot_saved', 'autopilot_deleted', 'review_link_created', 'review_link_revoked']
+  workspace: ['client_added', 'client_updated', 'client_removed', 'settings_changed', 'autopilot_saved', 'autopilot_deleted', 'review_link_created', 'review_link_revoked', 'workspace_exported']
 };
 const PAGE = 50;
 const KEEP_DAYS = 365;

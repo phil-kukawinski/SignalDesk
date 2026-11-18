@@ -208,6 +208,31 @@ async function periodPostsSection(workspaceId, clients, since) {
   return sections;
 }
 
+// Admins are reminded to keep a copy of their own workspace (Settings → General → Export) when nobody
+// has downloaded one in 30 days, at most once every four weeks per person, inside a wrap-up they'd
+// get anyway. SignalDesk's own daily backups cover every workspace and only platform owners reach them.
+const COPY_REMINDER_DAYS = 30;
+const COPY_REMINDER_EVERY_DAYS = 28;
+async function copyReminderSection(member, now) {
+  const reminderRun = `copy-reminder:${member.user_id}`;
+  const [exports, reminded] = await Promise.all([
+    databaseRequest(`activity_log?workspace_id=eq.${member.workspace_id}&action=eq.workspace_exported&select=created_at&order=created_at.desc&limit=1`).catch(() => null),
+    databaseRequest(`worker_runs?name=eq.${encodeURIComponent(reminderRun)}&select=last_run_at`).catch(() => null)
+  ]);
+  if (!Array.isArray(exports)) return [];
+  const lastExport = exports[0]?.created_at, lastReminder = Array.isArray(reminded) ? reminded[0]?.last_run_at : null;
+  const days = (iso) => (now - Date.parse(iso)) / 86400000;
+  if (lastExport && days(lastExport) < COPY_REMINDER_DAYS) return [];
+  if (lastReminder && days(lastReminder) < COPY_REMINDER_EVERY_DAYS) return [];
+  await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: reminderRun, last_run_at: now.toISOString(), last_result: {} }) }).catch(() => {});
+  const base = appUrl().replace(/\/+$/, '');
+  return [{ title: 'Keep your own copy', items: [{
+    title: 'Download a copy of your workspace',
+    body: `SignalDesk backs up everything every day, and a copy of your own means you always have your work. ${lastExport ? `Your workspace’s last copy was ${Math.floor(days(lastExport))} days ago.` : 'Your workspace hasn’t made one yet.'} In SignalDesk, open Settings → General and select Export. Save the two files in a private folder of your own, on your computer or in your own iCloud Drive, Google Drive, or Dropbox, not a shared one, since they hold your clients’ content. Once a month is plenty. If something ever goes missing, Settings → General → Restore brings it back from your copy.`,
+    meta: base ? `How backups work: ${base}/backups` : 'Settings → General → Export'
+  }] }];
+}
+
 // Sends digests and wrap-ups (daily, weekly, monthly, yearly, or every few days) at 8 AM in each workspace's time zone.
 async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
   if (!emailConfigured()) return { sent: 0, configured: false };
@@ -252,6 +277,8 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
       sections.push(...comingUpSection(localDateKey(now, timeZone), prefs, periodDays));
       if (member.role === 'admin') sections.push(...await planningNotesSection(member.workspace_id, state.clients || [], now));
     }
+    // Added only to a wrap-up that's going out anyway, so it never sends an email on its own.
+    if (sections.length && member.role === 'admin') sections.push(...await copyReminderSection(member, now));
     try {
       if (sections.length) {
         const shown = (short ? notifications : notifications.slice(0, 8)).map((item) => item.level);

@@ -708,6 +708,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       databaseRequest(`bio_pages?${scope}&select=slug,client_id,enabled`),
       databaseRequest(`activity_log?${scope}&select=actor_name,action,detail,created_at&order=created_at.desc&limit=20000`).catch(() => [])
     ]);
+    // Noted in Activity, so the wrap-up email only suggests a copy when nobody has made one recently.
+    await recordActivity(workspaceId, membership.name, 'workspace_exported', { posts: (posts || []).length });
     // Sign-in tokens and link secrets are never exported.
     return send(res, 200, {
       exportedAt: new Date().toISOString(), format: 'signaldesk-export-1',

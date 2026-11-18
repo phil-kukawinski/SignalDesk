@@ -1872,3 +1872,7 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 @media(max-width:620px){.usage-panel .usage-table{min-width:560px}.usage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.usage-panel .table-scroll,.usage-summary,.usage-setup,.usage-note{padding-left:0;padding-right:0}.usage-heading{margin-left:0}}
 .usage-backups-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-right:19px}.usage-backups-head .usage-heading{margin-bottom:0}.usage-warning{color:var(--warning-text);font-weight:600}
 @media(max-width:620px){.usage-backups-head{padding-right:0}}
+
+/* Settings → General: Export and Restore, and the Restore window. */
+.settings-buttons{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.restore-dialog{max-width:560px}.restore-pick{display:inline-flex;cursor:pointer}.restore-plan{display:grid;gap:8px;margin:8px 0}.restore-summary{margin:0 0 4px}.restore-option{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);cursor:pointer}.restore-option input{margin-top:3px}.restore-option b{display:block}.restore-option small{color:var(--muted);overflow-wrap:anywhere}
+.auth-form label.restore-pick{display:inline-flex;align-items:center;margin:4px 0 0;width:auto}.auth-form label.restore-option{display:flex;margin:0}.auth-form .restore-option input{width:auto;flex:none;margin:3px 0 0;padding:0}

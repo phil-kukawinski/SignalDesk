@@ -1,8 +1,8 @@
 const crypto = require('node:crypto');
 const { send, getConfig, databaseRequest } = require('./_lib/core');
-const { privacyPage, termsPage, deletionPage } = require('./_lib/legal');
+const { privacyPage, termsPage, deletionPage, backupsPage } = require('./_lib/legal');
 
-// Serves /privacy, /terms, and /data-deletion (see the rewrites in vercel.json), and receives
+// Serves /privacy, /terms, /data-deletion, and /backups (see the rewrites in vercel.json), and receives
 // Meta's two callbacks for when someone removes SignalDesk from their Facebook settings:
 //   POST /api/legal?event=meta-deletion     → delete their connections, return a status link
 //   POST /api/legal?event=meta-deauthorize  → mark their connections as needing sign-in
@@ -96,6 +96,7 @@ module.exports = async function handler(req, res) {
     let html;
     if (page === 'privacy') html = privacyPage();
     else if (page === 'terms') html = termsPage();
+    else if (page === 'backups') html = backupsPage();
     else if (page === 'data-deletion') html = deletionPage(await deletionRequest(url.searchParams.get('code')));
     else return send(res, 404, { error: 'Not found.' });
     res.setHeader('content-type', 'text/html; charset=utf-8');
