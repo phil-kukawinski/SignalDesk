@@ -140,6 +140,38 @@ async function lookupInstagramAccount(connection, username) {
   }
 }
 
+// Recent posts from a public Instagram business or creator account (Business Discovery), for
+// reposting with credit. Media links are Instagram's own and expire, so a repost copies them.
+async function instagramAccountPosts(connection, username, after) {
+  const page = `media.limit(18)${after ? `.after(${after})` : ''}{id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,children{media_type,media_url,thumbnail_url}}`;
+  let found;
+  try {
+    const result = await graph(connection.external_id, { token: connection.token, params: { fields: `business_discovery.username(${username}){username,name,profile_picture_url,followers_count,media_count,${page}}` } });
+    found = result.business_discovery;
+  } catch (error) {
+    if (error.kind === 'invalid' || error.kind === 'unknown') return { status: 'not-found' };
+    throw error;
+  }
+  if (!found?.username) return { status: 'not-found' };
+  const item = (media) => ({ type: media.media_type === 'VIDEO' ? 'video' : 'image', url: media.media_url || '', thumb: media.thumbnail_url || media.media_url || '' });
+  const posts = (found.media?.data || []).map((media) => {
+    const items = media.media_type === 'CAROUSEL_ALBUM' ? (media.children?.data || []).map(item) : [item(media)];
+    return {
+      id: media.id, caption: media.caption || '', kind: media.media_type === 'CAROUSEL_ALBUM' ? 'carousel' : media.media_product_type === 'REELS' ? 'reel' : items[0].type,
+      permalink: media.permalink || '', timestamp: media.timestamp || null, likes: media.like_count ?? null, comments: media.comments_count ?? null,
+      thumb: items.find((entry) => entry.thumb)?.thumb || '',
+      // Instagram leaves the media link out for some posts (for example Reels with licensed music); those can't be reposted.
+      items: items.filter((entry) => entry.url), available: items.length > 0 && items.every((entry) => entry.url)
+    };
+  });
+  const next = found.media?.paging?.next ? found.media?.paging?.cursors?.after || null : null;
+  return {
+    status: 'found',
+    account: { username: found.username, name: found.name || '', picture: found.profile_picture_url || '', followers: found.followers_count ?? null, posts: found.media_count ?? null },
+    posts, next
+  };
+}
+
 // Facebook post reach and views. Meta replaced the old impressions metrics with media views
 // (post_total_media_view_unique = unique viewers, used as reach; post_media_view = views);
 // the old post_impressions_unique stays as a fallback for older API versions.
@@ -981,6 +1013,6 @@ function adapterFor(platform) {
   return PROVIDERS[DIRECT_PLATFORMS[platform]];
 }
 
-module.exports = {
+module.exports = { instagramAccountPosts,
   CONNECTION_PLATFORM, accountHistory, lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
 };

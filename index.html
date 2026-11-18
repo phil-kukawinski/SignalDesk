@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#001d51">
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/icons/favicon-48.png" type="image/png" sizes="48x48">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,7 +23,7 @@
   <meta name="author" content="PK Works">
   <meta property="og:site_name" content="SignalDesk by PK Works">
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.min.css?v=81415c78b9">
+  <link rel="stylesheet" href="css/app.min.css?v=3906037fe8">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -163,11 +165,14 @@
 <label class="field-label" for="feed-template">Post template</label><textarea id="feed-template" class="field option-textarea">{title}
 
 {link}</textarea><p class="option-hint">Placeholders: {title}, {link}, {summary}, {feed}</p>
-<div class="feed-form-grid">
+<span class="field-label">When to post new articles</span>
+<label class="option-toggle"><input type="radio" name="feed-timing" value="slots" checked> At the next posting time below</label>
+<label class="option-toggle"><input type="radio" name="feed-timing" value="soon"> As soon as possible (about 5 minutes after it’s found). Good for breaking news.</label>
+<div class="feed-schedule" id="feed-schedule"><div class="feed-form-grid">
 <div><span class="field-label">Posting days</span><div class="feed-days" id="feed-days"></div></div>
 <div><span class="field-label">Posting times</span><div class="feed-times" id="feed-times"></div><button type="button" class="text-button" id="add-feed-time"><i data-icon="plus"></i>Add time</button></div>
 </div>
-<p class="option-hint">Each new article takes the next open time slot, in the workspace time zone from Settings.</p>
+<p class="option-hint">Each new article takes the next open time slot, in the workspace time zone from Settings.</p></div>
 <span class="field-label">When new articles arrive</span>
 <label class="option-toggle"><input type="radio" name="feed-mode" value="review" checked> Send to the approval queue</label>
 <label class="option-toggle"><input type="radio" name="feed-mode" value="auto"> Schedule automatically</label>
@@ -184,7 +189,7 @@
 
         <section class="page" id="view-composer">
           <div class="page-heading"><div><div class="eyebrow">MAKE SOMETHING GREAT</div><h1>Publishing studio</h1><p class="subheading">Draft, tailor, and schedule content for your channels.</p></div><div class="account-actions"><button class="secondary-button" id="csv-open" type="button">Import CSV</button><button class="secondary-button" id="clear-draft">Clear draft</button></div></div>
-          <div class="editing-banner" id="editing-banner" hidden role="status"><span id="editing-text"></span><button class="secondary-button" type="button" id="cancel-edit">Cancel editing</button></div><div class="composer-layout"><div class="panel composer-panel"><div class="composer-step"><span class="step-number">1</span><div><h2>Where to post</h2><p>Pick the client and the accounts for this post.</p></div></div><label class="field-label" for="client-select">Client</label><select id="client-select" class="field"></select><div class="account-select"></div><div class="manual-select" id="manual-select"></div><div class="divider"></div><div class="composer-step"><span class="step-number">2</span><div><h2>Write your post</h2><p>Write it once, then adjust it for any network if you like.</p></div></div><div class="platform-tabs" id="platform-tabs" role="tablist" aria-label="Customize by platform" hidden></div><div class="variant-note" id="variant-note" hidden><span id="variant-note-text"></span><button class="text-button" id="reset-variant" type="button">Reset to shared</button></div><label class="field-label" for="post-copy" id="post-copy-label">Post copy</label><textarea id="post-copy" class="field post-textarea" placeholder="What do you want your audience to know?"></textarea><textarea id="variant-copy" class="field post-textarea" aria-labelledby="post-copy-label" hidden></textarea><div class="editor-footer"><span id="char-count">0 characters</span><div><button class="text-button composer-library-button" type="button" id="ai-draft-button"><i data-icon="sparkles"></i>Draft with AI</button><button class="text-button composer-library-button" type="button" id="templates-button" aria-haspopup="true">Templates</button><button class="text-button composer-library-button" type="button" id="snippets-button" aria-haspopup="true">Snippets</button><button class="icon-button" title="Add emoji" id="emoji-button"><i data-icon="smile"></i></button><button class="icon-button" title="Add hashtag" id="hashtag-button">#</button><button class="icon-button" title="Add link" id="link-button"><i data-icon="link"></i></button></div></div><div class="composer-menu" id="composer-menu" hidden role="menu"></div><div class="upload-zone" id="upload-zone"><div class="upload-symbol"><i data-icon="upload"></i></div><b>Drop media here or <u>browse files</u></b><p>Images and video. Files are stored at public links so the networks can fetch them, so don’t upload anything confidential.</p><input type="file" id="media-input" accept="image/*,video/*" hidden></div><div class="stock-row"><button class="text-button" type="button" id="stock-button"><i data-icon="image"></i>Find a free stock photo (Unsplash)</button></div><div class="alt-editor" id="alt-editor" hidden></div><div class="creative-note" id="creative-note" hidden></div><div class="divider"></div><div class="composer-step"><span class="step-number">3</span><div><h2>Extras</h2><p>Tags, collaborators, privacy, comments, and repeats. All optional.</p></div></div>
+          <div class="editing-banner" id="editing-banner" hidden role="status"><span id="editing-text"></span><button class="secondary-button" type="button" id="cancel-edit">Cancel editing</button></div><div class="composer-layout"><div class="panel composer-panel"><div class="composer-step"><span class="step-number">1</span><div><h2>Where to post</h2><p>Pick the client and the accounts for this post.</p></div></div><label class="field-label" for="client-select">Client</label><select id="client-select" class="field"></select><div class="account-select"></div><div class="manual-select" id="manual-select"></div><div class="divider"></div><div class="composer-step"><span class="step-number">2</span><div><h2>Write your post</h2><p>Write it once, then adjust it for any network if you like.</p></div></div><div class="platform-tabs" id="platform-tabs" role="tablist" aria-label="Customize by platform" hidden></div><div class="variant-note" id="variant-note" hidden><span id="variant-note-text"></span><button class="text-button" id="reset-variant" type="button">Reset to shared</button></div><label class="field-label" for="post-copy" id="post-copy-label">Post copy</label><textarea id="post-copy" class="field post-textarea" placeholder="What do you want your audience to know?"></textarea><textarea id="variant-copy" class="field post-textarea" aria-labelledby="post-copy-label" hidden></textarea><div class="editor-footer"><span id="char-count">0 characters</span><div><button class="text-button composer-library-button" type="button" id="ai-draft-button"><i data-icon="sparkles"></i>Draft with AI</button><button class="text-button composer-library-button" type="button" id="templates-button" aria-haspopup="true">Templates</button><button class="text-button composer-library-button" type="button" id="snippets-button" aria-haspopup="true">Snippets</button><button class="icon-button" title="Add emoji" id="emoji-button"><i data-icon="smile"></i></button><button class="icon-button" title="Add hashtag" id="hashtag-button">#</button><button class="icon-button" title="Add link" id="link-button"><i data-icon="link"></i></button></div></div><div class="composer-menu" id="composer-menu" hidden role="menu"></div><div class="upload-zone" id="upload-zone"><div class="upload-symbol"><i data-icon="upload"></i></div><b>Drop media here or <u>browse files</u></b><p>Images and video. Files are stored at public links so the networks can fetch them, so don’t upload anything confidential.</p><input type="file" id="media-input" accept="image/*,video/*" hidden></div><div class="stock-row"><button class="text-button" type="button" id="stock-button"><i data-icon="image"></i>Find a free stock photo (Unsplash)</button><button class="text-button" type="button" id="igr-button"><i data-icon="repeat"></i>Repost from Instagram, with credit</button></div><div class="alt-editor" id="alt-editor" hidden></div><div class="creative-note" id="creative-note" hidden></div><div class="divider"></div><div class="composer-step"><span class="step-number">3</span><div><h2>Extras</h2><p>Tags, collaborators, privacy, comments, and repeats. All optional.</p></div></div>
 <div class="post-options" id="post-options">
 <details class="option-group"><summary><b>Collaborators &amp; tags</b><small id="people-summary">None</small></summary><div class="option-body">
 <div id="instagram-people"><label class="field-label" for="ig-collaborators">Instagram collaborators</label><input id="ig-collaborators" class="field" placeholder="username, username" autocomplete="off"><p class="option-hint">Up to 3 public accounts. They get an invite and appear as co-authors once they accept. Not available for Stories.</p><label class="field-label" for="ig-tags">Tag people on Instagram</label><input id="ig-tags" class="field" placeholder="username, username" autocomplete="off"><p class="option-hint">Works on a single image or a Reel. Tags are spaced along the bottom of the image.</p></div>
@@ -447,6 +452,43 @@
       <div class="auth-actions"><button class="primary-button" type="button" id="crop-use">Use this crop</button><button class="secondary-button" type="button" id="crop-skip">Upload original</button><button class="secondary-button" type="button" id="crop-cancel">Cancel</button></div>
     </div>
   </dialog>
+  <dialog id="igr-dialog" class="auth-dialog wide-dialog stock-dialog" aria-labelledby="igr-title">
+    <div class="auth-form">
+      <h2 id="igr-title">Repost from Instagram</h2>
+      <p>Look up a public Business or Creator account and pick one of its posts. It comes into the Publishing Studio with credit to the account. Repost only with the owner’s permission.</p>
+      <form class="stock-search igr-search" id="igr-form"><input class="field" id="igr-username" type="search" maxlength="31" placeholder="Instagram username, e.g. natgeo" aria-label="Instagram username" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="primary-button" type="submit">Browse</button></form>
+      <div class="igr-recent" id="igr-recent"></div>
+      <div id="igr-account"></div>
+      <p class="auth-message" id="igr-message" role="status"></p>
+      <div id="igr-browse"><div class="stock-grid" id="igr-results"></div></div>
+      <div id="igr-confirm" class="igr-confirm" hidden>
+        <div class="igr-picked" id="igr-picked"></div>
+        <label class="option-toggle"><input type="checkbox" id="igr-caption" checked> Include their caption</label>
+        <label class="option-toggle" id="igr-tag-row"><input type="checkbox" id="igr-tag" checked> Tag <span class="igr-name"></span> on the photo or Reel (Instagram)</label>
+        <p class="option-hint">The post ends with “📷 <span class="igr-name"></span> on Instagram”. You can edit everything before scheduling.</p>
+        <label class="option-toggle igr-permission"><input type="checkbox" id="igr-permission"> I have <span class="igr-name"></span>’s permission to repost this</label>
+      </div>
+      <div class="auth-actions"><button class="secondary-button" type="button" id="igr-more" hidden>More posts</button><button class="secondary-button" type="button" id="igr-back" hidden>Back to posts</button><button class="primary-button" type="button" id="igr-go" hidden disabled>Repost with credit</button><button class="secondary-button" type="button" id="igr-close">Close</button></div>
+    </div>
+  </dialog>
+  <dialog id="hook-dialog" class="auth-dialog hook-dialog" aria-labelledby="hook-title">
+    <div class="auth-form">
+      <h2 id="hook-title">Instant link</h2>
+      <p>Have your website call this link when it publishes a story. SignalDesk checks <b id="hook-feed-name">this feed</b> right away, instead of within 10 minutes. Posts still follow the feed’s settings: networks, template, keywords, and approval.</p>
+      <div id="hook-state"></div>
+      <p class="auth-message" id="hook-message" role="status"></p>
+      <details class="hook-help"><summary>Where to put the link</summary>
+        <ul>
+          <li><b>WordPress:</b> add a webhook plugin (for example, WP Webhooks), choose the “post published” trigger, and paste the link as the URL.</li>
+          <li><b>Other publishing systems (CMS):</b> look for “webhooks” or “notify on publish” and paste the link. GET or POST both work, and nothing needs to be sent with it.</li>
+          <li><b>Zapier or Make:</b> when a story is published, add a Webhooks step that calls the link.</li>
+          <li><b>To test it:</b> open the link in your browser. It checks the feed and says what it found.</li>
+        </ul>
+        <p>Treat the link like a password: anyone who has it can make SignalDesk check the feed (nothing else). If it gets out, make a new one.</p>
+      </details>
+      <div class="auth-actions"><button class="secondary-button" type="button" id="hook-close">Done</button></div>
+    </div>
+  </dialog>
   <dialog id="restore-dialog" class="auth-dialog restore-dialog" aria-labelledby="restore-title">
     <div class="auth-form">
       <h2 id="restore-title">Restore from a copy</h2>
@@ -536,7 +578,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=4a6e184313'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=5c577e41a4'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

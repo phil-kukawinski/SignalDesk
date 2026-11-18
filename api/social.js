@@ -8,7 +8,7 @@ const {
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
 } = require('./_lib/core');
-const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount } = require('./_lib/platforms');
+const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount, instagramAccountPosts } = require('./_lib/platforms');
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
@@ -44,7 +44,7 @@ const CLIENT_ACTIONS = new Set([
 const AYRSHARE_ACTIONS = new Set(['connect', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
 const WORKSPACE_ACTIONS = new Set([
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
-  'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'autopilot-run',
+  'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'feed-hook', 'autopilot-run', 'ig-browse', 'ig-repost',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'set-cover', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
@@ -58,7 +58,7 @@ const WORKSPACE_ACTIONS = new Set([
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
-  'stock-search', 'stock-use', 'ig-lookup', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
+  'stock-search', 'stock-use', 'ig-lookup', 'ig-browse', 'ig-repost', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
@@ -241,9 +241,61 @@ function validateFeedInput(input) {
     include_image: input.includeImage !== false,
     include_keywords: keywords(input.includeKeywords),
     exclude_keywords: keywords(input.excludeKeywords),
+    // Only sent when set, so saving a feed still works before the database update adds the column.
+    ...(['slots', 'soon'].includes(input.timing) ? { post_timing: input.timing } : {}),
     enabled: input.enabled !== false,
     updated_at: new Date().toISOString()
   };
+}
+
+// Feeds as the app sees them: whether an instant link is on, never its hash.
+function publicFeed(feed) {
+  const { hook_token_hash: hash, ...rest } = feed || {};
+  return { ...rest, has_hook: Boolean(hash) };
+}
+
+function hookTokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Instant links use the site's own address, or the app's address when the request didn't say.
+function hookOrigin(origin) {
+  return /^https:\/\/[\w.-]+(:\d+)?$/.test(origin) ? origin : require('./_lib/notify').appUrl();
+}
+
+// The Instagram connection used to look at other public accounts: this client's, or any in the workspace.
+async function instagramLookupConnection(workspaceId, clientId) {
+  if (typeof clientId === 'string' && clientId) {
+    const own = (await listConnections(workspaceId, clientId).catch(() => [])).find((item) => item.platform === 'instagram' && item.status === 'active');
+    if (own) return own;
+  }
+  const [any] = await databaseRequest(`social_connections?workspace_id=eq.${workspaceId}&platform=eq.instagram&status=eq.active&select=id&order=created_at.asc&limit=1`) || [];
+  return any || null;
+}
+
+// Instagram serves post media from its own CDNs; nothing else is copied.
+function instagramMediaUrl(raw) {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && /(^|\.)(cdninstagram\.com|fbcdn\.net)$/.test(url.hostname);
+  } catch { return false; }
+}
+
+const REPOST_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'video/mp4': 'mp4', 'video/quicktime': 'mov' };
+const REPOST_MAX_BYTES = 100 * 1024 * 1024;
+
+async function copyInstagramMedia(raw, userId) {
+  const response = await fetch(raw, { signal: AbortSignal.timeout(45000) }).catch(() => null);
+  if (!response?.ok) throw httpError(502, 'Instagram didn’t send the file. Browse the account again and pick the post once more.');
+  const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const extension = REPOST_TYPES[type];
+  if (!extension) throw httpError(400, 'That post’s media isn’t a photo or video SignalDesk can use.');
+  if (Number(response.headers.get('content-length')) > REPOST_MAX_BYTES) throw httpError(400, 'That video is over 100 MB, too large to copy.');
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > REPOST_MAX_BYTES) throw httpError(400, 'That video is over 100 MB, too large to copy.');
+  const path = `${userId}/repost-${crypto.randomUUID()}.${extension}`;
+  const url = await require('./_lib/images').uploadPublic(path, bytes, type);
+  return { path, url, type, name: `instagram-repost.${extension}`, size: bytes.length };
 }
 
 async function workspaceTimeZone(workspaceId) {
@@ -347,7 +399,51 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       databaseRequest(`autopilot_items?${scope}&status=in.(scheduled,in_review,failed,skipped)&created_at=gte.${since}&select=id,feed_id,title,link,image_url,status,scheduled_for,provider_post_id,post_id,platforms,error&order=scheduled_for.asc.nullslast&limit=500`),
       databaseRequest(`scheduled_comments?${scope}&status=in.(pending,failed)&select=id,provider_post_id,comment,run_at,status,attempts,last_error&order=run_at.asc&limit=200`)
     ]);
-    return send(res, 200, { feeds: feeds || [], items: items || [], comments: comments || [] });
+    return send(res, 200, { feeds: (feeds || []).map(publicFeed), items: items || [], comments: comments || [] });
+  }
+
+  if (action === 'feed-hook') {
+    // The instant link for a feed: a new secret (shown once; only its hash is stored), or off.
+    if (typeof body.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.id)) return send(res, 400, { error: 'Choose a feed.' });
+    const token = body.enable ? crypto.randomBytes(24).toString('base64url') : null;
+    let rows;
+    try {
+      rows = await databaseRequest(`autopilot_feeds?${scope}&id=eq.${body.id}`, {
+        method: 'PATCH', headers: { prefer: 'return=representation' },
+        body: JSON.stringify({ hook_token_hash: token ? hookTokenHash(token) : null, updated_at: new Date().toISOString() })
+      });
+    } catch (error) {
+      if (/hook_token_hash/.test(error.message)) return send(res, 503, { error: 'Instant links need the latest database update. Run supabase/schema.sql in Supabase, then try again.' });
+      throw error;
+    }
+    if (!rows?.length) return send(res, 404, { error: 'Feed not found.' });
+    await recordActivity(workspaceId, membership.name, token ? 'autopilot_link_created' : 'autopilot_link_removed', { url: rows[0].url });
+    return send(res, 200, { feed: publicFeed(rows[0]), url: token ? `${hookOrigin(origin)}/hook/${token}` : null });
+  }
+
+  if (action === 'ig-browse') {
+    const username = typeof body.username === 'string' ? body.username.trim().replace(/^@/, '').toLowerCase() : '';
+    if (!/^[a-z0-9._]{1,30}$/.test(username)) return send(res, 400, { error: 'Enter an Instagram username.' });
+    if (body.after !== undefined && (typeof body.after !== 'string' || !/^[A-Za-z0-9_=-]{1,400}$/.test(body.after))) return send(res, 400, { error: 'Start the search again.' });
+    const connection = await instagramLookupConnection(workspaceId, body.clientId);
+    if (!connection) return send(res, 200, { status: 'unavailable', reason: 'Connect an Instagram account (in Social Accounts) to browse other accounts.' });
+    const full = await loadConnection(connection.id, encryptionKey);
+    try {
+      return send(res, 200, await instagramAccountPosts(full, username, body.after));
+    } catch (error) {
+      return send(res, 200, { status: 'unavailable', reason: error.kind === 'rate_limit' ? 'Instagram is limiting lookups right now. Try again in a few minutes.' : `Instagram didn’t answer: ${error.message}` });
+    }
+  }
+
+  if (action === 'ig-repost') {
+    // Copies a public Instagram post's photos or video into SignalDesk's storage (Instagram's own
+    // links expire after a few days), so it can be scheduled like an upload.
+    if (body.permission !== true) return send(res, 400, { error: 'Confirm you have permission to repost this.' });
+    const media = Array.isArray(body.media) ? body.media.slice(0, 10) : [];
+    if (!media.length || media.some((item) => typeof item?.url !== 'string' || !instagramMediaUrl(item.url))) return send(res, 400, { error: 'Choose an Instagram post to repost.' });
+    const copies = [];
+    for (const item of media) copies.push(await copyInstagramMedia(item.url, user.id));
+    return send(res, 200, { media: copies });
   }
 
   if (action === 'feed-preview') {
@@ -366,7 +462,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
         method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify(fields)
       });
       if (!rows?.length) return send(res, 404, { error: 'Feed not found.' });
-      return send(res, 200, { feed: rows[0] });
+      return send(res, 200, { feed: publicFeed(rows[0]) });
     }
     if (typeof input.url !== 'string' || input.url.length > 2000) return send(res, 400, { error: 'Enter a feed URL.' });
     const url = input.url.trim();
@@ -380,7 +476,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     await baselineFeed(feed, body.queueLatest ? newestFirst.slice(1) : newestFirst);
     const run = body.queueLatest && feed.enabled ? await runFeed(feed, { encryptionKey, timeZone: await workspaceTimeZone(workspaceId) }) : null;
     await recordActivity(workspaceId, membership.name, 'autopilot_saved', { url: input.url });
-    return send(res, 200, { feed, run });
+    return send(res, 200, { feed: publicFeed(feed), run });
   }
 
   if (action === 'feed-delete') {
@@ -704,7 +800,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       databaseRequest(`post_history?${scope}&select=post_id,action,actor_name,detail,created_at&limit=20000`),
       databaseRequest(`social_connections?${scope}&select=client_id,platform,display_name,username,profile_url,status,created_at`),
       databaseRequest(`review_links?${scope}&select=client_id,label,created_at,expires_at,revoked_at,last_used_at`),
-      databaseRequest(`autopilot_feeds?${scope}&select=*`),
+      databaseRequest(`autopilot_feeds?${scope}&select=*`).then((rows) => (rows || []).map(publicFeed)),
       databaseRequest(`bio_pages?${scope}&select=slug,client_id,enabled`),
       databaseRequest(`activity_log?${scope}&select=actor_name,action,detail,created_at&order=created_at.desc&limit=20000`).catch(() => [])
     ]);

@@ -33,6 +33,7 @@
   "js/previews.js",
   "js/people.js",
   "js/stock.js",
+  "js/ig-repost.js",
   "js/health.js",
   "js/onboarding.js",
   "js/beta.js",

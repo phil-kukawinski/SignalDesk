@@ -47,7 +47,10 @@ function layout({ title, active, body }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${escapeHtml(title)} · SignalDesk</title>
+<link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/icons/favicon-48.png" type="image/png" sizes="48x48">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
 <style>
 :root{--ink:#101828;--muted:#5d6676;--line:#e4e7ec;--bg:#f5f6f8;--card:#fff;--accent:#0b5fdc;--logo-s:#001d51;--logo-desk:#0469fa;color-scheme:light}

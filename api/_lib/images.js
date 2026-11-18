@@ -86,4 +86,4 @@ async function storyImageUrl(url, { download, key }) {
   return { url: await uploadPublic(`system/instagram/${key}-story.jpg`, result.bytes, 'image/jpeg'), changed: true, padded: result.padded, converted: result.converted };
 }
 
-module.exports = { instagramImageUrl, storyImageUrl, STORY_RATIO, toInstagramJpeg, inspect, needsChange, MIN_RATIO, MAX_RATIO };
+module.exports = { uploadPublic, instagramImageUrl, storyImageUrl, STORY_RATIO, toInstagramJpeg, inspect, needsChange, MIN_RATIO, MAX_RATIO };

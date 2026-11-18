@@ -672,7 +672,23 @@ async function baselineFeed(feed, items) {
   })));
 }
 
+// Claims a feed for one check, so two checks at once (an instant link and the scheduler, or a
+// double-click) can't both post the same article. A feed checked in the last 15 seconds is skipped.
+async function claimFeed(feed, seconds = 15) {
+  const since = new Date(Date.now() - seconds * 1000).toISOString();
+  const rows = await databaseRequest(`autopilot_feeds?id=eq.${feed.id}&or=(last_checked_at.is.null,last_checked_at.lt.${since})`, {
+    method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify({ last_checked_at: new Date().toISOString() })
+  });
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+// 'soon' feeds post about 5 minutes after an article is found (15 minutes apart if several arrive at once).
+function soonSlots(count, now = Date.now()) {
+  return Array.from({ length: count }, (_, index) => now + (5 + index * 15) * 60000);
+}
+
 async function runFeed(feed, { encryptionKey, timeZone }) {
+  if (!await claimFeed(feed)) return { created: 0, busy: true };
   const patchFeed = (patch) => databaseRequest(`autopilot_feeds?id=eq.${feed.id}`, {
     method: 'PATCH', headers: { prefer: 'return=minimal' },
     body: JSON.stringify({ last_checked_at: new Date().toISOString(), ...patch })
@@ -698,7 +714,7 @@ async function runFeed(feed, { encryptionKey, timeZone }) {
     // Fail the whole run early with a clear message if an account isn't connected.
     await resolveDestinations(feed.workspace_id, feed.client_id, feed.platforms, encryptionKey);
     const taken = new Set(seen.filter((row) => row.scheduled_for).map((row) => Date.parse(row.scheduled_for)));
-    const slots = upcomingSlots(feed, timeZone, taken, queue.length);
+    const slots = feed.post_timing === 'soon' ? soonSlots(queue.length) : upcomingSlots(feed, timeZone, taken, queue.length);
     let created = 0;
     for (const [index, item] of queue.entries()) {
       if (!slots[index]) break; // Leave the rest unseen so the next run can place them in later slots.
@@ -772,5 +788,5 @@ module.exports = {
   getMembership, personProfile, getWorkspaceState, validateClientId, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms,
   validatePostOptions, buildPostBody, processDueComments,
-  readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, checkLink
+  readFeed, baselineFeed, runFeed, runAutopilot, soonSlots, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, checkLink
 };

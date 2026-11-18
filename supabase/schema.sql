@@ -590,6 +590,12 @@ create table if not exists public.worker_runs (
 alter table public.scheduled_comments add column if not exists job_id uuid references public.publish_jobs (id) on delete cascade;
 alter table public.scheduled_comments alter column provider_post_id drop not null;
 alter table public.autopilot_items add column if not exists post_id uuid references public.scheduled_posts (id) on delete set null;
+-- Instant links: a website or CMS calls /hook/<secret> when a story is published, and the feed is checked right away.
+-- Only a hash of the secret is stored. post_timing: 'slots' (next posting time) or 'soon' (about 5 minutes after it's found).
+alter table public.autopilot_feeds add column if not exists hook_token_hash text;
+alter table public.autopilot_feeds add column if not exists last_hook_at timestamptz;
+alter table public.autopilot_feeds add column if not exists post_timing text not null default 'slots';
+create unique index if not exists autopilot_feeds_hook_idx on public.autopilot_feeds (hook_token_hash) where hook_token_hash is not null;
 
 -- Keeps each post's status in step with its per-network jobs.
 create or replace function public.refresh_post_status(target uuid)
