@@ -20,7 +20,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
     const post=(id,client,text,days)=>({id,client_id:client,title:text,status:'scheduled',scheduled_for:later(days),campaign:'Fall launch',content:{text,media:['https://images.example/kit.jpg']},options:{},publish_jobs:[{platform:'facebook',status:'queued'},{platform:'instagram',status:'queued'}]});
     window.__copy={format:'signaldesk-export-1',exportedAt:new Date(Date.now()-3*86400000).toISOString(),workspace:state,
       posts:[post('11111111-1111-4111-8111-111111111111',clients[0].id,'Still on the calendar',4),post('22222222-2222-4222-8222-222222222222','harbor-coffee','Our fall menu, with a comma, and "quotes"',5),{...post('33333333-3333-4333-8333-333333333333',clients[0].id,'Went out last week',-7),status:'published'}]};
-    window.__asked=[];const real=callSocialApi;callSocialApi=async body=>{if(body.action==='posts-by-id'){__asked.push(body.ids);return{posts:body.ids.includes('11111111-1111-4111-8111-111111111111')?[{id:'11111111-1111-4111-8111-111111111111',clientId:clients[0].id,status:'scheduled',scheduledFor:later(4),jobs:[]}].filter(p=>body.ids.includes(p.id)):[]};}return real(body);};})()`);
+    window.__asked=[];window.__recorded=[];const real=callSocialApi;callSocialApi=async body=>{if(body.action==='record-restore'){__recorded.push(body);return{recorded:true};}if(body.action==='posts-by-id'){__asked.push(body.ids);return{posts:body.ids.includes('11111111-1111-4111-8111-111111111111')?[{id:'11111111-1111-4111-8111-111111111111',clientId:clients[0].id,status:'scheduled',scheduledFor:later(4),jobs:[]}].filter(p=>body.ids.includes(p.id)):[]};}return real(body);};})()`);
 
   // The Export spreadsheet can go straight back into Import CSV.
   const csv = await evaluate(`backupPostsCsv(__copy.posts,[...clients,{id:'harbor-coffee',name:'Harbor Coffee'}])`);
@@ -51,6 +51,16 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await check(failed.open && /couldn’t be saved, so nothing was restored/.test(failed.message) && failed.names.join() === JSON.parse(before).names.join(), 'a failed save restores nothing: ' + JSON.stringify(failed));
   await evaluate(`saveWorkspaceState=async()=>{sharedStateDirty=false;}`);
   await evaluate(`document.querySelector('#restore-go').click()`); await wait(1200);
+  // The results stay on screen: everything that came back by name, and the posts still to check.
+  const results = JSON.parse(await evaluate(`JSON.stringify({message:document.querySelector('#restore-message').textContent,open:document.querySelector('#restore-dialog').open,text:document.querySelector('#restore-plan').innerText.replace(/\\s+/g,' '),check:!document.querySelector('#restore-posts').hidden,restore:!document.querySelector('#restore-go').hidden,done:document.querySelector('#restore-cancel').textContent,recorded:__recorded})`));
+  log.push('results: ' + results.text.slice(0, 300));
+  if (process.env.SHOTS) { const { result } = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${process.env.SHOTS}restore-results.png`, Buffer.from(result.data, 'base64')); }
+  await check(results.open && /Restored from your copy/.test(results.text) && /Back in your workspace 1 client Harbor Coffee 1 template Weekly special/.test(results.text), 'the results list what came back by name: ' + results.text);
+  await check(/Still to do 1 upcoming post Our fall menu/.test(results.text) && results.check && !results.restore && results.done === 'Done' && !results.message, 'and the posts still to check, with Check posts and Done: ' + JSON.stringify(results));
+  await check(results.recorded.length === 1 && JSON.stringify(results.recorded[0].items) === JSON.stringify([{ kind: 'clients', count: 1, names: ['Harbor Coffee'] }, { kind: 'templates', count: 1, names: ['Weekly special'] }]) && results.recorded[0].posts === 1 && results.recorded[0].settings === false, 'one Activity entry records what came back: ' + JSON.stringify(results.recorded));
+  const activityText = await evaluate(`restoreActivityText({copyMadeAt:'2026-11-15T16:00:00Z',items:[{kind:'clients',count:1,names:['Harbor Coffee']},{kind:'templates',count:3,names:['A','B']}],settings:false,posts:1})`);
+  await check(activityText === 'Copy made Nov 15, 2026 · 1 client (Harbor Coffee) · 3 templates (A, B, …) · 1 upcoming post to check', 'Activity describes the restore in words: ' + activityText);
+  await evaluate(`document.querySelector('#restore-posts').click()`); await wait(800);
   const after = JSON.parse(await evaluate(`JSON.stringify({names:clients.map(c=>c.name),templates:templates.map(t=>t.name),timezone:collectSettings().timezone,csv:document.querySelector('#csv-dialog').open,rows:csvRows.map(r=>[r.record.text,csvStatusLabel(r)])})`));
   log.push('after: ' + JSON.stringify(after));
   await check(after.names.join() === [...JSON.parse(before).names, 'Harbor Coffee'].join(), 'the deleted client is back, after the others, and nothing else changed');

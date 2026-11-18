@@ -48,7 +48,7 @@ const WORKSPACE_ACTIONS = new Set([
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'set-cover', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
-  'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
+  'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export', 'record-restore',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
   'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
   'planning-note', 'open-comments', 'comment-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
@@ -715,6 +715,20 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       exportedAt: new Date().toISOString(), format: 'signaldesk-export-1',
       workspace: state, posts: posts || [], notes: notes || [], history: history || [], activity: activity || [], connections: connections || [], reviewLinks: links || [], autopilotFeeds: feeds || [], bioPages: bios || []
     });
+  }
+
+  if (action === 'record-restore') {
+    // What a restore from a copy brought back, kept in Activity (the browser saves the workspace itself).
+    const clip = (value, max) => String(value ?? '').slice(0, max);
+    const KINDS = ['clients', 'savedPosts', 'templates', 'snippets', 'assets', 'replyTemplates'];
+    const items = (Array.isArray(body.items) ? body.items : []).filter((item) => KINDS.includes(item?.kind)).map((item) => ({
+      kind: item.kind, count: Math.max(0, Math.min(10000, parseInt(item.count, 10) || 0)), names: (Array.isArray(item.names) ? item.names : []).slice(0, 20).map((name) => clip(name, 80))
+    })).filter((item) => item.count);
+    const copyMadeAt = Number.isFinite(Date.parse(body.copyMadeAt)) ? new Date(body.copyMadeAt).toISOString() : null;
+    const posts = Math.max(0, Math.min(10000, parseInt(body.posts, 10) || 0));
+    if (!items.length && !body.settings && !posts) return send(res, 400, { error: 'Nothing was restored.' });
+    await recordActivity(workspaceId, membership.name, 'workspace_restored', { copyMadeAt, items, settings: body.settings === true, posts });
+    return send(res, 200, { recorded: true });
   }
 
   if (action === 'post-notes') {
