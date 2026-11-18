@@ -139,4 +139,28 @@ async function alertPlatformAdmins({ lastAlert } = {}) {
   return { sent, errors: errors.length, failed: failed.length };
 }
 
-module.exports = { isPlatformAdmin, platformAdmins, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors, alertPlatformAdmins, inviteLink };
+// For platform owners: what each workspace uses, and what each kind of AI request costs on average,
+// so plan limits and credit prices can be set from real numbers. Until the database update that adds
+// these summaries runs, ready is false.
+async function platformUsage({ days = 30, now = Date.now() } = {}) {
+  const since = new Date(now - days * 86400000).toISOString();
+  const rpc = (name) => databaseRequest(`rpc/${name}`, { method: 'POST', body: JSON.stringify({ p_since: since }) });
+  try {
+    const [workspaces, costs] = await Promise.all([rpc('platform_workspace_usage'), rpc('platform_ai_costs')]);
+    return {
+      ready: true, days,
+      workspaces: (workspaces || []).map((row) => ({
+        id: row.workspace_id, name: row.name || 'Workspace', createdAt: row.created_at, members: Number(row.members) || 0, clients: Number(row.clients) || 0,
+        posts: Number(row.posts) || 0, aiRequests: Number(row.ai_requests) || 0, aiCost: Number(row.ai_cost) || 0, files: Number(row.files) || 0, storageBytes: Number(row.storage_bytes) || 0
+      })),
+      costs: (costs || []).map((row) => ({
+        action: row.action, model: row.model, requests: Number(row.requests) || 0, totalCost: Number(row.total_cost) || 0, averageCost: Number(row.average_cost) || 0,
+        highestCost: Number(row.highest_cost) || 0, averageInput: Number(row.average_input) || 0, averageOutput: Number(row.average_output) || 0, searches: Number(row.searches) || 0
+      }))
+    };
+  } catch {
+    return { ready: false, days, workspaces: [], costs: [] };
+  }
+}
+
+module.exports = { platformUsage, isPlatformAdmin, platformAdmins, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors, alertPlatformAdmins, inviteLink };

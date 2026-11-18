@@ -76,4 +76,31 @@ async function cleanupMedia({ limit = 200, now = Date.now() } = {}) {
   return { deleted: stale.length, referenced: used.size };
 }
 
-module.exports = { cleanupMedia, collectPaths, referencedPaths, KEEP_DAYS };
+// Storage used by each workspace, in media_files, for storage limits later (docs/pricing-plan.md).
+// Uploads sit in each person's folder, and a person belongs to one workspace. Profile photos don't
+// count. Files deleted since the last run drop out.
+async function syncMediaFiles({ now = new Date() } = {}) {
+  const members = await databaseRequest('workspace_members?select=user_id,workspace_id');
+  if (!Array.isArray(members)) throw new Error('Could not read workspace members.');
+  const workspaceOf = new Map(members.map((row) => [row.user_id, row.workspace_id]));
+  const seenAt = now.toISOString();
+  const rows = [];
+  for (const folder of await listFolder('')) {
+    if (folder.id) continue;
+    const userId = /^[0-9a-f-]{36}$/i.test(folder.name) ? folder.name : null;
+    for (const file of await listFolder(folder.name)) {
+      if (!file.id || file.name.startsWith('avatar-')) continue;
+      rows.push({
+        path: `${folder.name}/${file.name}`, workspace_id: workspaceOf.get(userId) || null, user_id: userId,
+        size_bytes: Math.max(0, Number(file.metadata?.size) || 0), created_at: file.created_at || seenAt, seen_at: seenAt
+      });
+    }
+  }
+  for (let index = 0; index < rows.length; index += 500) {
+    await databaseRequest('media_files?on_conflict=path', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows.slice(index, index + 500)) });
+  }
+  await databaseRequest(`media_files?seen_at=lt.${encodeURIComponent(seenAt)}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+  return { files: rows.length, bytes: rows.reduce((sum, row) => sum + row.size_bytes, 0) };
+}
+
+module.exports = { cleanupMedia, syncMediaFiles, collectPaths, referencedPaths, KEEP_DAYS };

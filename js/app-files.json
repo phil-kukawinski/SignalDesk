@@ -35,6 +35,7 @@
   "js/health.js",
   "js/onboarding.js",
   "js/beta.js",
+  "js/usage.js",
   "js/network.js",
   "js/campaigns.js",
   "js/studio.js",

@@ -3,7 +3,7 @@
 Your guide to running SignalDesk: what's set up, what's left, how to use it day to day, and what to do when something breaks.
 
 Live site: **https://socialsignaldesk.com**
-Last updated: November 17, 2026
+Last updated: November 18, 2026
 
 ---
 
@@ -223,6 +223,18 @@ Uncheck **Invite-only sign-ups** in Settings → Beta invites. Check it again to
 | Campaign plans | 3 per day |
 | Trend scans | 1 every 7 days |
 | Uploads | Images and video only, 50 MB each |
+
+All of these come from one place in the code (`api/_lib/allowances.js`), so plans can change them later. The client limit is also enforced by the database.
+
+### Usage and costs
+
+**Settings → Usage & costs**, for platform owners only, measures what the pricing plan needs:
+
+- **Workspaces:** people, clients (yellow near the limit, red over it), new posts, AI requests and their cost, and storage, for the last 7, 30, or 90 days.
+- **What each AI request costs:** the count, average, highest, and total cost of each kind of request, such as a trend scan or a caption draft, with its average size. Only token and search counts are kept, never the text. Records are kept for about 13 months.
+- **The trend scan check:** whether scans still average under the $0.57 that the planned 10-credit price allows.
+
+Costs use Anthropic's list prices, so they can differ slightly from the bill. Storage is counted once a day and leaves out profile photos. If the screen says to run the database update, paste `supabase/schema.sql` into the SQL editor and click Run.
 
 ### Deleting accounts
 

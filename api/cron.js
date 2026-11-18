@@ -5,7 +5,7 @@ const { syncDueConnections } = require('./_lib/sync');
 const { processPublishQueue, maintainConnections, warnPostsAtRisk, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth, recycleEvergreen } = require('./_lib/publishing');
 const { processEmailDigests, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
-const { cleanupMedia } = require('./_lib/media');
+const { cleanupMedia, syncMediaFiles } = require('./_lib/media');
 const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
 const { maybeRunWeeklyCheck } = require('./_lib/weekly-check');
 
@@ -56,7 +56,10 @@ module.exports = async function handler(req, res) {
     const lastCleanup = await lastWorkerRun('media-cleanup');
     if (!lastCleanup || Date.now() - Date.parse(lastCleanup) > DAY_MS) {
       media = await cleanupMedia().catch((error) => ({ error: error.message }));
+      // After the cleanup, so deleted files aren't counted. Fails quietly until the database update adds media_files.
+      media.storage = await syncMediaFiles().catch((error) => ({ error: error.message }));
       await require('./_lib/activity').cleanupActivity().catch((error) => console.error('Activity cleanup failed:', error.message));
+      await require('./_lib/ai').cleanupAiUsage().catch(() => {});
       await recordWorkerRun('media-cleanup', media);
     }
     const health = await checkWorkerHealth();

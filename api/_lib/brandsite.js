@@ -1,4 +1,4 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { trackedClient } = require('./ai');
 const { assertPublicUrl, httpError } = require('./core');
 
 // Brand kit → "Fill from website": reads a client's homepage (and its About page, if linked),
@@ -145,7 +145,7 @@ async function brandFromSite({ url, clientName }) {
   if (typeof url !== 'string' || !url.trim() || url.length > 500) throw httpError(400, 'Enter the client’s website.');
   const site = await readSite(url.trim());
   if (site.homeText.length < 80 && !site.description) throw httpError(422, 'That page has almost no readable text (it may be built entirely with scripts). Fill in the brand kit by hand, or try their About page address.');
-  const client = new Anthropic();
+  const client = trackedClient();
   const response = await client.beta.messages.create({
     model: MODEL, max_tokens: 2000,
     betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',

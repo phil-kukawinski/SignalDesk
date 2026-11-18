@@ -1,4 +1,4 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { trackedClient } = require('./ai');
 const { assertPublicUrl, httpError } = require('./core');
 
 // AI help in the Publishing Studio: caption drafts in a client's voice, and image descriptions.
@@ -35,7 +35,7 @@ const ALT_SCHEMA = {
 
 function client() {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('AI writing help is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
-  return new Anthropic();
+  return trackedClient();
 }
 
 function parse(response, schemaName) {

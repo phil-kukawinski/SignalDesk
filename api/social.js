@@ -24,10 +24,12 @@ const { buildTopPostsReport, weekRange, saveWeeklyReport } = require('./_lib/rep
 const { TREND_PLATFORMS, byPopularity, generateTrendReport } = require('./_lib/trends');
 const { proofreadTexts } = require('./_lib/proofread');
 const { systemStatus } = require('./_lib/health');
-const { isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
+const { platformUsage, isPlatformAdmin, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors } = require('./_lib/platform');
 const { deletionPlan, deleteAccount } = require('./_lib/account');
 const { recordActivity, listActivity } = require('./_lib/activity');
 const { brandFromSite } = require('./_lib/brandsite');
+const { withAiUsage } = require('./_lib/ai');
+const { DAILY_COUNTERS, workspaceAllowances } = require('./_lib/allowances');
 const { listNetworkPosts, syncClient } = require('./_lib/sync');
 const { latestPlanningNote, createPlanningNote, NOTE_MAX_AGE_DAYS } = require('./_lib/planning');
 const { searchPhotos, usePhoto, stockConfigured } = require('./_lib/stock');
@@ -47,7 +49,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
+  'platform-status', 'platform-usage', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
   'planning-note', 'open-comments', 'comment-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
@@ -59,24 +61,15 @@ const USER_ACTIONS = new Set([
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
-// AI writing help per workspace per day (caption drafts, image descriptions, Fill from website). Keeps costs bounded.
-const AI_DAILY_LIMIT = Math.max(1, parseInt(process.env.AI_DAILY_LIMIT, 10) || 30);
-// Whole campaign plans are the largest AI request, so they get their own smaller limit.
-const CAMPAIGN_DAILY_LIMIT = Math.max(1, parseInt(process.env.CAMPAIGN_DAILY_LIMIT, 10) || 3);
-// Beta limits per workspace, so one account can't run up costs or flood the networks.
-const DAILY_POST_LIMIT = 150;
-const TEAM_LIMIT = 25;
+// Per-workspace limits (AI help, posts a day, team size, trend scans) live in api/_lib/allowances.js.
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
 const OAUTH_SESSION_MINUTES = 15;
-// Trend scans are by far the largest AI request, so each workspace gets one a week.
-const TREND_WEEKLY_LIMIT = Math.max(1, parseInt(process.env.TREND_WEEKLY_LIMIT, 10) || 1);
+// Trend scans are by far the largest AI request, so each workspace gets a few a week (trendScansPerWeek).
 const TREND_WINDOW_MS = 7 * 86400000;
-// Failed scans leave no report but still cost money, so tries are capped too.
-const TREND_DAILY_TRIES = 2;
 // Scans in the last 7 days, newest first, and when the next one opens up if they've all been used.
-async function trendScanState(scope, select) {
+async function trendScanState(scope, select, weekly) {
   const recent = await databaseRequest(`trend_reports?${scope}&created_at=gte.${new Date(Date.now() - TREND_WINDOW_MS).toISOString()}&select=${select}&order=created_at.desc`) || [];
-  const blocking = recent[TREND_WEEKLY_LIMIT - 1];
+  const blocking = recent[weekly - 1];
   return { recent, nextScanAt: blocking ? new Date(Date.parse(blocking.created_at) + TREND_WINDOW_MS).toISOString() : null };
 }
 const ROLES = new Set(['admin', 'user']);
@@ -141,9 +134,16 @@ async function clientName(workspaceId, clientId) {
   return ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === clientId)?.name || 'a client';
 }
 
-// Counts one AI request against the workspace's daily allowance; false once it's used up.
-async function useAiCredit(workspaceId, { kind = 'ai-usage', limit = AI_DAILY_LIMIT } = {}) {
+// Counts one AI request against the workspace's daily allowance; false once it's used up. The
+// database counts in one step, so two requests at the same moment can't both slip past the limit.
+async function useAiCredit(workspaceId, kind = 'ai-usage') {
+  const limit = (await workspaceAllowances(workspaceId))[DAILY_COUNTERS[kind]];
   const counter = `${kind}:${workspaceId}:${new Date().toISOString().slice(0, 10)}`;
+  try {
+    return await databaseRequest('rpc/use_daily_allowance', { method: 'POST', body: JSON.stringify({ p_name: counter, p_limit: limit }) }) !== false;
+  } catch {
+    // Before the latest database update there's no use_daily_allowance: count the older way.
+  }
   const used = (await databaseRequest(`worker_runs?name=eq.${encodeURIComponent(counter)}&select=last_result`))?.[0]?.last_result?.count || 0;
   if (used >= limit) return false;
   await databaseRequest('worker_runs?on_conflict=name', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ name: counter, last_run_at: new Date().toISOString(), last_result: { count: used + 1 } }) });
@@ -285,7 +285,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'invite') {
     const email = normalizeEmail(body.email);
     const [members, pending] = await Promise.all([databaseRequest(`workspace_members?${scope}&select=user_id`), databaseRequest(`workspace_invites?${scope}&select=email`)]);
-    if ((members?.length || 0) + (pending?.length || 0) >= TEAM_LIMIT) return send(res, 409, { error: `Workspaces can have up to ${TEAM_LIMIT} people during the beta. Remove someone or cancel an invite first.` });
+    const { teamMembers } = await workspaceAllowances(workspaceId);
+    if ((members?.length || 0) + (pending?.length || 0) >= teamMembers) return send(res, 409, { error: `Workspaces can have up to ${teamMembers} people during the beta. Remove someone or cancel an invite first.` });
     if (!ROLES.has(body.role)) return send(res, 400, { error: 'Choose Admin or User.' });
     const existing = await databaseRequest(`workspace_members?${new URLSearchParams({ select: 'workspace_id', email: `eq.${email}`, limit: '1' })}`);
     if (existing?.length) {
@@ -485,7 +486,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const [latest, recent, scans] = await Promise.all([
       databaseRequest(`trend_reports?${scope}${typeof body.id === 'string' && /^[0-9a-f-]{36}$/i.test(body.id) ? `&id=eq.${body.id}` : ''}&select=id,focus,platforms,data,model,created_at&order=created_at.desc&limit=1`),
       databaseRequest(`trend_reports?${scope}&select=id,focus,platforms,created_at&order=created_at.desc&limit=8`),
-      trendScanState(scope, 'created_at')
+      workspaceAllowances(workspaceId).then((allow) => trendScanState(scope, 'created_at', allow.trendScansPerWeek))
     ]);
     return send(res, 200, { report: latest?.[0] || null, recent: recent || [], platforms: TREND_PLATFORMS, nextScanAt: scans.nextScanAt });
   }
@@ -495,7 +496,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const focus = await trendFocus(workspaceId, body);
     const focusLabel = `${focus.key}|${[...platforms].sort().join(',')}`;
-    const { recent, nextScanAt } = await trendScanState(scope, 'id,focus,created_at,platforms,data,model');
+    const { trendScansPerWeek } = await workspaceAllowances(workspaceId);
+    const { recent, nextScanAt } = await trendScanState(scope, 'id,focus,created_at,platforms,data,model', trendScansPerWeek);
     const cached = recent.find((report) => `${report.focus}|${[...report.platforms].sort().join(',')}` === focusLabel);
     if (nextScanAt) {
       // The week's scan is used. The same focus gets that report; anything else waits.
@@ -503,7 +505,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       const when = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric' }).format(new Date(nextScanAt));
       return send(res, 429, { error: `This workspace has used its trend scan for this week. The next one opens ${when}.`, nextScanAt });
     }
-    if (!await useAiCredit(workspaceId, { kind: 'trend-tries', limit: TREND_DAILY_TRIES })) return send(res, 429, { error: 'Trend scans didn’t finish after a couple of tries today. Try again tomorrow.' });
+    if (!await useAiCredit(workspaceId, 'trend-tries')) return send(res, 429, { error: 'Trend scans didn’t finish after a couple of tries today. Try again tomorrow.' });
     const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
     const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
     const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms });
@@ -511,7 +513,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       method: 'POST', headers: { prefer: 'return=representation' },
       body: JSON.stringify({ workspace_id: workspaceId, focus: focus.key, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources }, model: result.model, created_by: user.id })
     });
-    return send(res, 200, { report, cached: false, nextScanAt: recent.length + 1 >= TREND_WEEKLY_LIMIT ? new Date(Date.parse(report.created_at) + TREND_WINDOW_MS).toISOString() : null });
+    return send(res, 200, { report, cached: false, nextScanAt: recent.length + 1 >= trendScansPerWeek ? new Date(Date.parse(report.created_at) + TREND_WINDOW_MS).toISOString() : null });
   }
 
   if (action === 'posts') {
@@ -578,7 +580,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
     const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     const schedule = cleanSchedule(body, today);
-    if (!await useAiCredit(workspaceId, { kind: 'campaign-usage', limit: CAMPAIGN_DAILY_LIMIT })) return send(res, 429, { error: `This workspace has used its ${CAMPAIGN_DAILY_LIMIT} campaign plans for today. Try again tomorrow.` });
+    if (!await useAiCredit(workspaceId, 'campaign-usage')) return send(res, 429, { error: `This workspace has used its ${(await workspaceAllowances(workspaceId)).campaignPlansPerDay} campaign plans for today. Try again tomorrow.` });
     return send(res, 200, { plan: await writePlan({ workspaceId, client, timeZone, ...request, ...schedule, postLimit }) });
   }
 
@@ -596,11 +598,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, { slug, enabled: body.enabled !== false });
   }
 
-  if (['platform-status', 'create-invite', 'revoke-invite', 'set-invite-only'].includes(action)) {
+  if (['platform-status', 'platform-usage', 'create-invite', 'revoke-invite', 'set-invite-only'].includes(action)) {
     if (!isPlatformAdmin(user.email)) return send(res, 403, { error: 'Only SignalDesk platform owners can manage invites.' });
     if (action === 'create-invite') return send(res, 200, await createInvite({ label: body.label, maxUses: body.maxUses, days: body.days, email: body.email, createdBy: user.email }));
     if (action === 'revoke-invite') return send(res, 200, await revokeInvite(body.code));
     if (action === 'set-invite-only') return send(res, 200, { inviteOnly: await setInviteOnly(body.inviteOnly !== false) });
+    if (action === 'platform-usage') return send(res, 200, { ...await platformUsage({ days: [7, 30, 90].includes(body.days) ? body.days : 30 }), allowances: await workspaceAllowances(workspaceId) });
     const [only, invites, errors] = await Promise.all([inviteOnly(), listInvites(), recentErrors(24)]);
     return send(res, 200, { inviteOnly: only, invites, errors });
   }
@@ -838,8 +841,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!ids.length || ids.length > 50) return send(res, 400, { error: 'Choose between 1 and 50 posts to copy.' });
     if (!Number.isInteger(offsetDays) || offsetDays < 1 || offsetDays > 365) return send(res, 400, { error: 'Copy posts between 1 and 365 days later.' });
     const since = new Date(Date.now() - 86400000).toISOString();
-    const recent = await databaseRequest(`scheduled_posts?${scope}&created_at=gte.${since}&select=id&limit=${DAILY_POST_LIMIT}`) || [];
-    if (recent.length + ids.length > DAILY_POST_LIMIT) return send(res, 429, { error: `That would pass the beta limit of ${DAILY_POST_LIMIT} new posts in 24 hours. Copy fewer posts or try again later.` });
+    const { postsPerDay } = await workspaceAllowances(workspaceId);
+    const recent = await databaseRequest(`scheduled_posts?${scope}&created_at=gte.${since}&select=id&limit=${postsPerDay}`) || [];
+    if (recent.length + ids.length > postsPerDay) return send(res, 429, { error: `That would pass the limit of ${postsPerDay} new posts in 24 hours. Copy fewer posts or try again later.` });
     const state = await getWorkspaceState(workspaceId);
     const result = await copyPosts(workspaceId, { postIds: ids, offsetDays, userId: user.id, timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', encryptionKey, actorName: membership.name });
     return send(res, 200, result);
@@ -955,8 +959,9 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
   const input = validatePublishInput(body);
   if (!body.postId) {
     const since = new Date(Date.now() - 86400000).toISOString();
-    const recent = await databaseRequest(`scheduled_posts?workspace_id=eq.${membership.workspace_id}&created_at=gte.${since}&select=id&limit=${DAILY_POST_LIMIT}`) || [];
-    if (recent.length >= DAILY_POST_LIMIT) return send(res, 429, { error: `This workspace has created ${DAILY_POST_LIMIT} posts in the last 24 hours, the beta limit. Try again later.` });
+    const { postsPerDay } = await workspaceAllowances(membership.workspace_id);
+    const recent = await databaseRequest(`scheduled_posts?workspace_id=eq.${membership.workspace_id}&created_at=gte.${since}&select=id&limit=${postsPerDay}`) || [];
+    if (recent.length >= postsPerDay) return send(res, 429, { error: `This workspace has created ${postsPerDay} posts in the last 24 hours, the limit. Try again later.` });
   }
   const state = await getWorkspaceState(membership.workspace_id);
   const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
@@ -1014,7 +1019,11 @@ module.exports = async function handler(req, res) {
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
     membership.name = personProfile(user).name || membership.email || user.email || 'Teammate';
     if (membership.role !== 'admin' && !USER_ACTIONS.has(action)) return send(res, 403, { error: 'Only workspace admins can do that.' });
-    if (WORKSPACE_ACTIONS.has(action)) return await handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin: typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '' }, res);
+    if (WORKSPACE_ACTIONS.has(action)) {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : '';
+      // AI requests made while handling this action are recorded against the workspace (api/_lib/ai.js).
+      return await withAiUsage({ workspaceId: membership.workspace_id, action }, () => handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin }, res));
+    }
 
     const workspaceId = membership.workspace_id;
     const clientId = body.clientId;

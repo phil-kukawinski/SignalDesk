@@ -743,6 +743,94 @@ create table if not exists public.app_errors (
 );
 create index if not exists app_errors_recent_idx on public.app_errors (last_seen desc);
 
+-- What each AI request cost, per workspace and action (api/_lib/ai.js), so credit prices come from
+-- real numbers. Only token and search counts, never the prompt or reply. Kept for about 13 months.
+create table if not exists public.ai_usage (
+  id bigint generated always as identity primary key,
+  workspace_id uuid references public.workspaces (id) on delete cascade,
+  action text not null,
+  model text not null,
+  input_tokens integer not null default 0,
+  output_tokens integer not null default 0,
+  cache_read_tokens integer not null default 0,
+  cache_write_tokens integer not null default 0,
+  web_searches integer not null default 0,
+  cost_usd numeric(10, 5),
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_usage_workspace_idx on public.ai_usage (workspace_id, created_at desc);
+create index if not exists ai_usage_recent_idx on public.ai_usage (created_at desc);
+
+-- Every uploaded file and its size, by workspace, refreshed daily by the worker from Storage
+-- (syncMediaFiles in api/_lib/media.js). Profile photos aren't counted.
+create table if not exists public.media_files (
+  path text primary key,
+  workspace_id uuid references public.workspaces (id) on delete cascade,
+  user_id uuid,
+  size_bytes bigint not null default 0,
+  created_at timestamptz not null default now(),
+  seen_at timestamptz not null default now()
+);
+create index if not exists media_files_workspace_idx on public.media_files (workspace_id);
+
+-- Counts one use of a daily allowance in a single step, so two requests at the same moment can't
+-- both get past the limit. Returns false once the limit is reached.
+create or replace function public.use_daily_allowance(p_name text, p_limit integer)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare used integer;
+begin
+  if p_limit is null or p_limit < 1 then return false; end if;
+  insert into public.worker_runs as w (name, last_run_at, last_result)
+  values (p_name, now(), jsonb_build_object('count', 1))
+  on conflict (name) do update
+    set last_run_at = now(), last_result = jsonb_build_object('count', coalesce((w.last_result ->> 'count')::integer, 0) + 1)
+    where coalesce((w.last_result ->> 'count')::integer, 0) < p_limit
+  returning (last_result ->> 'count')::integer into used;
+  return used is not null;
+end;
+$$;
+revoke all on function public.use_daily_allowance(text, integer) from public, anon, authenticated;
+grant execute on function public.use_daily_allowance(text, integer) to service_role;
+
+-- Platform owners' Workspaces list (Settings → Beta invites): each workspace's size and usage since a date.
+create or replace function public.platform_workspace_usage(p_since timestamptz)
+returns table (workspace_id uuid, name text, created_at timestamptz, members bigint, clients integer, posts bigint,
+  ai_requests bigint, ai_cost numeric, files bigint, storage_bytes bigint)
+language sql stable security definer set search_path = public
+as $$
+  select w.id, w.name, w.created_at,
+    (select count(*) from public.workspace_members m where m.workspace_id = w.id),
+    coalesce((select case when jsonb_typeof(s.state -> 'clients') = 'array' then jsonb_array_length(s.state -> 'clients') else 0 end
+      from public.workspace_state s where s.workspace_id = w.id), 0),
+    (select count(*) from public.scheduled_posts p where p.workspace_id = w.id and p.parent_id is null and p.created_at >= p_since),
+    (select count(*) from public.ai_usage a where a.workspace_id = w.id and a.created_at >= p_since),
+    (select coalesce(sum(a.cost_usd), 0) from public.ai_usage a where a.workspace_id = w.id and a.created_at >= p_since),
+    (select count(*) from public.media_files f where f.workspace_id = w.id),
+    (select coalesce(sum(f.size_bytes), 0)::bigint from public.media_files f where f.workspace_id = w.id)
+  from public.workspaces w
+  order by w.created_at;
+$$;
+revoke all on function public.platform_workspace_usage(timestamptz) from public, anon, authenticated;
+grant execute on function public.platform_workspace_usage(timestamptz) to service_role;
+
+-- What each kind of AI request costs on average, across every workspace, since a date.
+create or replace function public.platform_ai_costs(p_since timestamptz)
+returns table (action text, model text, requests bigint, total_cost numeric, average_cost numeric, highest_cost numeric,
+  average_input bigint, average_output bigint, searches bigint)
+language sql stable security definer set search_path = public
+as $$
+  select a.action, a.model, count(*), coalesce(sum(a.cost_usd), 0), round(avg(a.cost_usd), 5), max(a.cost_usd),
+    round(avg(a.input_tokens + a.cache_read_tokens + a.cache_write_tokens))::bigint, round(avg(a.output_tokens))::bigint, sum(a.web_searches)::bigint
+  from public.ai_usage a
+  where a.created_at >= p_since
+  group by a.action, a.model
+  order by 4 desc;
+$$;
+revoke all on function public.platform_ai_costs(timestamptz) from public, anon, authenticated;
+grant execute on function public.platform_ai_costs(timestamptz) to service_role;
+
 -- Gets or creates the signed-in person's workspace. New people join a workspace they were invited
 -- to; otherwise, while sign-ups are invite-only, they need a valid invite code (passed in, or
 -- saved on their account at sign-up) to create their own.
@@ -806,19 +894,29 @@ $$;
 revoke all on function public.ensure_workspace(text) from public;
 grant execute on function public.ensure_workspace(text) to authenticated;
 
+-- How many clients a workspace may have. Keep in step with `clients` in api/_lib/allowances.js;
+-- when plans arrive, this reads the workspace's plan.
+create or replace function public.workspace_client_limit(p_workspace uuid)
+returns integer
+language sql stable security definer set search_path = public
+as $$ select 50 $$;
+
 -- Members with the User role can save posts and drafts but cannot change clients, settings, or approvals.
 create or replace function public.guard_workspace_state()
 returns trigger
 language plpgsql security definer set search_path = public
 as $$
 begin
-  -- Beta limits for everyone, admins included: up to 50 clients, and about 2 MB of workspace data.
-  if auth.uid() is not null and jsonb_typeof(new.state -> 'clients') = 'array' and jsonb_array_length(new.state -> 'clients') > 50 then
-    raise exception 'Workspaces can have up to 50 clients during the beta.';
+  -- Limits for everyone, admins included: the workspace's client allowance, and about 2 MB of workspace data.
+  if auth.uid() is not null and jsonb_typeof(new.state -> 'clients') = 'array'
+    and jsonb_array_length(new.state -> 'clients') > public.workspace_client_limit(new.workspace_id) then
+    raise exception 'Workspaces can have up to % clients during the beta.', public.workspace_client_limit(new.workspace_id);
   end if;
   if auth.uid() is not null and octet_length(new.state::text) > 2000000 then
     raise exception 'This workspace has grown past the beta size limit. Remove old saved posts or library items.';
   end if;
+  -- A new workspace's first save is checked against the limits above; the role checks compare with the old save.
+  if tg_op = 'INSERT' then return new; end if;
   if auth.uid() is null or public.workspace_role(new.workspace_id) = 'admin' then return new; end if;
   if (new.state -> 'clients') is distinct from (old.state -> 'clients')
     or (new.state -> 'settings') is distinct from (old.state -> 'settings') then
@@ -832,7 +930,7 @@ begin
 end;
 $$;
 drop trigger if exists guard_workspace_state on public.workspace_state;
-create trigger guard_workspace_state before update on public.workspace_state
+create trigger guard_workspace_state before insert or update on public.workspace_state
   for each row execute function public.guard_workspace_state();
 
 -- The server checks a time is free before saving, but two people saving at the same moment can both
@@ -995,6 +1093,8 @@ alter table public.beta_invites enable row level security;
 alter table public.beta_redemptions enable row level security;
 alter table public.app_settings enable row level security;
 alter table public.app_errors enable row level security;
+alter table public.ai_usage enable row level security;
+alter table public.media_files enable row level security;
 alter table public.link_click_days enable row level security;
 
 -- Team, provider, publishing, Autopilot, comment, report, and trend tables are managed only by the server API.
@@ -1003,14 +1103,14 @@ revoke all on public.workspaces, public.workspace_members, public.workspace_invi
   public.weekly_reports, public.trend_reports, public.social_connections, public.oauth_sessions,
   public.scheduled_posts, public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.activity_log, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states from anon, authenticated;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states, public.ai_usage, public.media_files from anon, authenticated;
 grant all on public.workspaces, public.workspace_members, public.workspace_invites, public.social_profiles,
   public.autopilot_feeds, public.autopilot_items, public.scheduled_comments, public.workspace_state, public.user_drafts,
   public.notifications, public.notification_preferences, public.post_submissions, public.weekly_reports,
   public.trend_reports, public.social_connections, public.oauth_sessions, public.scheduled_posts,
   public.publish_jobs, public.publish_attempts, public.worker_runs, public.review_links, public.post_notes, public.post_history, public.activity_log, public.push_subscriptions,
   public.bio_pages, public.data_deletion_requests, public.short_links, public.link_click_days,
-  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states to service_role;
+  public.beta_invites, public.beta_redemptions, public.app_settings, public.app_errors, public.network_posts, public.account_stats, public.post_metric_days, public.planning_notes, public.comment_states, public.ai_usage, public.media_files to service_role;
 
 -- People read their own notifications and can only mark them read.
 drop policy if exists "Users can read their notifications" on public.notifications;

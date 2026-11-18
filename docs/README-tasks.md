@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 17, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 18, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -14,7 +14,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 - [ ] **New: send the usage export after the November 17 trend scan,** to confirm what a 6-search scan costs.
 - [x] **New: delete the old `signaldesk` Anthropic key.** Done November 12; `signaldesk-new` is the only key.
 
-- [x] **0. Run the latest database update. Do this first.** Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health will flag a missing table, Activity shows post events only, and the database's double-booking check stays off.
+- [ ] **0. Run the latest database update. Do this first (new November 18).** It adds cost and storage measuring for the pricing plan. Open the [SignalDesk SQL editor](https://supabase.com/dashboard/project/zuckwjjzhrcesrzbfdak/sql/new) (project `zuckwjjzhrcesrzbfdak`), paste all of `supabase/schema.sql`, and click Run. It's safe to run again. Until you do, Settings → Setup & health flags two missing tables (`ai_usage` and `media_files`), and Settings → Usage & costs asks for the update. Everything else keeps working.
 - [ ] **1. Ask Google to index the home page.** In Search Console, paste `https://socialsignaldesk.com/` into URL Inspection and click Request indexing. Checked November 16: the site is set up correctly (search engines allowed, sitemap lists all four pages, nothing blocks indexing), but no pages show in search yet, so this is still worth doing.
 - [ ] **2. Add your name and photo.** Settings → Your account.
 - [ ] **3. Add OpenID Connect to LinkedIn app 1.** Add the **Sign In with LinkedIn using OpenID Connect** product. It's self-serve and instant.

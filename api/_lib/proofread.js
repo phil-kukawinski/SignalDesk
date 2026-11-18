@@ -1,4 +1,4 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { trackedClient } = require('./ai');
 
 const PROOFREAD_MODEL = 'claude-haiku-5-5';
 const ISSUE_TYPES = ['spelling', 'grammar', 'punctuation', 'clarity', 'consistency'];
@@ -34,7 +34,7 @@ For each issue, copy the exact text being replaced into "original" (short, but l
 
 async function proofreadTexts(texts, brandNotes = '') {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Proofreading is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
-  const client = new Anthropic();
+  const client = trackedClient();
   const body = texts.map((item) => `<text key="${item.key}" label="${item.label.replace(/"/g, "'")}">\n${item.text}\n</text>`).join('\n\n');
   const response = await client.beta.messages.create({
     model: PROOFREAD_MODEL,

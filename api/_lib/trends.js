@@ -1,4 +1,4 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { trackedClient } = require('./ai');
 
 const TREND_MODEL = 'claude-sonnet-5-5';
 // Most widely used by small businesses and agency clients first. Scans cover them in this order, so if
@@ -133,7 +133,7 @@ function cleanReport(input, sources) {
 
 async function generateTrendReport({ clients, focus, platforms, today, watchTerms = [] }) {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Trend research is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
-  const client = new Anthropic();
+  const client = trackedClient();
   const clientLines = clients.map((item) => `- ${item.name}: ${item.desc || 'No description yet.'}`).join('\n') || '- No clients yet.';
   const platformNames = byPopularity(platforms).map((platform) => TREND_PLATFORMS[platform]).join(', ');
   const messages = [{

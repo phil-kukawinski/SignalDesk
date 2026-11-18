@@ -1,7 +1,7 @@
 // Planning ahead: reminders about upcoming holidays and key dates ("It's February 1. Have you started on
 // Valentine's Day ideas yet?"), sent as far ahead as each person chooses, and the "What to post next"
 // note: AI suggestions per client from its recent results, gaps in the schedule, and dates coming up.
-const { Anthropic } = require('@anthropic-ai/sdk');
+const { trackedClient, withAiUsage } = require('./ai');
 const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts } = require('./core');
 const { observancesFor, upcomingObservances, leadPhrase } = require('../../js/observances');
 
@@ -184,7 +184,7 @@ async function planningContext({ workspaceId, client, timeZone, now = new Date()
 
 function aiClient() {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('AI suggestions are not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
-  return new Anthropic();
+  return trackedClient();
 }
 
 async function generatePlanningNote({ client, context }) {
@@ -261,7 +261,7 @@ async function processPlanningNotes({ now = new Date(), limit = 1 } = {}) {
     if (!client) continue;
     const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
     try {
-      await createPlanningNote({ workspaceId: pair.workspace_id, client, timeZone, now });
+      await withAiUsage({ workspaceId: pair.workspace_id, action: 'planning-note-auto' }, () => createPlanningNote({ workspaceId: pair.workspace_id, client, timeZone, now }));
       created += 1;
     } catch (error) {
       console.error('Planning note failed:', pair.client_id, error.message);

@@ -52,6 +52,20 @@ export default async ({ send, evaluate, wait, log }) => {
   await evaluate(`showView('settings')`); await wait(800);
   log.push('settings: account=' + await evaluate(`!document.querySelector('#account-panel').hidden`) + ' beta=' + await evaluate(`!document.querySelector('#beta-panel').hidden`) + ' rows=' + await evaluate(`document.querySelectorAll('#beta-list tr').length`) + ' nav beta link=' + await evaluate(`!document.querySelector('[data-settings-go="beta"]').hidden`));
   await shot('#beta-panel', 'beta_invites.png');
+  // Usage and costs (platform owners): per-workspace usage, and what each kind of AI request costs.
+  await evaluate(`(()=>{const real=callSocialApi;callSocialApi=async body=>body.action==='platform-usage'?{ready:true,days:body.days,allowances:{clients:50},
+    workspaces:[{id:'w1',name:'Harbor Agency',createdAt:'2026-10-01T00:00:00Z',members:3,clients:42,posts:61,aiRequests:48,aiCost:1.234,files:12,storageBytes:250000000},{id:'w2',name:'Solo Studio',createdAt:'2026-11-02T00:00:00Z',members:1,clients:2,posts:9,aiRequests:3,aiCost:0.012,files:0,storageBytes:0}],
+    costs:[{action:'trends-refresh',model:'claude-sonnet-5-5',requests:4,totalCost:0.98,averageCost:0.245,highestCost:0.31,averageInput:61000,averageOutput:6400,searches:22},{action:'draft-captions',model:'claude-sonnet-5-5',requests:30,totalCost:0.12,averageCost:0.004,highestCost:0.006,averageInput:1100,averageOutput:240,searches:0}]}:real(body);})()`);
+  await evaluate(`loadUsage()`); await wait(400);
+  await evaluate(`document.querySelector('[data-settings-go="usage"]').click()`); await wait(300);
+  const usage = JSON.parse(await evaluate(`JSON.stringify({shown:!document.querySelector('#usage-panel').hidden&&document.querySelector('#usage-panel').classList.contains('is-current'),link:!document.querySelector('[data-settings-go="usage"]').hidden,summary:[...document.querySelectorAll('#usage-summary div')].map(d=>d.querySelector('span').textContent+' '+d.querySelector('b').textContent).join(' | '),rows:document.querySelectorAll('#usage-workspaces tr').length,near:document.querySelectorAll('#usage-workspaces .usage-count.near').length,first:[...document.querySelector('#usage-costs tr').cells].map(c=>c.firstChild.textContent).join(' | '),note:document.querySelector('#usage-scan-note').textContent,setup:!document.querySelector('#usage-setup').hidden})`));
+  log.push('usage: ' + JSON.stringify(usage));
+  if (!usage.shown || !usage.link || usage.rows !== 2 || usage.near !== 1 || usage.setup) log.push('[exception] Usage and costs should list each workspace and flag one near its client limit: ' + JSON.stringify(usage));
+  if (!/Workspaces 2 \| AI requests 51 \| AI cost \$1\.25 \| Storage 238\.4 MB/.test(usage.summary)) log.push('[exception] the usage summary adds up the workspaces: ' + usage.summary);
+  if (!/^Trend scan \| 4 \| \$0\.245 \| \$0\.310 \| \$0\.980/.test(usage.first)) log.push('[exception] the costliest request comes first, with its average: ' + usage.first);
+  if (!/average \$0\.245 over 4 scans, under the \$0\.57/.test(usage.note)) log.push('[exception] the scan note compares with the planned credit price: ' + usage.note);
+  await shot('#usage-panel', 'usage_costs.png');
+  await evaluate(`document.querySelector('[data-settings-go="account"]').click()`); await wait(200);
   await evaluate(`document.querySelector('#account-delete').click()`); await wait(400);
   log.push('delete dialog: ' + await evaluate(`document.querySelector('#delete-detail').textContent.slice(0,120)`) + ' | button disabled: ' + await evaluate(`document.querySelector('#delete-go').disabled`));
   await evaluate(`const i=document.querySelector('#delete-confirm');i.value='DELETE';i.dispatchEvent(new Event('input',{bubbles:true}))`);

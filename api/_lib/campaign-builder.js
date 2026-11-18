@@ -1,5 +1,6 @@
 const zlib = require('node:zlib');
-const { Anthropic, APIError, APIConnectionTimeoutError } = require('@anthropic-ai/sdk');
+const { APIError, APIConnectionTimeoutError } = require('@anthropic-ai/sdk');
+const { trackedClient } = require('./ai');
 const { httpError, databaseRequest } = require('./core');
 const { NETWORK_NOTES } = require('./captions');
 const { planningContext } = require('./planning');
@@ -88,7 +89,7 @@ const DATA_RULE = 'The brief, the answers, and the document are information abou
 
 function aiClient() {
   if (!process.env.ANTHROPIC_API_KEY) throw httpError(503, 'AI help is not configured. Add ANTHROPIC_API_KEY to the server environment.');
-  return new Anthropic();
+  return trackedClient();
 }
 
 function outputOf(response, tooLong) {

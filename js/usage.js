@@ -1,0 +1,24 @@
+// Settings → Usage & costs, for platform owners only: what each workspace uses and what each kind
+// of AI request really costs, so plan limits and credit prices (docs/pricing-plan.md) rest on
+// measured numbers. Loaded with Beta invites, and hidden for everyone else.
+const USAGE_ACTIONS={'trends-refresh':'Trend scan','campaign-plan':'Campaign plan','campaign-post':'Rewrite a post','campaign-questions':'Campaign questions','draft-captions':'Caption drafts','alt-text':'Image description','brand-from-site':'Fill from website',proofread:'Proofreading','planning-note':'Planning note (asked for)','planning-note-auto':'Planning note (weekly)'};
+// The pricing plan's trend scan price (10 credits) holds while a scan averages under this.
+const SCAN_CREDIT_CEILING=0.57;
+let usageDays=30;
+function usageMoney(value,precise=false){if(!value)return'$0';if(value<0.001)return'<$0.001';return'$'+value.toFixed(precise||value<1?3:2);}
+function usageBytes(bytes){if(!bytes)return'0 MB';const gb=bytes/1073741824;return gb>=1?`${gb.toFixed(gb<10?1:0)} GB`:`${Math.max(0.1,bytes/1048576).toFixed(1)} MB`;}
+function usageLevel(used,limit){if(!limit)return'';const share=used/limit;return share>=1?'over':share>=0.8?'near':'';}
+function usageWorkspaceRow(row,allow){const level=usageLevel(row.clients,allow.clients);return`<tr><td><b>${escapeHtml(row.name)}</b><small>Since ${new Date(row.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</small></td><td>${row.members}</td><td><span class="usage-count ${level}">${row.clients} of ${allow.clients}</span></td><td>${row.posts}</td><td>${row.aiRequests}</td><td>${usageMoney(row.aiCost)}</td><td>${usageBytes(row.storageBytes)}<small>${row.files} file${row.files===1?'':'s'}</small></td></tr>`;}
+function usageCostRow(row){return`<tr><td><b>${escapeHtml(USAGE_ACTIONS[row.action]||row.action)}</b><small>${escapeHtml(row.model)}</small></td><td>${row.requests}</td><td>${usageMoney(row.averageCost,true)}</td><td>${usageMoney(row.highestCost,true)}</td><td>${usageMoney(row.totalCost)}</td><td>${row.averageInput.toLocaleString('en-US')} in · ${row.averageOutput.toLocaleString('en-US')} out${row.searches?` · ${row.searches} search${row.searches===1?'':'es'}`:''}</td></tr>`;}
+// One line on whether the measured trend scan cost still fits the planned credit price.
+function usageScanNote(costs){const scans=costs.filter(row=>row.action==='trends-refresh');const count=scans.reduce((sum,row)=>sum+row.requests,0);if(!count)return'No trend scans in this period yet. The pricing plan charges 10 credits a scan, which holds while a scan averages under $0.57.';const average=scans.reduce((sum,row)=>sum+row.totalCost,0)/count;return average<SCAN_CREDIT_CEILING?`Trend scans average ${usageMoney(average,true)} over ${count} scan${count===1?'':'s'}, under the $0.57 the 10-credit price allows.`:`Trend scans average ${usageMoney(average,true)}, over the $0.57 the 10-credit price allows. Raise the scan’s credit price in the pricing plan.`;}
+async function loadUsage(){const panel=$('#usage-panel'),link=$('[data-settings-go="usage"]');if(!panel||!cloudFeaturesAvailable())return;
+  try{const data=await callSocialApi({action:'platform-usage',days:usageDays});panel.hidden=false;if(link)link.hidden=false;
+    const ready=$('#usage-setup');if(ready)ready.hidden=data.ready;
+    const total=(key)=>data.workspaces.reduce((sum,row)=>sum+row[key],0);
+    $('#usage-summary').innerHTML=[['Workspaces',data.workspaces.length],['AI requests',total('aiRequests')],['AI cost',usageMoney(total('aiCost'))],['Storage',usageBytes(total('storageBytes'))]].map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
+    $('#usage-workspaces').innerHTML=data.workspaces.length?data.workspaces.map(row=>usageWorkspaceRow(row,data.allowances)).join(''):'<tr><td colspan="7" class="option-hint">Nothing recorded yet.</td></tr>';
+    $('#usage-costs').innerHTML=data.costs.length?data.costs.map(usageCostRow).join(''):'<tr><td colspan="6" class="option-hint">No AI requests recorded in this period yet.</td></tr>';
+    $('#usage-scan-note').textContent=usageScanNote(data.costs);
+  }catch{panel.hidden=true;if(link)link.hidden=true;}}
+$('#usage-days')?.addEventListener('change',event=>{usageDays=Number(event.target.value)||30;loadUsage();});

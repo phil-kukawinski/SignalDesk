@@ -22,7 +22,7 @@ for test in tests/unit/*.test.js; do
 done
 
 echo "Database"
-for test in tests/db/upgrade.test.mjs tests/db/queue.test.mjs tests/db/isolation.test.mjs; do
+for test in tests/db/upgrade.test.mjs tests/db/queue.test.mjs tests/db/isolation.test.mjs tests/db/usage.test.mjs; do
   out=$(limit 300 node "$test" 2>&1) && pass "$(basename "$test")" || fail "$(basename "$test")" "$(echo "$out" | grep -v '^    at ' | tail -15)"
 done
 
