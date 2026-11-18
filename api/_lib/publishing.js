@@ -4,6 +4,8 @@ const {
   encryptSecret, decryptSecret, buildPostBody, COMMENT_PLATFORMS
 } = require('./core');
 const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, COMMENTABLE, PublishError, providerConfigured, adapterFor } = require('./platforms');
+// Shared with the app, so the post panel and the email give the same reason.
+const { explainPublishError } = require('../../js/publish-hints.js');
 
 // SignalDesk's own publishing queue. A scheduled post has one job per network; the worker
 // claims due jobs, publishes them directly (or through Ayrshare for other networks), and
@@ -402,6 +404,13 @@ async function publishViaAyrshare({ job, post, content, markSent, encryptionKey 
   return { externalId: result.id, url: entry.postUrl || '' };
 }
 
+// A plain reason and fix for the email, with the network's own words after it.
+function failureText(job, unknown) {
+  const raw = job.last_error || 'The network rejected the post.';
+  const hint = unknown ? null : explainPublishError(job.platform, job.last_error, job.error_kind);
+  return hint ? `${hint.why} ${hint.fix} (${label(job.platform)} said: ${raw})` : raw;
+}
+
 function classify(error) {
   if (error instanceof PublishError) return error.kind;
   if (error.status && error.status < 500) return 'invalid';
@@ -512,7 +521,7 @@ async function notifyFailedJobs() {
       const payload = {
         workspaceId: post.workspace_id, type: unknown ? 'publish_unknown' : 'publish_failed', category: 'publishing',
         title: unknown ? `Check ${networks}: did “${post.title || 'a post'}” go out?` : `“${post.title || 'A post'}” didn't publish to ${networks}`,
-        body: `${client?.name ? `${client.name}: ` : ''}${jobs[0].last_error || 'The network rejected the post.'}`,
+        body: `${client?.name ? `${client.name}: ` : ''}${failureText(jobs[0], unknown)}`,
         view: 'calendar', data: { postId: post.id }
       };
       await notify({ ...payload, audience: 'admins', excludeUserId: post.created_by });

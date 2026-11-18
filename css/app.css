@@ -420,6 +420,7 @@ h1,h2,h3,.brand strong,.stat-number,.client-stats b{font-family:Inter,system-ui,
 .job-row b{display:block;font-size:calc(13px*var(--fs,1))}.job-row small{display:block;color:var(--text-muted);font-size:calc(12px*var(--fs,1));margin-top:2px}
 .job-row.failed,.job-row.unknown,.job-row.overdue{border-color:var(--danger-border);background:var(--surface-2)}
 .job-row.published{border-color:var(--success)}
+.job-raw{margin:4px 0 0;font-size:calc(12px*var(--fs,1));color:var(--muted)}.job-raw summary{cursor:pointer;width:max-content}.job-raw p{margin:4px 0 0;overflow-wrap:anywhere}
 .job-detail{margin:6px 0 0;font-size:calc(12px*var(--fs,1));line-height:1.5;color:var(--danger-text);overflow-wrap:anywhere}
 .job-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .post-dialog-reschedule{margin:4px 0 8px}
@@ -1841,3 +1842,27 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 .heat-network{display:inline-flex;align-items:center;gap:2px;flex:none}
 .heat-network select{min-width:150px}
 #view-overview .performance-panel .panel-header{flex-wrap:wrap}
+
+/* Phone tidy-ups (checked by tests/browser/phone.mjs): the attention chips wrap instead of hiding off
+   the edge, the calendar puts its date on its own line and the view tabs across the width, approval
+   rows give the post the full width, and the Studio's action bar fits on one row plus a short status. */
+@media(max-width:620px){
+  .attention-strip{flex-wrap:wrap;overflow:visible;margin:0 0 14px;padding:0}
+  .calendar-toolbar>div:first-child{flex-wrap:wrap}
+  .calendar-toolbar #calendar-month{order:-1;flex-basis:100%;margin:0 0 6px}
+  .calendar-controls .view-tabs{order:-1;flex:1 1 100%;display:flex}
+  .calendar-controls .view-tabs .view-toggle{flex:1}
+  .approval-table-row{grid-template-columns:minmax(0,1fr)}
+  .approval-post{align-items:flex-start}
+  #composer-actions{gap:6px;padding-top:8px;padding-bottom:8px}
+  #composer-actions #schedule-post,#composer-actions>#submit-review.primary-button{flex:1 1 auto;order:0;min-width:0}
+  #composer-actions>.secondary-button,#composer-actions .action-menu>.secondary-button{padding-left:10px;padding-right:10px}
+  #composer-actions #composer-status{order:3;flex:1 1 100%;margin:0;padding:0;text-align:center;font-size:var(--text-xs)}
+}
+
+/* "New in SignalDesk" note on Home (js/whats-new.js) */
+.whats-new{display:flex;align-items:flex-start;gap:14px;margin:0 0 16px;padding:14px 16px;border:1px solid var(--accent-border);border-radius:var(--radius);background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.whats-new>div{flex:1;min-width:0}
+.whats-new b{display:block;font-size:var(--text-sm);color:var(--accent-text)}
+.whats-new ul{margin:6px 0 0;padding-left:18px;font-size:var(--text-sm);line-height:1.55;color:var(--text-2)}
+.whats-new .text-button{flex:none;white-space:nowrap}

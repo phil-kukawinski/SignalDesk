@@ -99,6 +99,8 @@ The sidebar is grouped into **Plan** (Home, calendar, Publishing Studio, Campaig
 
 Times read the friendly way across lists and the post panel: "In 4 hours", "Tomorrow, 9:00 AM".
 
+After an update, a short **New in SignalDesk** note on the Command Center lists what changed. **Got it** hides it on that device.
+
 Press **?** anywhere for keyboard shortcuts: **N** starts a new post, **/** searches, and **G** then **C** jumps to the calendar (**H** home, **A** analytics, **S** social accounts).
 
 A **Needs attention** row at the top of the Command Center counts what's waiting (failed posts, approvals, accounts to reconnect); each count goes straight to the fix. Below it, **Needs your attention** lists failed posts, approvals, accounts to reconnect, and dates with nothing planned. Select **×** to dismiss one; it comes back if something about it changes, and **Show dismissed** brings them all back. Dismissing only hides it on your own device and doesn't fix anything, so a dismissed failed post still needs a retry.
@@ -131,7 +133,7 @@ The brand kit opens after you add a client. You can also open it any time from t
 
 ### Create a post (Publishing Studio)
 
-1. **Choose where to publish:** pick the client and its accounts, plus any reminder networks.
+1. **Choose where to publish:** pick the client and its accounts, plus any reminder networks. The Studio opens on the client you used last on that device, with the networks you last picked for them.
 2. **Write the copy.** Optional helpers:
    - **✦ Draft with AI** writes a version for each network in the client's voice.
    - **Templates** and **Snippets** insert saved text.
@@ -297,7 +299,7 @@ Supabase's free plan has no backups you can restore yourself, and the upgrade is
 | "SignalDesk is invite-only…" after signing in | No invite code on the account | Enter a code in the prompt, or create one in Beta invites. |
 | A network's Connect pop-up shows an error | The developer app is missing a permission or product | Setup & health → Recent problems shows the network's exact message. LinkedIn "unauthorized scope" means a product is missing (section 2). |
 | An @mention shows "can't be looked up" | It's a personal Instagram account, or the name is misspelled | Personal accounts can't be confirmed by any app. Check the name with **Open ↗**; the @ still goes out as typed. |
-| A post didn't go out | Scheduler stopped, account needs reconnecting, or the network refused it | Open the post's details for the reason; **Retry** once fixed. Check Setup & health → Scheduler. |
+| A post didn't go out | Scheduler stopped, account needs reconnecting, or the network refused it | Open the post's details: common problems are explained in plain words with the fix, and **Details** shows the network's own message. **Retry** once fixed. Check Setup & health → Scheduler. |
 | "Check the account" on a post | The connection dropped after sending; it may already be live | Look on the network before selecting Retry, to avoid posting twice. |
 | Instagram image rejected | Very rare now; SignalDesk converts images automatically | Setup & health → **Instagram image conversion** should be OK. Use Prep image to crop if needed. |
 | The whole site shows "Vercel Security Checkpoint" to tools | Vercel's automatic protection after a burst of requests | It clears on its own within the hour. If it doesn't, check Vercel → Firewall → Attack Challenge Mode is off. |
