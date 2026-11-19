@@ -1888,7 +1888,7 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 .client-card{position:relative;overflow:hidden}.client-card::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--client-color,var(--accent))}.client-card::after{content:"";position:absolute;inset:0 0 auto;height:70px;background:linear-gradient(180deg,color-mix(in srgb,var(--client-color,var(--accent)) 10%,transparent),transparent);pointer-events:none}.client-card>*{position:relative;z-index:1}
 #view-composer .preview-panel{position:relative;overflow:hidden}#view-composer .preview-panel::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--client-color,transparent);transition:background .3s}#view-composer .preview-panel .social-preview{transition:box-shadow .3s;box-shadow:0 0 0 1px color-mix(in srgb,var(--client-color,transparent) 35%,transparent)}
 
-@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url('../fonts/bricolage-latin.woff2') format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url('../fonts/bricolage-latin.woff2') format('woff2-variations');unicode-range:U+0000-0025,U+0027-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 :root{--font-display:'Bricolage Grotesque',Inter,system-ui,sans-serif;--warm:#f26b3a;--warm-soft:#fff1ea}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--warm:#ff8a5c;--warm-soft:#3a2219}}
 :root[data-theme="dark"]{--warm:#ff8a5c;--warm-soft:#3a2219}
@@ -1913,3 +1913,6 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 @keyframes empty-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .empty-state>svg{display:none}
 @media (prefers-reduced-motion:reduce){.empty-dot,.home-pulse::before{animation:none}}
+.calendar-event img{pointer-events:none;-webkit-user-drag:none;user-select:none}
+.post-people{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:var(--text-sm);color:var(--text-muted)}.post-by{color:var(--text-muted)}
+.rank-pick{cursor:pointer;border-radius:8px;padding:2px 4px;margin:0 -4px}.rank-pick:hover{background:var(--surface-2,var(--surface-3))}.rank-check{width:16px;height:16px;margin:0 2px 0 0;accent-color:var(--accent);flex:none;cursor:pointer}

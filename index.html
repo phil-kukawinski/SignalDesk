@@ -24,7 +24,7 @@
   <meta property="og:site_name" content="SignalDesk by PK Works">
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/bricolage-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.min.css?v=ab1596cf3c">
+  <link rel="stylesheet" href="css/app.min.css?v=e800327792">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -504,7 +504,7 @@
     <div class="auth-form">
       <h2>Import posts from a spreadsheet</h2>
       <p>Save a spreadsheet as CSV with these columns: <code>date</code> (2026-11-03 or 11/3/2026), <code>time</code> (14:30 or 2:30 PM, your local time), <code>client</code>, <code>networks</code> (separated by semicolons, e.g. Facebook;LinkedIn), <code>text</code>, and optionally <code>media_url</code>, <code>campaign</code>, and <code>cover</code>. Other columns are ignored.</p>
-      <p class="option-hint"><b>Media:</b> in <code>media_url</code>, put a link starting with https://, or the name of a file you add below with <b>Add media files</b>, such as <code>1.png</code>. Separate several with <code>|</code> for a carousel. For a video post, <code>cover</code> takes an image the same way (such as <code>1-cover.png</code>) to use as its thumbnail instead of the first frame. Files upload when you import.</p>
+      <p class="option-hint"><b>Media:</b> in <code>media_url</code>, put a link starting with https://, or the name of a file you add below with <b>Add media files</b>, such as <code>1.png</code>. Separate several with <code>|</code> for a carousel, such as <code>Fall kit 1.png|Fall kit 2.png</code>. File names can have spaces. For a video post, <code>cover</code> takes an image the same way (such as <code>1-cover.png</code>) to use as its thumbnail instead of the first frame. Files upload when you import.</p>
       <p class="option-hint">Schedule them right away, or import them as drafts, which wait in Campaigns and Saved drafts. A file exported from a campaign has an <code>id</code> column, so importing it again updates those posts instead of adding new ones.</p>
       <div class="auth-actions"><label class="secondary-button file-button">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label><label class="secondary-button file-button">Add media files<input type="file" id="csv-media" accept="image/*,video/*" multiple hidden></label><button class="text-button" type="button" id="csv-template">Download a template</button></div>
       <p class="option-hint" id="csv-media-count" role="status"></p>
@@ -579,7 +579,7 @@
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=6e3cd59121'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=4e3b4db8f6'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

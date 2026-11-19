@@ -16,8 +16,10 @@ $('#library-search')?.addEventListener('input',()=>renderLibrary());
 function clientLogoUrl(client){const url=String(clientBrand(client).logo||'').trim();return /^https:\/\//i.test(url)||/^data:image\//i.test(url)?url:'';}
 function clientLogoHtml(client){const url=clientLogoUrl(client);return`<div class="client-logo${url?' has-image':''}" style="background:${client.logo};color:${readableOn(client.text,client.logo)}">${url?`<img src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:''}<span>${escapeHtml(client.initials)}</span></div>`;}
 document.addEventListener('error',event=>{const img=event.target;if(img?.tagName==='IMG'&&img.parentElement?.classList.contains('client-logo')){img.parentElement.classList.remove('has-image');img.remove();}},true);
-// A client's own color: the first brand kit color, else the color its posts use on the calendar.
-function clientAccent(client){const color=clientBrand(client).colors?.[0];return /^#[0-9a-f]{6}$/i.test(color||'')?color:/^#[0-9a-f]{3,8}$/i.test(client?.text||'')?client.text:'var(--accent)';}
+// A client's own color: its most colorful brand kit color (black, white, and grays are skipped, since they vanish
+// on one theme or the other), else the color its posts use on the calendar.
+function colorfulness(hex){const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255),max=Math.max(r,g,b),min=Math.min(r,g,b);return max-min;}
+function clientAccent(client){const color=(clientBrand(client).colors||[]).filter(value=>/^#[0-9a-f]{6}$/i.test(value||'')).sort((a,b)=>colorfulness(b)-colorfulness(a)).find(value=>colorfulness(value)>=.18);return color?color:/^#[0-9a-f]{3,8}$/i.test(client?.text||'')?client.text:'var(--accent)';}
 // The Publishing Studio preview takes on the chosen client's color, so it's clear whose post this is.
 function tintStudioForClient(){const view=$('#view-composer'),select=$('#client-select');if(!view||!select)return;const client=clients.find(item=>item.id===select.value||item.name===select.value);if(client)view.style.setProperty('--client-color',clientAccent(client));else view.style.removeProperty('--client-color');}
 $('#client-select')?.addEventListener('change',tintStudioForClient);

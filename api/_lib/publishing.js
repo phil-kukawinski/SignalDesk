@@ -667,7 +667,7 @@ function publicPost(row, clicks = null) {
   return {
     id: row.id, clientId: row.client_id, title: row.title, status: row.status, source: row.source,
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
-    approvedAt: row.approved_at, decisionNote: row.decision_note, createdAt: row.created_at,
+    approvedAt: row.approved_at, approvedBy: row.approved_by || null, decisionNote: row.decision_note, createdAt: row.created_at,
     campaign: row.campaign || '', evergreen: Boolean(row.evergreen), clientStatus: row.client_status || null,
     text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {}, mediaAlt: row.content?.mediaAlt || {},
     options: row.options || {},

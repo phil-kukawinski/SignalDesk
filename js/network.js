@@ -34,11 +34,11 @@ function renderAllPostsRows(){const body=$('#all-posts-body');if(!body)return;co
 // Analytics: engagement over time, right under the numbers.
 function renderAnalyticsTrend(){const view=$('#view-analytics');if(!view)return;const summary=cloudFeaturesAvailable()?analyticsSummary():null;let panel=$('#analytics-trend-panel');if(!summary?.engagement){panel?.remove();return;}if(!panel){panel=document.createElement('div');panel.id='analytics-trend-panel';panel.className='panel performance-panel analytics-trend-panel';$('.analytics-stats',view).insertAdjacentElement('afterend',panel);}const byNetwork=trendMode()==='networks',canSplit=Object.keys(summary.engagement.byPlatform||{}).length>1;panel.innerHTML=`<div class="panel-header"><div><h2>Engagement over time</h2><p>${homeClientId()?`${escapeHtml(homeClientName())}, last ${rangeLabel()}, from every source.`:`All clients, last ${rangeLabel()}, from every source.`}${summary.step===7?' Each point is one week.':''}${byNetwork&&canSplit?' Select a network below to hide or show it.':''}</p></div>${canSplit?trendToggleHtml(byNetwork):`<span class="performance-range">Last ${rangeLabel()}</span>`}</div><div class="performance-content">${performanceHtml(summary.engagement,{byNetwork:byNetwork&&canSplit})}</div>`;}
 // The chart's view (all networks together, or one line each) is remembered on this device.
-const TREND_MODE_KEY='signaldesk.trendMode';
-function trendMode(){try{return localStorage.getItem(TREND_MODE_KEY)==='networks'?'networks':'all';}catch{return'all';}}
+let trendModeNow='all';
+function trendMode(){return trendModeNow;}
 // The switch and the network keys work the same on Home and Analytics, and both charts follow the choice.
 function redrawTrendCharts(){renderAnalyticsTrend();if(typeof drawHomePerformance==='function')drawHomePerformance();}
-document.addEventListener('click',event=>{const panel=event.target.closest('.performance-panel');if(!panel)return;const where=panel.id?`#${panel.id}`:'#view-overview .performance-panel',mode=event.target.closest('[data-trend-mode]');if(mode){try{localStorage.setItem(TREND_MODE_KEY,mode.dataset.trendMode);}catch{}redrawTrendCharts();$(`${where} [data-trend-mode="${mode.dataset.trendMode}"]`)?.focus();return;}const key=event.target.closest('[data-trend-network]');if(key){const platform=key.dataset.trendNetwork;trendHidden.has(platform)?trendHidden.delete(platform):trendHidden.add(platform);redrawTrendCharts();$(`${where} [data-trend-network="${platform}"]`)?.focus();}});
+document.addEventListener('click',event=>{const panel=event.target.closest('.performance-panel');if(!panel)return;const where=panel.id?`#${panel.id}`:'#view-overview .performance-panel',mode=event.target.closest('[data-trend-mode]');if(mode){trendModeNow=mode.dataset.trendMode==='networks'?'networks':'all';redrawTrendCharts();$(`${where} [data-trend-mode="${mode.dataset.trendMode}"]`)?.focus();return;}const key=event.target.closest('[data-trend-network]');if(key){const platform=key.dataset.trendNetwork;trendHidden.has(platform)?trendHidden.delete(platform):trendHidden.add(platform);redrawTrendCharts();$(`${where} [data-trend-network="${platform}"]`)?.focus();}});
 
 // When posts do best: average engagement by day of the week and time of day, from the posts in
 // the time frame shown (local time). Needs a reasonable number of posts to say anything.
@@ -60,3 +60,9 @@ async function repurposeNetworkPost(id){const post=networkPostById(id);if(!post)
 document.addEventListener('click',event=>{const button=event.target.closest('[data-repurpose]');if(button)repurposeNetworkPost(button.dataset.repurpose);});
 
 document.addEventListener('change',event=>{if(event.target.id!=='heat-network')return;heatNetwork=event.target.value;renderBestTimesHeatmap();$('#heat-network')?.focus();});
+// The boxes beside each channel: on All networks, checking one shows just that network; on By network they show
+// and hide lines; clearing the last one goes back to All networks.
+document.addEventListener('change',event=>{const box=event.target.closest?.('[data-rank-network]');if(!box)return;const panel=box.closest('.performance-panel'),platform=box.dataset.rankNetwork,all=[...new Set($$('[data-rank-network]',panel).map(item=>item.dataset.rankNetwork))];
+  if(trendMode()!=='networks'){trendModeNow='networks';trendHidden=new Set(all.filter(item=>item!==platform));}
+  else{box.checked?trendHidden.delete(platform):trendHidden.add(platform);if(all.every(item=>trendHidden.has(item))){trendModeNow='all';trendHidden=new Set();}}
+  const where=panel?.id?`#${panel.id}`:'#view-overview .performance-panel';redrawTrendCharts();$(`${where} [data-rank-network="${CSS.escape(platform)}"]`)?.focus();});

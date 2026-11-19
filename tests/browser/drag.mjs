@@ -87,4 +87,14 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`__answer('yes')`); await wait(200);
   const month = JSON.parse(await evaluate(`(()=>{const at=new Date(__moves().pop().scheduleDate);return JSON.stringify({day:localIsoDate(at),hour:at.getHours(),minute:at.getMinutes()});})()`));
   if (month.day !== monthTarget || month.hour !== 9 || month.minute !== 0) fail('a month move should keep the time: ' + JSON.stringify(month));
+
+  // Day view: a post moves to a new time the same way, even when it has a picture (which must not start the browser's own image drag).
+  await evaluate(`(()=>{const post=__post();post.media=['https://images.example/kit.jpg'];serverPosts=[post];calView='day';calCursor=startOfDay(__base);timelineKey=null;renderCalendar();})()`); await wait(200);
+  const dayThumb = await evaluate(`(()=>{const img=document.querySelector('.timeline-event[data-open-post="p1"] img');return img?img.getAttribute('draggable')+'/'+getComputedStyle(img).pointerEvents:'none';})()`);
+  if (dayThumb !== 'false/none' && dayThumb !== 'none') fail('calendar pictures should never be draggable on their own: ' + dayThumb);
+  await evaluate(`(()=>{const el=${chip('.timeline-event[data-open-post="p1"]')},col=document.querySelector('.timeline-col');document.querySelector('#timeline-scroll').scrollTop=8*HOUR_HEIGHT;const box=col.getBoundingClientRect();__drag(el,box.left+20,box.top+14*HOUR_HEIGHT+8);})()`); await wait(150);
+  if (!/9:00\sAM/.test(await evaluate(prompt)) || !/2:00\sPM/.test(await evaluate(prompt))) fail('a Day view drop should ask first, with both times: ' + await evaluate(prompt));
+  await evaluate(`__answer('yes')`); await wait(200);
+  const dayMove = await evaluate(`new Date(__moves().pop().scheduleDate).getHours()`);
+  if (dayMove !== 14) fail('a Day view move should change the time: ' + dayMove);
 };

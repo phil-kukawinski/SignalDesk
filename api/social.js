@@ -3,7 +3,7 @@ const { APIError } = require('@anthropic-ai/sdk');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
-  getMembership, personProfile, getWorkspaceState, assertClientInWorkspace,
+  getMembership, personProfile, workspacePeople, getWorkspaceState, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms, decryptSecret, encryptSecret,
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
@@ -616,7 +616,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   if (action === 'posts') {
     const from = Date.parse(body.from), to = Date.parse(body.to);
     if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 101 * 86400000) return send(res, 400, { error: 'Choose a date range of up to 100 days.' });
-    return send(res, 200, { posts: await listPosts(workspaceId, { from, to }), now: new Date().toISOString() });
+    const [posts, people] = await Promise.all([listPosts(workspaceId, { from, to }), workspacePeople(workspaceId)]);
+    return send(res, 200, { posts, people, now: new Date().toISOString() });
   }
 
   if (action === 'activity') {

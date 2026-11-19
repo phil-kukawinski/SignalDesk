@@ -159,6 +159,24 @@ function personProfile(user) {
   };
 }
 
+// The names teammates see on each other's posts ("Scheduled by Phil"): the name someone set under
+// Settings → Your account, else the part of their email before the @. Kept for 10 minutes per workspace.
+const peopleCache = new Map();
+async function workspacePeople(workspaceId) {
+  const cached = peopleCache.get(workspaceId);
+  if (cached && cached.at > Date.now() - 600000) return cached.people;
+  const members = await databaseRequest(`workspace_members?workspace_id=eq.${encodeURIComponent(workspaceId)}&select=user_id,email`).catch(() => []);
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const entries = await Promise.all((members || []).slice(0, 50).map(async (member) => {
+    const found = await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/users/${member.user_id}`, { headers: { apikey: service, authorization: `Bearer ${service}` } }).catch(() => null);
+    const name = found?.ok ? personProfile(await found.json().catch(() => null)).name : '';
+    return [member.user_id, name || String(member.email || '').split('@')[0].slice(0, 40) || 'A teammate'];
+  }));
+  const people = Object.fromEntries(entries);
+  peopleCache.set(workspaceId, { at: Date.now(), people });
+  return people;
+}
+
 async function getWorkspaceState(workspaceId) {
   const query = new URLSearchParams({ select: 'state', workspace_id: `eq.${workspaceId}`, limit: '1' });
   const rows = await databaseRequest(`workspace_state?${query}`);
@@ -785,7 +803,7 @@ module.exports = {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getBearerToken, getUser, databaseRequest, ayrshareRequest,
   encryptSecret: encryptProfileKey, decryptSecret: decryptProfileKey, assertPublicUrl,
-  getMembership, personProfile, getWorkspaceState, validateClientId, assertClientInWorkspace,
+  getMembership, personProfile, workspacePeople, getWorkspaceState, validateClientId, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms,
   validatePostOptions, buildPostBody, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, soonSlots, WORKSPACE_TIMEZONES, zonedParts, zonedToUtc, checkLink
