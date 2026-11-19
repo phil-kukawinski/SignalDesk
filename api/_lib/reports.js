@@ -152,7 +152,9 @@ function reportTotals(rows) {
     const values = rows.map((row) => row.metrics[key]).filter((value) => value !== null);
     return [key, values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10 : null];
   }));
-  totals.engagementRate = totals.engagements !== null && (totals.reach || totals.views) ? Math.round((totals.engagements / (totals.reach || totals.views)) * 10000) / 100 : null;
+  const rated = rows.filter((row) => row.metrics.engagements !== null && (row.metrics.reach || row.metrics.views));
+  const ratedAudience = rated.reduce((sum, row) => sum + (row.metrics.reach || row.metrics.views), 0);
+  totals.engagementRate = ratedAudience ? Math.round((rated.reduce((sum, row) => sum + row.metrics.engagements, 0) / ratedAudience) * 10000) / 100 : null;
   return totals;
 }
 
