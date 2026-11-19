@@ -2,10 +2,11 @@
 // Publishing queue: posts SignalDesk publishes itself, shown on the calendar, Command Center, and approvals.
 const POST_STATUS_LABELS={pending_approval:'In Review',scheduled:'Scheduled',publishing:'Publishing',published:'Published',partial:'Partly published',failed:'Failed',canceled:'Canceled'};
 const JOB_STATUS_LABELS={held:'Waiting for approval',manual_due:'Time to post',queued:'Scheduled',publishing:'Publishing now',published:'Published',failed:'Failed',unknown:'Check the account',canceled:'Canceled'};
-const CLIENT_STYLES={'coral-art':['event-coral','coral'],'gold-art':['event-gold','gold'],'green-art':['event-green','green-bg']};
 const WORKER_GRACE_MS=5*60000;
 let serverPostsLoading=false,serverPostsLoadedAt=0,openPostId=null;
-function clientStyle(client){const[cls,color]=CLIENT_STYLES[client?.color]||['event-purple','blue-bg'];return{cls,color};}
+const CLIENT_COLOR_COUNT=7;
+function clientColorIndex(client){if(!client)return 0;const at=clients.findIndex(item=>item.id===client.id);if(at>=0)return at%CLIENT_COLOR_COUNT;let hash=0;for(const ch of String(client.id||client.name||''))hash=(hash*31+ch.charCodeAt(0))>>>0;return hash%CLIENT_COLOR_COUNT;}
+function clientStyle(client){const index=clientColorIndex(client);return{cls:`event-c${index}`,color:`cbg-c${index}`};}
 // A post's picture for the calendar and lists: the chosen video cover, else its first image (videos without a cover get none).
 function postThumbUrl(post){const cover=post?.options?.cover?.url;if(cover)return cover;const first=(post?.media||[]).map(item=>typeof item==='string'?item:item?.url).find(url=>url&&/^https:\/\//i.test(url)&&!VIDEO_FILE.test(url));return first||'';}
 // Who did what on a post, so teammates can see who to ask: "Scheduled by Phil · Approved by Sam".

@@ -63,5 +63,9 @@ export default async ({ send, evaluate, wait, sampleData }) => {
     const single=await maybeStorySeries({client:{id:'c',name:'C'},text:'Hi',platforms:['facebook'],manual:[],platformContent:{},options:{},scheduleDate:start.toISOString(),queue:false,now:false,requiresApproval:false});
     return JSON.stringify({handled,single,pub:__pub.map(item=>({p:item.p.join('+'),m:item.m.map(u=>u.slice(-5)).join(','),gap:Math.round((Date.parse(item.at)-start.getTime())/60000)}))});})()`));
   await check(series.handled === true && series.single === false && JSON.stringify(series.pub) === JSON.stringify([{ p: 'facebook', m: '1.jpg,2.jpg,3.jpg', gap: 0 }, { p: 'instagram_story+facebook_story', m: '1.jpg', gap: 0 }, { p: 'instagram_story+facebook_story', m: '2.jpg', gap: 1 }, { p: 'instagram_story+facebook_story', m: '3.jpg', gap: 2 }]), 'a Story series: ' + JSON.stringify(series));
+  // Colors: each of the first seven clients gets its own, and none is Autopilot's gray or a status color.
+  const styles = await evaluate(`JSON.stringify(Array.from({length:7},(_,i)=>clientStyle({id:'k'+i}).cls))`);
+  const unique = await evaluate(`(()=>{const saved=[...clients];clients.splice(0,clients.length,...Array.from({length:7},(_,i)=>({id:'k'+i,name:'K'+i})));const list=clients.map(c=>clientStyle(c).cls);clients.splice(0,clients.length,...saved);return new Set(list).size;})()`);
+  await check(unique === 7, 'seven clients, seven colors: ' + styles);
 };
 function trendModeIs(want, got) { return want === got; }
