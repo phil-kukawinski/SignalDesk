@@ -55,11 +55,11 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   log.push('sent: ' + JSON.stringify(sent));
   if (!sent || sent.platforms.includes('tiktok') || sent.platforms.length !== 4 || !sent.cover?.url || sent.cover.video) log.push('[exception] the post should go to the other four networks with the cover');
 
-  // Other rules: a Story with two items, X with five images.
+  // Other rules: a Story with several files (a series), X with five images.
   await evaluate(`(()=>{document.querySelector('.account-select').innerHTML=['instagram_story','twitter'].map(p=>'<label><input type="checkbox" value="'+p+'" checked>'+p+'</label>').join('');sharedMediaPreview=null;uploadedMedia=[1,2,3,4,5].map(i=>({path:'',url:'https://media.test/'+i+'.jpg',name:i+'.jpg',type:'image/jpeg'}));updatePreview();})()`); await wait(300);
   const rules = await evaluate(`document.querySelector('#format-alert').innerText`);
   log.push('rules: ' + rules.replace(/\s+/g, ' '));
-  if (!/Story takes one/.test(rules) || !/X allows up to 4/.test(rules) ) log.push('[exception] Story and X limits should be flagged');
+  if (!/series of 5 Stories, one a minute apart/.test(rules) || !/X allows up to 4/.test(rules) ) log.push('[exception] a Story series and the X limit should be noted');
   if (await evaluate(`!document.querySelector('#cover-picker').hidden`)) log.push('[exception] the cover picker should hide without a video');
   await evaluate(`document.querySelector('#confirm-dialog')?.open&&document.querySelector('#confirm-dialog').close()`);
   // Each network's file and shape rules, using known sizes rather than real uploads.

@@ -46,5 +46,22 @@ export default async ({ send, evaluate, wait, sampleData }) => {
   // Import: file names with spaces stay whole; | separates files; links separated by spaces still split.
   const lists = await evaluate(`JSON.stringify([csvMediaList('Fall Kit 1.png|Fall Kit 2.png'),csvMediaList(' 1.png | 2.mp4 '),csvMediaList('https://a.example/1.jpg https://a.example/2.jpg'),csvMediaList('My photo.png'),csvMediaList('')])`);
   await check(lists === JSON.stringify([['Fall Kit 1.png', 'Fall Kit 2.png'], ['1.png', '2.mp4'], ['https://a.example/1.jpg', 'https://a.example/2.jpg'], ['My photo.png'], []]), 'media_url lists: ' + lists);
+  // Suggest all: fills only the empty image descriptions, keeps one already written, and carries on past a failure.
+  await evaluate(`showView('composer')`); await wait(500);
+  await evaluate(`(()=>{scheduleDraftSave=()=>{};saveWorkspaceState=async()=>{};window.__altCalls=[];const real=callSocialApi;callSocialApi=async body=>{if(body.action==='alt-text'){__altCalls.push(body.url);await new Promise(r=>setTimeout(r,30));if(body.url.endsWith('c.jpg'))throw new Error('That image couldn’t be read.');return{altText:'Described '+body.url.slice(-5)};}return real(body);};uploadedMedia=[{url:'https://x.example/a.jpg',type:'image/jpeg'},{url:'https://x.example/b.jpg',type:'image/jpeg',alt:'Mine'},{url:'https://x.example/c.jpg',type:'image/jpeg'},{url:'https://x.example/v.mp4',type:'video/mp4'}];renderAltEditor();})()`); await wait(200);
+  const label = await evaluate(`document.querySelector('[data-suggest-all-alt]')?.textContent||''`);
+  await check(/Suggest the other 2/.test(label), 'the button counts the images still to describe: ' + label);
+  await evaluate(`document.querySelector('[data-suggest-all-alt]').click()`); await wait(600);
+  const alts = await evaluate(`JSON.stringify({alts:uploadedMedia.map(m=>m.alt||''),calls:__altCalls.sort(),button:Boolean(document.querySelector('[data-suggest-all-alt]'))})`);
+  await check(alts === JSON.stringify({ alts: ['Described a.jpg', 'Mine', '', ''], calls: ['https://x.example/a.jpg', 'https://x.example/c.jpg'], button: false }), 'only empty images are described, a failure leaves its box empty: ' + alts);
+  // Story series: three files on Stories become three Stories a minute apart; Facebook gets one post with all three.
+  const series = JSON.parse(await evaluate(`(async()=>{window.__pub=[];confirmAction=async()=>true;retireScheduledDraft=async()=>null;showScheduledConfirmation=()=>{};resetComposer=()=>{};loadServerPosts=async()=>{};loadOverview=()=>{};updateQueueButton=()=>{};
+    const real=callSocialApi;callSocialApi=async body=>{if(body.action==='publish'){__pub.push({p:body.platforms,m:body.mediaUrls,at:body.scheduleDate});return{post:{id:'x'+__pub.length}};}return real(body);};
+    uploadedMedia=[1,2,3].map(n=>({url:'https://x.example/'+n+'.jpg',type:'image/jpeg'}));platformOverrides={};
+    const start=new Date(Date.now()+86400000);start.setSeconds(0,0);
+    const handled=await maybeStorySeries({client:{id:'c',name:'C'},text:'Hi',platforms:['facebook','instagram_story','facebook_story'],manual:[],platformContent:{},options:{},scheduleDate:start.toISOString(),queue:false,now:false,requiresApproval:false});
+    const single=await maybeStorySeries({client:{id:'c',name:'C'},text:'Hi',platforms:['facebook'],manual:[],platformContent:{},options:{},scheduleDate:start.toISOString(),queue:false,now:false,requiresApproval:false});
+    return JSON.stringify({handled,single,pub:__pub.map(item=>({p:item.p.join('+'),m:item.m.map(u=>u.slice(-5)).join(','),gap:Math.round((Date.parse(item.at)-start.getTime())/60000)}))});})()`));
+  await check(series.handled === true && series.single === false && JSON.stringify(series.pub) === JSON.stringify([{ p: 'facebook', m: '1.jpg,2.jpg,3.jpg', gap: 0 }, { p: 'instagram_story+facebook_story', m: '1.jpg', gap: 0 }, { p: 'instagram_story+facebook_story', m: '2.jpg', gap: 1 }, { p: 'instagram_story+facebook_story', m: '3.jpg', gap: 2 }]), 'a Story series: ' + JSON.stringify(series));
 };
 function trendModeIs(want, got) { return want === got; }

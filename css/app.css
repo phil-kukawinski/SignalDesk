@@ -1916,3 +1916,4 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 .calendar-event img{pointer-events:none;-webkit-user-drag:none;user-select:none}
 .post-people{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:var(--text-sm);color:var(--text-muted)}.post-by{color:var(--text-muted)}
 .rank-pick{cursor:pointer;border-radius:8px;padding:2px 4px;margin:0 -4px}.rank-pick:hover{background:var(--surface-2,var(--surface-3))}.rank-check{width:16px;height:16px;margin:0 2px 0 0;accent-color:var(--accent);flex:none;cursor:pointer}
+.alt-head:has(.alt-all,.alt-all-status){display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.alt-head>div{display:flex;flex-direction:column}.alt-all{flex:none}.alt-all-status{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--text-muted);flex:none}
