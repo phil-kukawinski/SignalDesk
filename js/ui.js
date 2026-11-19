@@ -37,7 +37,7 @@ function skeletonStatCards(labels){return labels.map(label=>`<div class="stat-ca
 
 // Empty states: a short message and one next step.
 function emptyStateHtml({iconName='info',title,body='',action='',actionAttr=''}){
-  return `<div class="empty-state">${icon(iconName)}<b>${escapeHtml(title)}</b>${body?`<p>${escapeHtml(body)}</p>`:''}${action?`<button type="button" class="secondary-button" ${actionAttr}>${escapeHtml(action)}</button>`:''}</div>`;
+  return `<div class="empty-state"><div class="empty-art" aria-hidden="true"><span class="empty-orb"></span><span class="ea-card c1"></span><span class="ea-card c2"></span><span class="empty-dot d1"></span><span class="empty-dot d2"></span><span class="empty-dot d3"></span><span class="empty-icon">${icon(iconName)}</span></div><b>${escapeHtml(title)}</b>${body?`<p>${escapeHtml(body)}</p>`:''}${action?`<button type="button" class="secondary-button" ${actionAttr}>${escapeHtml(action)}</button>`:''}</div>`;
 }
 
 // A small ⓘ that explains a term on hover or keyboard focus.
