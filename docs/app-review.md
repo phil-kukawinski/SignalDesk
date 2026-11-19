@@ -67,13 +67,17 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 > Teams can add a first comment that SignalDesk posts right after the post publishes (often a link or hashtags), and they can reply to comments on their posts from SignalDesk's Social Inbox. Without it, first comments and replies wouldn't work.
 > **To test:** in Publishing Studio, open **More options → Comments**, add a first comment, and choose **More → Post now**. The comment appears under the post. Then open Social Inbox → Comments on your posts, choose the post, and reply.
 
+**`pages_read_user_content`**
+> SignalDesk's Social Inbox shows the comments people leave on posts the team published to the client's Page, with the commenter's name and the time, so the team can read and reply to them in one place. Without it, comments from other people on the Page's posts can't be read. We read only comments on the connected Page's own posts and use them only to show them to that team.
+> **To test:** as another Facebook user, comment on a post SignalDesk published to the Page. In SignalDesk, open Social Inbox → Comments on your posts and choose the post; the comment appears with the person's name, and you can reply.
+
 **`read_insights`**
 > SignalDesk reads views and reach for the Page's recent posts, including posts made outside SignalDesk, so Analytics and client reports can show engagement rate (engagement ÷ reach) across everything on the account. We read this only for Pages the person connected, and use it only to show them their own results.
 > **To test:** open Analytics after a post has been live for a few hours; Reach and Engagement rate are filled in for it.
 
 **`instagram_basic`**
-> SignalDesk reads the connected Instagram professional account's username, name, and profile picture so the person can confirm they connected the right account, and reads the account's recent posts (caption, media, permalink, date, and like and comment counts), including posts made outside SignalDesk, so the calendar and Analytics show the whole account. When someone adds a collaborator or tags an account on a post, SignalDesk looks the username up (Business Discovery) and shows that account's name and picture, so the team tags the right account. It's also required for every other Instagram feature.
-> **To test:** after connecting, Social Accounts shows the Instagram account's username and picture. Posts made directly on Instagram appear on the Content Calendar. In Publishing Studio → More options → Collaborators & tags, type a business account's username to see it confirmed with its name and picture.
+> SignalDesk reads the connected Instagram professional account's username, name, and profile picture so the person can confirm they connected the right account, and reads the account's recent posts (caption, media, permalink, date, and like and comment counts), including posts made outside SignalDesk, so the calendar and Analytics show the whole account. When someone adds a collaborator or tags an account on a post, SignalDesk looks the username up (Business Discovery) and shows that account's name and picture, so the team tags the right account. Teams can also look up a public business account the same way and browse its recent posts, to repost one with credit to that account after confirming they have its permission. It's also required for every other Instagram feature.
+> **To test:** after connecting, Social Accounts shows the Instagram account's username and picture. Posts made directly on Instagram appear on the Content Calendar. In Publishing Studio → More options → Collaborators & tags, type a business account's username to see it confirmed with its name and picture. Under the image upload, select **Repost from Instagram, with credit**, enter a business account's username, and its recent posts appear.
 
 **`instagram_content_publish`**
 > SignalDesk publishes the posts a team schedules for a client's Instagram account: images, carousels, Reels, and Stories, with captions, collaborators, and photo tags. This is the app's core Instagram feature.
@@ -94,13 +98,13 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 ### Meta screencast script (one video, about 3–4 minutes)
 1. Show the SignalDesk sign-in page and sign in with the reviewer login.
 2. **Social Accounts** → choose **App Review Demo** → **Connect** on Facebook.
-3. Show Facebook's Login for Business dialog listing every permission, choose the Page (and its Instagram account), and finish.
+3. Show Facebook's Login for Business dialog listing every permission, choose the Page (and its Instagram account), and finish. If the Page belongs to a Business portfolio, show choosing it there *(business_management)*.
 4. Back in SignalDesk, show the Page and Instagram account connected, with their names and pictures *(pages_show_list, instagram_basic)*.
 5. **Publishing Studio**: choose both accounts, write a caption, attach an image, add a first comment, and add a collaborator by typing a business username so it shows as confirmed *(instagram_basic)*. Choose **More → Post now**.
 6. Open the Page and the Instagram account in new tabs and show the post and the first comment *(pages_manage_posts, instagram_content_publish, pages_manage_engagement, instagram_manage_comments)*.
-7. On Facebook or Instagram, leave a comment on the post. In SignalDesk, open **Social Inbox → Comments on your posts**, show the comment, reply, and show the reply on the network *(pages_manage_engagement, instagram_manage_comments)*.
+7. From a different Facebook account (a friend's, or a second account of yours), leave a comment on the Facebook post, and one on the Instagram post. In SignalDesk, open **Social Inbox → Comments on your posts**, show each comment with the person's name, reply, and show the reply on the network *(pages_read_user_content, pages_manage_engagement, instagram_manage_comments)*.
 8. Open **Analytics** and the post's details to show engagement and reach *(pages_read_engagement, read_insights, instagram_manage_insights)*. If the numbers are still empty, say they refresh every few hours and show a post from earlier. Then open the **Content Calendar** and show a post made directly on Facebook or Instagram, to show why posts from outside SignalDesk are read *(pages_read_engagement, instagram_basic)*.
-9. **Social Accounts → Disconnect** on the Page, to show people can remove access.
+9. *(Optional, but reviewers like it)* **Social Accounts → Disconnect** on the Page, to show people can remove access.
 
 ### Common reasons Meta rejects, and how this submission avoids them
 - *Screencast doesn't show the permission in use* → each step above names the permission it demonstrates; consider adding on-screen captions with the permission names.
