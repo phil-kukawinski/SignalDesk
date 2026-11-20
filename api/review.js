@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { send, getConfig, databaseRequest, getWorkspaceState } = require('./_lib/core');
 const { approvePost, listNotes, addNote, contentFor, addHistory } = require('./_lib/publishing');
 const { notify } = require('./_lib/notify');
+const UPLOAD_MAX_BYTES = 50 * 1024 * 1024, UPLOAD_MAX_FILES = 10, UPLOADS_PER_DAY = 40;
 
 // The client review page. A client opens a private link (no SignalDesk account) to see a
 // client's upcoming posts, approve them, or ask for changes. The link's secret is sent in
@@ -110,10 +111,61 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // Results for the client portal: the last 30 days on the client's connected accounts.
+    if (body.action === 'results') {
+      const since = new Date(Date.now() - 30 * 86400000).toISOString();
+      const rows = await databaseRequest(`network_posts?workspace_id=eq.${link.workspace_id}&client_id=eq.${encodeURIComponent(link.client_id)}&published_at=gte.${since}&select=platform,text,url,published_at,metrics&order=published_at.desc&limit=500`).catch(() => []) || [];
+      const sum = (key) => { const values = rows.map((row) => row.metrics?.[key]).filter((value) => typeof value === 'number'); return values.length ? values.reduce((a, b) => a + b, 0) : null; };
+      const networks = {};
+      rows.forEach((row) => { networks[row.platform] = (networks[row.platform] || 0) + 1; });
+      const top = rows.filter((row) => typeof row.metrics?.engagements === 'number').sort((a, b) => b.metrics.engagements - a.metrics.engagements).slice(0, 3)
+        .map((row) => ({ network: PLATFORM_LABELS[row.platform] || row.platform, text: String(row.text || '').slice(0, 200), url: /^https:\/\//.test(row.url || '') ? row.url : '', engagements: row.metrics.engagements, at: row.published_at }));
+      return send(res, 200, { days: 30, posts: rows.length, views: sum('views'), reach: sum('reach'), engagements: sum('engagements'), networks: Object.entries(networks).map(([key, count]) => ({ network: PLATFORM_LABELS[key] || key, count })), top });
+    }
+
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
     const comment = typeof body.comment === 'string' ? body.comment.trim() : '';
     if (!name) return send(res, 400, { error: 'Add your name so the team knows who reviewed this.' });
     if (comment.length > 2000) return send(res, 400, { error: 'Comments can be up to 2,000 characters.' });
+
+    // Files from the client: the server hands out one-time upload addresses in the workspace's client
+    // folder, then confirms each file arrived before the team sees it in the Content Library.
+    if (body.action === 'upload-start') {
+      const files = Array.isArray(body.files) ? body.files.slice(0, UPLOAD_MAX_FILES + 1) : [];
+      if (!files.length || files.length > UPLOAD_MAX_FILES) return send(res, 400, { error: `Send 1 to ${UPLOAD_MAX_FILES} files at a time.` });
+      const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) : '';
+      const day = new Date().toISOString().slice(0, 10), slots = [];
+      for (const file of files) {
+        const type = String(file?.type || ''), size = Number(file?.size) || 0, fileName = String(file?.name || 'file').replace(/[\u0000-\u001f/\\]/g, '').slice(0, 120) || 'file';
+        if (!/^(image|video)\/[\w.+-]+$/.test(type)) return send(res, 400, { error: `${fileName} isn’t a photo or video.` });
+        if (size < 1 || size > UPLOAD_MAX_BYTES) return send(res, 400, { error: `${fileName} is over 50 MB.` });
+        const allowed = await databaseRequest('rpc/use_daily_allowance', { method: 'POST', body: JSON.stringify({ p_name: `client-upload:${link.id}:${day}`, p_limit: UPLOADS_PER_DAY }) });
+        if (allowed === false) return send(res, 429, { error: `That’s the limit of ${UPLOADS_PER_DAY} files a day on this link. Try again tomorrow.` });
+        const extension = (fileName.match(/\.([a-z0-9]{1,8})$/i)?.[1] || type.split('/')[1] || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+        const path = `c-${link.workspace_id}/${crypto.randomUUID()}.${extension}`;
+        const signed = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/upload/sign/social-media/${path}`, { method: 'POST', headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' }, body: '{}' });
+        const data = signed.ok ? await signed.json().catch(() => null) : null;
+        if (!data?.url) throw new Error(`Storage refused an upload address (HTTP ${signed.status}).`);
+        await databaseRequest('client_uploads', { method: 'POST', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ workspace_id: link.workspace_id, client_id: link.client_id, link_id: link.id, path, name: fileName, type, size_bytes: size, sender: name, note }) });
+        slots.push({ path, uploadUrl: `${process.env.SUPABASE_URL}/storage/v1${data.url}` });
+      }
+      return send(res, 200, { uploads: slots });
+    }
+
+    if (body.action === 'upload-done') {
+      const paths = Array.isArray(body.paths) ? body.paths.filter((path) => typeof path === 'string' && path.startsWith(`c-${link.workspace_id}/`)).slice(0, UPLOAD_MAX_FILES) : [];
+      if (!paths.length) return send(res, 400, { error: 'No files to confirm.' });
+      const rows = await databaseRequest(`client_uploads?workspace_id=eq.${link.workspace_id}&link_id=eq.${link.id}&status=eq.pending&path=in.(${paths.map((path) => `"${path}"`).join(',')})&select=id,path`) || [];
+      let arrived = 0;
+      for (const row of rows) {
+        const head = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/public/social-media/${row.path}`, { method: 'HEAD' }).catch(() => null);
+        if (!head?.ok) continue;
+        await databaseRequest(`client_uploads?id=eq.${row.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'uploaded', size_bytes: Number(head.headers.get('content-length')) || 0 }) });
+        arrived += 1;
+      }
+      if (arrived) await notify({ workspaceId: link.workspace_id, audience: 'admins', type: 'client_upload', category: 'approvals', level: 'good', title: `${client.name} sent ${arrived} file${arrived === 1 ? '' : 's'}`, body: `${name} sent ${arrived === 1 ? 'a file' : 'files'} through the review link. They’re in the Content Library under From clients.`, view: 'library' });
+      return send(res, 200, { ok: true, arrived });
+    }
 
     // Approve several at once. The team gets one notification with the total, not one per post.
     if (body.action === 'approve-many') {

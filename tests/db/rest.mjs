@@ -40,6 +40,8 @@ export async function createRest(db) {
     const cast = (col) => columns[table][col] || 'text';
     const one = (col, expr) => {
       if (expr === 'not.is.null') return `t.${q(col)} is not null`;
+      const like = /^(not\.)?like\.(.*)$/s.exec(expr);
+      if (like) { values.push(like[2].replace(/\*/g, '%')); return `t.${q(col)} ${like[1] ? 'not like' : 'like'} $${values.length}::text`; }
       const m = /^(eq|neq|lt|lte|gt|gte|in|is)\.(.*)$/s.exec(expr);
       if (!m) throw new Error(`bad filter ${col}=${expr}`);
       const [, op, raw] = m;

@@ -18,6 +18,12 @@
     <label class="review-name">Your name<input id="review-name" autocomplete="name" maxlength="80" placeholder="So the team knows who reviewed"></label>
   </header>
   <main class="review-main">
+    <nav class="portal-tabs" id="portal-tabs" role="tablist" aria-label="Sections" hidden>
+      <button type="button" role="tab" class="active" aria-selected="true" data-portal="posts">Posts</button>
+      <button type="button" role="tab" aria-selected="false" data-portal="results">Results</button>
+      <button type="button" role="tab" aria-selected="false" data-portal="files">Send files</button>
+    </nav>
+    <section id="portal-posts">
     <p class="review-intro" id="review-intro">Loading upcoming posts…</p>
     <div class="review-toolbar">
       <div class="review-filter" id="review-filter" hidden>
@@ -27,6 +33,18 @@
       <button type="button" class="review-approve-all" id="review-approve-all" hidden></button>
     </div>
     <div id="review-list" class="review-list"></div>
+    <p class="portal-calendar" id="portal-calendar" hidden><a id="portal-calendar-link" href="#">Add these posts to my calendar</a> <small>Google Calendar, Outlook, or Apple Calendar. It stays up to date.</small></p>
+    </section>
+    <section id="portal-results" hidden><p class="review-intro" id="results-intro">Loading results…</p><div class="results-grid" id="results-grid"></div><div id="results-top"></div></section>
+    <section id="portal-files" hidden>
+      <p class="review-intro">Send photos or videos for upcoming posts. They go straight to the team’s content library. Up to 10 files at a time, 50 MB each.</p>
+      <form class="files-form" id="files-form">
+        <label class="files-drop" id="files-drop"><input type="file" id="files-input" accept="image/*,video/*" multiple><span id="files-label">Choose photos or videos</span></label>
+        <label class="files-note">Note for the team <small>(optional)</small><textarea id="files-note" maxlength="500" rows="2" placeholder="For example: for the fall launch posts"></textarea></label>
+        <button type="submit" class="review-send" id="files-send" disabled>Send files</button>
+        <p class="files-status" id="files-status" role="status"></p>
+      </form>
+    </section>
   </main>
   <div id="review-toast" class="review-toast" role="status" aria-live="polite"></div>
   <script src="js/media-viewer.js"></script>

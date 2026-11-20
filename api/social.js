@@ -43,6 +43,7 @@ const CLIENT_ACTIONS = new Set([
 // Actions that go through Ayrshare and need its per-client profile.
 const AYRSHARE_ACTIONS = new Set(['connect', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
 const WORKSPACE_ACTIONS = new Set([
+  'client-uploads', 'client-upload-dismiss', 'content-insights', 'compare-periods', 'suggest-reply', 'refresh-post', 'report-summary',
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'feed-hook', 'autopilot-run', 'ig-browse', 'ig-repost',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
@@ -57,10 +58,11 @@ const WORKSPACE_ACTIONS = new Set([
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
-  'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
+  'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'client-uploads', 'client-upload-dismiss', 'content-insights', 'compare-periods', 'suggest-reply', 'refresh-post', 'report-summary', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
   'stock-search', 'stock-use', 'ig-lookup', 'ig-browse', 'ig-repost', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
+const QUICK_TRENDS_PER_WEEK = 3;
 const PUSH_HOSTS = /^https:\/\/[\w.-]+(:\d+)?\//;
 // Per-workspace limits (AI help, posts a day, team size, trend scans) live in api/_lib/allowances.js.
 const REVIEW_LINK_DAYS = { min: 1, max: 90, default: 30 };
@@ -69,7 +71,8 @@ const OAUTH_SESSION_MINUTES = 15;
 const TREND_WINDOW_MS = 7 * 86400000;
 // Scans in the last 7 days, newest first, and when the next one opens up if they've all been used.
 async function trendScanState(scope, select, weekly) {
-  const recent = await databaseRequest(`trend_reports?${scope}&created_at=gte.${new Date(Date.now() - TREND_WINDOW_MS).toISOString()}&select=${select}&order=created_at.desc`) || [];
+  // Quick one-network checks have their own allowance and don't use up the weekly scan.
+  const recent = await databaseRequest(`trend_reports?${scope}&created_at=gte.${new Date(Date.now() - TREND_WINDOW_MS).toISOString()}&focus=not.like.quick:*&select=${select}&order=created_at.desc`) || [];
   const blocking = recent[weekly - 1];
   return { recent, nextScanAt: blocking ? new Date(Date.parse(blocking.created_at) + TREND_WINDOW_MS).toISOString() : null };
 }
@@ -319,6 +322,52 @@ async function trendFocus(workspaceId, body) {
 }
 
 async function handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin = '' }, res) {
+  // AI helpers: reply suggestions (Social Inbox), a fresh take on a past top post, and the "What worked"
+  // paragraph for client reports. Each uses the workspace's daily AI allowance.
+  if (action === 'suggest-reply' || action === 'refresh-post' || action === 'report-summary') {
+    const state = await getWorkspaceState(membership.workspace_id);
+    const clientId = typeof body.clientId === 'string' ? body.clientId : '';
+    const client = (state.clients || []).find((item) => item.id === clientId) || null;
+    if (clientId && !client) return send(res, 404, { error: 'That client isn’t in this workspace.' });
+    const text = (value, max) => (typeof value === 'string' ? value.slice(0, max) : '');
+    if (action === 'suggest-reply' && !text(body.comment, 1500).trim()) return send(res, 400, { error: 'There’s no comment to reply to.' });
+    if (action === 'refresh-post' && !text(body.text, 3000).trim()) return send(res, 400, { error: 'This post has no caption to work from.' });
+    if (action === 'report-summary' && !client) return send(res, 400, { error: 'Choose a client.' });
+    if (!await useAiCredit(membership.workspace_id)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
+    const { suggestReplies, refreshPost, reportSummary } = require('./_lib/assist');
+    if (action === 'suggest-reply') return send(res, 200, { replies: await suggestReplies({ client, post: text(body.post, 1200), comment: text(body.comment, 1500), author: text(body.author, 60), network: text(body.network, 30) }) });
+    if (action === 'refresh-post') return send(res, 200, await refreshPost({ client, text: text(body.text, 3000), network: text(body.network, 30), results: text(body.results, 200) }));
+    const safe = (value) => JSON.parse(JSON.stringify(value ?? null, (key, item) => (typeof item === 'string' ? item.slice(0, 300) : item)));
+    return send(res, 200, { summary: await reportSummary({ client, periodLabel: text(body.periodLabel, 60), totals: safe(body.totals), previous: safe(body.previous), top: safe(Array.isArray(body.top) ? body.top.slice(0, 5) : []), byNetwork: safe(body.byNetwork), highlights: safe(Array.isArray(body.highlights) ? body.highlights.slice(0, 6) : []) }) });
+  }
+
+  // Analytics → Posts → What works, and Analytics → Compare.
+  if (action === 'content-insights' || action === 'compare-periods') {
+    const clientId = typeof body.clientId === 'string' && body.clientId ? body.clientId : '';
+    if (clientId) await assertClientInWorkspace(membership.workspace_id, clientId);
+    const { loadInsights, periodTotals } = require('./_lib/insights');
+    if (action === 'content-insights') {
+      const days = [30, 90, 180, 365].includes(Number(body.days)) ? Number(body.days) : 90;
+      return send(res, 200, { days, ...await loadInsights(membership.workspace_id, { clientId, days }) });
+    }
+    const range = (value) => { const from = Date.parse(value?.from), to = Date.parse(value?.to); return Number.isFinite(from) && Number.isFinite(to) && to > from && to - from <= 400 * 86400000 ? { from, to } : null; };
+    const a = range(body.a), b = range(body.b);
+    if (!a || !b) return send(res, 400, { error: 'Choose two time frames of up to a year each.' });
+    const [first, second] = await Promise.all([periodTotals(membership.workspace_id, { clientId, ...a }), periodTotals(membership.workspace_id, { clientId, ...b })]);
+    return send(res, 200, { a: first, b: second });
+  }
+
+  // Files clients sent through review links, newest first (Content Library → From clients).
+  if (action === 'client-uploads') {
+    const rows = await databaseRequest(`client_uploads?workspace_id=eq.${membership.workspace_id}&status=eq.uploaded&select=id,client_id,path,name,type,size_bytes,sender,note,created_at&order=created_at.desc&limit=100`).catch(() => []) || [];
+    return send(res, 200, { uploads: rows.map((row) => ({ id: row.id, clientId: row.client_id, path: row.path, url: `${process.env.SUPABASE_URL}/storage/v1/object/public/social-media/${row.path}`, name: row.name, type: row.type, size: Number(row.size_bytes) || 0, sender: row.sender, note: row.note, at: row.created_at })) });
+  }
+  if (action === 'client-upload-dismiss') {
+    if (typeof body.id !== 'string' || !validUuid(body.id)) return send(res, 400, { error: 'Choose a file.' });
+    await databaseRequest(`client_uploads?workspace_id=eq.${membership.workspace_id}&id=eq.${body.id}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } });
+    return send(res, 200, { ok: true });
+  }
+
   const workspaceId = membership.workspace_id;
   const scope = `workspace_id=eq.${workspaceId}`;
 
@@ -592,6 +641,18 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const platforms = Array.isArray(body.platforms) ? byPopularity([...new Set(body.platforms)].filter((platform) => TREND_PLATFORMS[platform])) : [];
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const focus = await trendFocus(workspaceId, body);
+    // Quick check: one network, two searches, a few a week on top of the weekly full scan.
+    if (body.quick === true) {
+      if (platforms.length !== 1) return send(res, 400, { error: 'A quick check covers one network. Pick just one.' });
+      const week = `${new Date().getUTCFullYear()}-${Math.floor((Date.now() - Date.UTC(new Date().getUTCFullYear(), 0, 1)) / (7 * 86400000))}`;
+      const allowed = await databaseRequest('rpc/use_daily_allowance', { method: 'POST', body: JSON.stringify({ p_name: `quick-trend:${workspaceId}:${week}`, p_limit: QUICK_TRENDS_PER_WEEK }) });
+      if (allowed === false) return send(res, 429, { error: `This workspace has used its ${QUICK_TRENDS_PER_WEEK} quick checks this week.` });
+      const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
+      const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
+      const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms, searches: 2 });
+      const [report] = await databaseRequest('trend_reports', { method: 'POST', headers: { prefer: 'return=representation' }, body: JSON.stringify({ workspace_id: workspaceId, focus: `quick:${focus.key}`, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources, quick: true }, model: result.model, created_by: user.id }) });
+      return send(res, 200, { report, cached: false, quick: true });
+    }
     const focusLabel = `${focus.key}|${[...platforms].sort().join(',')}`;
     const { trendScansPerWeek } = await workspaceAllowances(workspaceId);
     const { recent, nextScanAt } = await trendScanState(scope, 'id,focus,created_at,platforms,data,model', trendScansPerWeek);
@@ -662,8 +723,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const request = cleanRequest(body, new Set([...PLATFORM_KEYS, ...Object.keys(MANUAL_PLATFORMS)].filter((network) => network !== 'other')));
     const postLimit = cleanPostLimit(body);
     if (action === 'campaign-questions') {
-      const document = readDocument(body.file);
-      if (!request.brief && !document) return send(res, 400, { error: 'Describe the campaign or upload a document.' });
+      const link = typeof body.sourceUrl === 'string' ? body.sourceUrl.trim().slice(0, 500) : '';
+      const document = readDocument(body.file) || (link ? await require('./_lib/brandsite').readArticle(link) : null);
+      if (!request.brief && !document) return send(res, 400, { error: 'Describe the campaign, add a document, or paste a link.' });
       if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
       return send(res, 200, await askQuestions({ client, brief: request.brief, document, networks: request.networks, start: typeof body.start === 'string' ? body.start.slice(0, 10) : '', days: Number.isInteger(body.days) ? body.days : null, postLimit }));
     }

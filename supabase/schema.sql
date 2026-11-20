@@ -1295,3 +1295,38 @@ drop trigger if exists broadcast_note_change on public.post_notes;
 create trigger broadcast_note_change after insert or update or delete on public.post_notes for each row execute function public.broadcast_workspace_change();
 drop trigger if exists broadcast_state_change on public.workspace_state;
 create trigger broadcast_state_change after update on public.workspace_state for each row execute function public.broadcast_workspace_change();
+
+-- November 2026, roadmap batch 5. Files clients send through their review link (stored under
+-- c-<workspace id>/ in the social-media bucket), shown in the Content Library until the team adds or
+-- dismisses them. Only the server reads and writes these rows.
+create table if not exists public.client_uploads (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  link_id uuid references public.review_links (id) on delete set null,
+  path text not null unique,
+  name text not null default '',
+  type text not null default '',
+  size_bytes bigint not null default 0,
+  sender text not null default '',
+  note text not null default '',
+  status text not null default 'pending' check (status in ('pending', 'uploaded')),
+  created_at timestamptz not null default now()
+);
+create index if not exists client_uploads_workspace_idx on public.client_uploads (workspace_id, created_at desc);
+alter table public.client_uploads enable row level security;
+
+-- Review emails a client can answer by replying (APPROVE, or CHANGES and what to change). Each email
+-- gets its own code in its reply-to address; the code names the posts that email listed.
+create table if not exists public.email_reply_codes (
+  code text primary key,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  client_id text not null,
+  link_id uuid references public.review_links (id) on delete cascade,
+  post_ids uuid[] not null default '{}',
+  sent_to text not null default '',
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.email_reply_codes enable row level security;

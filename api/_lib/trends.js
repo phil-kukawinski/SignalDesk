@@ -131,7 +131,7 @@ function cleanReport(input, sources) {
   };
 }
 
-async function generateTrendReport({ clients, focus, platforms, today, watchTerms = [] }) {
+async function generateTrendReport({ clients, focus, platforms, today, watchTerms = [], searches = TREND_SEARCHES }) {
   if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('Trend research is not configured. Add ANTHROPIC_API_KEY to the server environment.'), { status: 503 });
   const client = trackedClient();
   const clientLines = clients.map((item) => `- ${item.name}: ${item.desc || 'No description yet.'}`).join('\n') || '- No clients yet.';
@@ -140,7 +140,7 @@ async function generateTrendReport({ clients, focus, platforms, today, watchTerm
     role: 'user',
     content: `Today is ${today}. Build this week's trend report for: ${platformNames}. They're listed most widely used first, so cover them in that order and spread your searches across them.\n\nFocus: ${focus}\n\nClients:\n${clientLines}\n\n${watchTerms.length ? `Watched terms (brand names, hashtags, competitors): ${watchTerms.join(', ')}. Also search for notable public posts or coverage from the past week that mention them, and report those in mentions.` : 'There are no watched terms, so leave mentions empty.'}`
   }];
-  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: TREND_SEARCHES }, submitTool()];
+  const tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: searches }, submitTool()];
   const sources = new Map();
   for (let turn = 0; turn <= MAX_CONTINUATIONS; turn += 1) {
     const response = await client.beta.messages.create({

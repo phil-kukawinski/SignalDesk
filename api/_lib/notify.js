@@ -84,12 +84,12 @@ function renderEmail({ heading, intro, sections, legend = [], status = null, cta
   return { html, text };
 }
 
-async function sendEmail(to, subject, content) {
+async function sendEmail(to, subject, content, { replyTo = null } = {}) {
   if (!emailConfigured()) return false;
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: process.env.NOTIFY_FROM_EMAIL, to: [to], subject, html: content.html, text: content.text })
+    body: JSON.stringify({ from: process.env.NOTIFY_FROM_EMAIL, to: [to], subject, html: content.html, text: content.text, ...(replyTo ? { reply_to: replyTo } : {}) })
   });
   if (!response.ok) throw new Error(`Email provider returned HTTP ${response.status}.`);
   return true;
@@ -404,11 +404,15 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
         const label = (platform) => PLATFORM_LABELS[platform] || platform;
         const networks = Object.entries(report.rows.reduce((all, item) => { const entry = all[item.platform] ||= { posts: 0, engagements: 0, views: 0 }; entry.posts += 1; entry.engagements += item.metrics.engagements || 0; entry.views += item.metrics.views || 0; return all; }, {})).sort((a, b) => b[1].engagements - a[1].engagements);
         const bestNetwork = Math.max(1, ...networks.map(([, entry]) => entry.engagements));
+        // A short "What worked" paragraph, written from these numbers. Costs about a cent; skipped if AI is off or fails.
+        const summary = report.rows.length && process.env.ANTHROPIC_API_KEY && client.reports?.aiSummary !== false
+          ? await require('./assist').reportSummary({ client, periodLabel: monthLabel, totals, previous: prior?.totals || null, top: top.map((item) => ({ network: label(item.platform), text: String(item.text || '').slice(0, 200), engagements: item.metrics.engagements ?? null, views: item.metrics.views ?? null })), byNetwork: Object.fromEntries(networks.map(([platform, entry]) => [label(platform), entry])), highlights }).catch(() => '')
+          : '';
         const content = renderEmail({
           eyebrow: (row.state?.settings?.name || 'Your social media team').toUpperCase(),
           heading: `${client.name} social report: ${monthLabel}`,
           intro: `${report.postCount} post${report.postCount === 1 ? '' : 's'} published · ${formatNumber(totals.views)} views${vs(totals.views, prior?.totals?.views)} · ${formatNumber(totals.engagements)} engagements${vs(totals.engagements, prior?.totals?.engagements)}${totals.engagementRate === null ? '' : totals.engagementRate >= 100 ? ' · more engagements than people reached' : ` · ${totals.engagementRate}% engagement rate`}.`,
-          sections: [...(highlights.length ? [{ title: 'Highlights', items: highlights.map((line) => ({ title: line })) }] : []), ...(networks.length > 1 ? [{ title: 'By network', items: networks.map(([platform, entry]) => ({ title: `${label(platform)}: ${formatNumber(entry.engagements)} engagements`, meta: `${entry.posts} post${entry.posts === 1 ? '' : 's'} · ${formatNumber(entry.views)} views`, color: NETWORK_COLORS[platform], bar: entry.engagements / bestNetwork * 100 })) }] : []), ...(top.length ? [{ title: 'Top posts', items: top.map((item) => ({ color: NETWORK_COLORS[item.platform], title: `${label(item.platform)} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [])],
+          sections: [...(summary ? [{ title: 'What worked', items: [{ title: '', body: summary }] }] : []), ...(highlights.length ? [{ title: 'Highlights', items: highlights.map((line) => ({ title: line })) }] : []), ...(networks.length > 1 ? [{ title: 'By network', items: networks.map(([platform, entry]) => ({ title: `${label(platform)}: ${formatNumber(entry.engagements)} engagements`, meta: `${entry.posts} post${entry.posts === 1 ? '' : 's'} · ${formatNumber(entry.views)} views`, color: NETWORK_COLORS[platform], bar: entry.engagements / bestNetwork * 100 })) }] : []), ...(top.length ? [{ title: 'Top posts', items: top.map((item) => ({ color: NETWORK_COLORS[item.platform], title: `${label(item.platform)} · ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone }) : ''}`, body: item.text || '(no caption)', meta: `${formatNumber(item.metrics.views)} views · ${formatNumber(item.metrics.engagements)} engagements${item.url ? ` · ${item.url}` : ''}` })) }] : [])],
           showCta: false,
           footer: 'Metrics come from each network and may change slightly as they update.'
         });

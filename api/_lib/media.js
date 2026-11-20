@@ -42,13 +42,15 @@ function collectPaths(value, into) {
 
 async function referencedPaths(keepSince) {
   const used = new Set();
-  const [posts, drafts, sharedDrafts, states] = await Promise.all([
+  const [posts, drafts, sharedDrafts, states, uploads] = await Promise.all([
     databaseRequest(`scheduled_posts?or=(status.in.(pending_approval,scheduled,publishing),updated_at.gte.${keepSince})&select=content`),
     databaseRequest('user_drafts?select=draft,saved'),
     databaseRequest('saved_drafts?select=draft'),
-    databaseRequest('workspace_state?select=state')
+    databaseRequest('workspace_state?select=state'),
+    databaseRequest('client_uploads?select=path').catch(() => [])
   ]);
   if (!Array.isArray(posts) || !Array.isArray(drafts) || !Array.isArray(sharedDrafts) || !Array.isArray(states)) throw new Error('Could not read media references.');
+  (uploads || []).forEach((row) => used.add(row.path));
   posts.forEach((row) => collectPaths(row.content, used));
   drafts.forEach((row) => { collectPaths(row.draft, used); collectPaths(row.saved, used); });
   sharedDrafts.forEach((row) => collectPaths(row.draft, used));
@@ -88,10 +90,12 @@ async function syncMediaFiles({ now = new Date() } = {}) {
   for (const folder of await listFolder('')) {
     if (folder.id) continue;
     const userId = /^[0-9a-f-]{36}$/i.test(folder.name) ? folder.name : null;
+    // Files clients send through a review link live in c-<workspace id>/.
+    const clientFolder = /^c-([0-9a-f-]{36})$/i.exec(folder.name)?.[1] || null;
     for (const file of await listFolder(folder.name)) {
       if (!file.id || file.name.startsWith('avatar-')) continue;
       rows.push({
-        path: `${folder.name}/${file.name}`, workspace_id: workspaceOf.get(userId) || null, user_id: userId,
+        path: `${folder.name}/${file.name}`, workspace_id: clientFolder || workspaceOf.get(userId) || null, user_id: userId,
         size_bytes: Math.max(0, Number(file.metadata?.size) || 0), created_at: file.created_at || seenAt, seen_at: seenAt
       });
     }

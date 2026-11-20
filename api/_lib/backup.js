@@ -26,7 +26,7 @@ const TABLES = {
   post_history: 'id', push_subscriptions: 'endpoint', bio_pages: 'slug', short_links: 'code', link_click_days: 'code,day', network_posts: 'id',
   account_stats: 'connection_id,day', post_metric_days: 'workspace_id,platform,external_id,day', planning_notes: 'id', comment_states: 'workspace_id,job_id,comment_id',
   invite_requests: 'id', data_deletion_requests: 'code', worker_runs: 'name', beta_invites: 'code', beta_redemptions: 'code,user_id', app_settings: 'key',
-  app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id'
+  app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id', client_uploads: 'id', email_reply_codes: 'code'
 };
 const SKIPPED = ['oauth_sessions'];
 // Tables whose id the database numbers itself. A restore keeps the old numbers and moves the counter past them.

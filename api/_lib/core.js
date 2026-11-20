@@ -341,6 +341,8 @@ function validatePostOptions(options, platforms) {
   }
   if (options.utm === true) clean.utm = true;
   if (options.shortLinks === true) clean.shortLinks = true;
+  // Content pillar from the client's brand kit (Studio → More options).
+  if (typeof options.pillar === 'string' && options.pillar.trim()) clean.pillar = options.pillar.trim().replace(/\s+/g, ' ').slice(0, 30);
   // A/B caption test: two posts share a group; A is the first caption, B the second.
   if (options.abTest && typeof options.abTest === 'object' && /^[0-9a-f-]{8,40}$/i.test(String(options.abTest.group || '')) && ['A', 'B'].includes(options.abTest.version)) clean.abTest = { group: String(options.abTest.group).toLowerCase(), version: options.abTest.version };
   if (options.autoRepost !== undefined && options.autoRepost !== null) {

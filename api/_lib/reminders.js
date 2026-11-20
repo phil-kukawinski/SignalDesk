@@ -4,6 +4,7 @@
 const { databaseRequest, getWorkspaceState, decryptSecret } = require('./core');
 const { notify, sendEmail, renderEmail, appUrl, emailConfigured, reportEmails } = require('./notify');
 const { lastWorkerRun, recordWorkerRun } = require('./publishing');
+const { createReplyCode, replyConfigured } = require('./replies');
 
 const WAIT_MS = 2 * 86400000;
 
@@ -45,10 +46,11 @@ async function processReviewReminders({ encryptionKey, now = Date.now(), limit =
         intro: `${agency} is waiting on your OK for ${posts.length === 1 ? 'a post' : 'these posts'} before ${posts.length === 1 ? 'it goes' : 'they go'} out.`,
         sections: [{ title: 'Waiting for you', items: posts.slice(0, 8).map((post) => ({ title: post.title || 'Untitled post', meta: `Set for ${new Date(post.scheduled_for).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` })) }],
         ctaLabel: 'Review the posts', ctaUrl: `${appUrl()}/review.html#t=${token}`,
-        footer: 'You can approve each post or ask for changes. No account needed.'
+        footer: replyConfigured() ? 'You can approve each post or ask for changes on the page. Or reply to this email: APPROVE to approve them all, or CHANGES followed by what to change. No account needed.' : 'You can approve each post or ask for changes. No account needed.'
       });
       for (const email of emails) {
-        await sendEmail(email, `Waiting for your review: ${posts.length} post${posts.length === 1 ? '' : 's'}`, content).then(() => { emailed += 1; }).catch((error) => console.error('Review reminder email failed:', error.message));
+        const replyTo = replyConfigured() ? await createReplyCode({ workspaceId: link.workspace_id, clientId: link.client_id, linkId: link.id, postIds: posts.map((post) => post.id), sentTo: email }).catch(() => null) : null;
+        await sendEmail(email, `Waiting for your review: ${posts.length} post${posts.length === 1 ? '' : 's'}`, content, { replyTo }).then(() => { emailed += 1; }).catch((error) => console.error('Review reminder email failed:', error.message));
       }
     }
     await recordWorkerRun(runName, { posts: posts.length, emailed: emails.length && token ? emails.length : 0 });

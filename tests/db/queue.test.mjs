@@ -571,6 +571,59 @@ assert.equal((await q(`select count(*)::int n from notifications where type='pos
 r = await call({ action: 'assign-post', postId: series[0].id, userId: null });
 assert.equal((await q(`select assigned_to from scheduled_posts where id='${series[0].id}'`))[0].assigned_to, null);
 
+// --- Approving by email reply (api/_lib/replies.js) ---
+{
+  const { handleReply, createReplyCode } = require(`${ROOT}/api/_lib/replies.js`);
+  process.env.INBOUND_EMAIL_DOMAIN = 'in.example.com';
+  await db.exec(`update workspace_state set state = jsonb_set(state, '{clients}', (select jsonb_agg(case when c->>'id'='pk-works' then c || '{"reports":{"emails":"jane@client.com"}}'::jsonb else c end) from jsonb_array_elements(state->'clients') c)) where workspace_id='${WS}'`);
+  r = await call({ action: 'publish', clientId: 'pk-works', text: 'Needs a client OK', platforms: ['facebook'], scheduleDate: new Date(future + 9000000).toISOString(), requiresApproval: true });
+  const waitingId = r.payload.post.id;
+  const replyTo = await createReplyCode({ workspaceId: WS, clientId: 'pk-works', linkId: null, postIds: [waitingId], sentTo: 'jane@client.com' });
+  assert.match(replyTo, /^review\+[a-f0-9]{30}@in\.example\.com$/);
+  const event = (from, text) => ({ type: 'email.received', data: { email_id: 'e1', from, to: [replyTo], subject: 'Waiting for your review' } });
+  let out = await handleReply(event('mallory@evil.com'), { fetchEmail: async () => ({ text: 'Approve' }) });
+  assert.equal(out.ignored, 'sender not allowed');
+  assert.equal((await q(`select status from scheduled_posts where id='${waitingId}'`))[0].status, 'pending_approval', 'a stranger can’t approve');
+  out = await handleReply(event('Jane <jane@client.com>'), { fetchEmail: async () => ({ text: 'Who is this?' }) });
+  assert.equal(out.ignored, 'unclear reply');
+  out = await handleReply(event('jane@client.com'), { fetchEmail: async () => ({ text: 'Approve, thanks!\n\nOn Mon someone wrote:\n> old' }) });
+  assert.deepEqual(out, { decision: 'approved', posts: 1 });
+  const approved = (await q(`select status, client_status from scheduled_posts where id='${waitingId}'`))[0];
+  assert.equal(approved.client_status, 'approved');
+  assert.equal(approved.status, 'scheduled', 'released to publish');
+  assert.equal((await q(`select count(*)::int n from post_notes where post_id='${waitingId}' and author_kind='client' and decision='approved'`))[0].n, 1);
+  out = await handleReply(event('jane@client.com'), { fetchEmail: async () => ({ text: 'Approve' }) });
+  assert.equal(out.ignored, 'code expired or used', 'each email’s code works once');
+}
+
+// --- Files from clients: listed for the team, dismissed when handled; pillars are kept on posts ---
+await db.exec(`insert into client_uploads (workspace_id, client_id, path, name, type, size_bytes, sender, note, status) values ('${WS}','pk-works','c-${WS}/a.jpg','Fall kit.jpg','image/jpeg',1200,'Jane','For the launch','uploaded'), ('${WS}','pk-works','c-${WS}/b.jpg','half.jpg','image/jpeg',0,'Jane','','pending')`);
+r = await call({ action: 'client-uploads' });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.deepEqual(r.payload.uploads.map((u) => [u.name, u.sender, u.note]), [['Fall kit.jpg', 'Jane', 'For the launch']], 'only files that arrived');
+r = await call({ action: 'client-upload-dismiss', id: r.payload.uploads[0].id });
+assert.equal((await q(`select count(*)::int n from client_uploads where status='uploaded'`))[0].n, 0);
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Pillar post', platforms: ['facebook'], scheduleDate: new Date(future + 9600000).toISOString(), options: { pillar: '  Education   tips ' } });
+assert.equal((await q(`select options->>'pillar' p from scheduled_posts where id='${r.payload.post.id}'`))[0].p, 'Education tips');
+
+// --- Quick trend checks don't use up the weekly scan; AI helpers check their input first ---
+{
+  const { databaseRequest } = require(`${ROOT}/api/_lib/core.js`);
+  await db.exec(`insert into trend_reports (workspace_id, focus, platforms, data, model) values ('${WS}','quick:all','{instagram}','{}','x'), ('${WS}','all','{instagram}','{}','x')`);
+  const counted = await databaseRequest(`trend_reports?workspace_id=eq.${WS}&focus=not.like.quick:*&select=focus`);
+  assert.ok(counted.length >= 1 && counted.every((row) => !row.focus.startsWith('quick:')), JSON.stringify(counted));
+  r = await call({ action: 'trends-refresh', platforms: ['instagram', 'facebook'], quick: true, focus: 'all' });
+  assert.equal(r.status, 400, 'a quick check is one network');
+  r = await call({ action: 'suggest-reply', clientId: 'pk-works', comment: '   ' });
+  assert.equal(r.status, 400);
+  r = await call({ action: 'refresh-post', clientId: 'pk-works', text: '' });
+  assert.equal(r.status, 400);
+  r = await call({ action: 'report-summary', clientId: 'nope' });
+  assert.equal(r.status, 404);
+  r = await call({ action: 'campaign-questions', clientId: 'pk-works', networks: ['facebook'], sourceUrl: 'http://127.0.0.1/private' });
+  assert.equal(r.status, 400, 'links to private addresses are refused: ' + JSON.stringify(r.payload));
+}
+
 // --- Metrics refresh for recent direct posts ---
 const { refreshRecentMetrics } = require(`${ROOT}/api/_lib/publishing.js`);
 networkHandler = (c) => {
@@ -727,7 +780,7 @@ r = await reviewCall({ token: reviewToken, action: 'decide', postId: reviewPostI
 assert.equal(r.payload.released, true);
 const afterReview = (await q(`select client_status, status from scheduled_posts where id='${reviewPostId}'`))[0];
 assert.deepEqual([afterReview.client_status, afterReview.status], ['approved', 'scheduled']);
-assert.equal((await q(`select count(*)::int n from notifications where type='client_review'`))[0].n, 2);
+assert.equal((await q(`select count(*)::int n from notifications where type='client_review' and title not like '%by email%' and title not like '%wasn%'`))[0].n, 2);
 r = await reviewCall({ token: reviewToken, action: 'decide', postId: postId, decision: 'approved', name: 'Dana' });
 assert.equal(r.status, 404, 'published posts are not reviewable');
 // --- Campaigns: the board's numbers, a campaign's posts, and a client approving them all at once ---

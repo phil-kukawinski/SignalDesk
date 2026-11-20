@@ -125,6 +125,52 @@
     }
   });
 
+  // Client portal: Posts (above), Results for the last 30 days, and Send files.
+  const number = (value) => (value === null || value === undefined ? '—' : value >= 10000 ? `${Math.round(value / 100) / 10}k` : value.toLocaleString('en-US'));
+  let resultsLoaded = false;
+  function showPortal(name) {
+    document.querySelectorAll('[data-portal]').forEach((tab) => { const on = tab.dataset.portal === name; tab.classList.toggle('active', on); tab.setAttribute('aria-selected', String(on)); });
+    ['posts', 'results', 'files'].forEach((key) => { $(`#portal-${key}`).hidden = key !== name; });
+    if (name === 'results' && !resultsLoaded) loadResults();
+  }
+  async function loadResults() {
+    resultsLoaded = true;
+    try {
+      const data = await api({ action: 'results' });
+      $('#results-intro').textContent = data.posts ? `The last ${data.days} days on your connected accounts: ${data.posts} post${data.posts === 1 ? '' : 's'}.` : `No posts in the last ${data.days} days yet.`;
+      $('#results-grid').innerHTML = data.posts ? [['Posts', data.posts], ['Views', data.views], ['Reached', data.reach], ['Engagements', data.engagements]].map(([label, value]) => `<div class="results-card"><b>${number(value)}</b><small>${label}</small></div>`).join('') + `<p class="results-networks">${data.networks.map((item) => `${escapeHtml(item.network)}: ${item.count}`).join(' · ')}</p>` : '';
+      $('#results-top').innerHTML = data.top.length ? `<h2 class="results-heading">Top posts</h2>${data.top.map((post) => `<div class="results-post"><small>${escapeHtml(post.network)} · ${new Date(post.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${number(post.engagements)} engagements</small><p>${escapeHtml(post.text) || '(no caption)'}</p>${post.url ? `<a href="${escapeHtml(post.url)}" target="_blank" rel="noopener noreferrer">View the post</a>` : ''}</div>`).join('')}` : '';
+    } catch (error) { resultsLoaded = false; $('#results-intro').textContent = error.message; }
+  }
+  document.addEventListener('click', (event) => { const tab = event.target.closest('[data-portal]'); if (tab) showPortal(tab.dataset.portal); });
+  $('#files-input').addEventListener('change', (event) => {
+    const files = [...event.target.files];
+    $('#files-label').textContent = files.length ? `${files.length} file${files.length === 1 ? '' : 's'} chosen: ${files.slice(0, 3).map((file) => file.name).join(', ')}${files.length > 3 ? '…' : ''}` : 'Choose photos or videos';
+    $('#files-send').disabled = !files.length;
+  });
+  $('#files-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const files = [...$('#files-input').files], status = $('#files-status'), button = $('#files-send');
+    const name = $('#review-name').value.trim();
+    if (!name) { toast('Add your name at the top first.'); $('#review-name').focus(); return; }
+    if (!files.length) return;
+    if (files.length > 10) { status.textContent = 'Send up to 10 files at a time.'; return; }
+    button.disabled = true;
+    try {
+      status.textContent = 'Getting ready…';
+      const { uploads } = await api({ action: 'upload-start', name, note: $('#files-note').value.trim(), files: files.map((file) => ({ name: file.name, type: file.type, size: file.size })) });
+      for (const [index, slot] of uploads.entries()) {
+        status.textContent = `Sending ${index + 1} of ${uploads.length}…`;
+        const response = await fetch(slot.uploadUrl, { method: 'PUT', headers: { 'content-type': files[index].type || 'application/octet-stream', 'x-upsert': 'false' }, body: files[index] });
+        if (!response.ok) throw new Error(`${files[index].name} didn’t upload. Try again.`);
+      }
+      const done = await api({ action: 'upload-done', name, paths: uploads.map((slot) => slot.path) });
+      status.textContent = `Sent ${done.arrived} file${done.arrived === 1 ? '' : 's'}. Thank you!`;
+      $('#files-form').reset(); $('#files-label').textContent = 'Choose photos or videos';
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = !$('#files-input').files.length; }
+  });
+
   (async () => {
     if (!token) {
       $('#review-client').textContent = 'Link incomplete';
@@ -145,6 +191,10 @@
       $('#review-intro').textContent = `${data.campaign ? `${data.campaign}: ` : ''}${posts.length} upcoming post${posts.length === 1 ? '' : 's'}${data.campaign ? '' : ' in the next 60 days'}${waiting ? `, ${waiting} waiting for your approval` : ''}. This link works until ${new Date(data.expiresAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`;
       $('#review-filter').hidden = !posts.length;
       render();
+      $('#portal-tabs').hidden = Boolean(data.campaign);
+      const feed = `${location.origin}/api/review?format=ics&t=${encodeURIComponent(token)}`;
+      $('#portal-calendar-link').href = feed.replace(/^https?:/, 'webcal:');
+      $('#portal-calendar').hidden = !posts.length;
     } catch (error) {
       $('#review-client').textContent = 'Review unavailable';
       $('#review-intro').textContent = error.message;

@@ -6,7 +6,7 @@ function addDays(date,count){const day=new Date(date);day.setDate(day.getDate()+
 function weekDays(date){const start=addDays(startOfDay(date),-date.getDay());return Array.from({length:7},(_,index)=>addDays(start,index));}
 function parseClockMinutes(text){const match=/^(\d{1,2}):(\d{2})\s*([AP]M)?$/i.exec(String(text||'').trim());if(!match)return null;let hour=+match[1];if(match[3]){hour%=12;if(match[3].toUpperCase()==='PM')hour+=12;}return hour*60+ +match[2];}
 function formatHour(hour){return new Date(2000,0,1,hour%24).toLocaleTimeString('en-US',{hour:'numeric'});}
-function calendarEventFrom(post){return{date:post.date,minutes:parseClockMinutes(post.time)??540,time:post.time,title:post.title,client:post.client,channel:post.channel,platforms:post.platforms||[],status:post.status,cls:post.cls||'event-c0',autopilot:Boolean(post.autopilot),serverId:post.serverId,movable:Boolean(post.movable),campaign:post.campaign||'',at:post.at,thumb:post.thumb||'',by:post.by||'',assignedTo:post.assignedTo||null};}
+function calendarEventFrom(post){return{date:post.date,minutes:parseClockMinutes(post.time)??540,time:post.time,title:post.title,client:post.client,channel:post.channel,platforms:post.platforms||[],status:post.status,cls:post.cls||'event-c0',autopilot:Boolean(post.autopilot),serverId:post.serverId,movable:Boolean(post.movable),campaign:post.campaign||'',at:post.at,thumb:post.thumb||'',by:post.by||'',assignedTo:post.assignedTo||null,pillar:post.pillar||''};}
 // The calendar's filters, as one test, so every view (including List) filters the same way.
 function calendarMatches(){const clientId=$('#calendar-client')?.value||'',status=$('#calendar-status')?.value||'',clientName=clients.find(client=>client.id===clientId)?.name,campaign=$('#calendar-campaign')?.value||'',network=$('#calendar-network')?.value||'',source=$('#calendar-source')?.value||'',assignee=$('#calendar-assignee')?.value||'',networkLabel=network?platformLabel(network):'';return event=>(!campaign||event.campaign===campaign)&&(!clientName||event.client===clientName)&&(!network||(event.platforms||[]).includes(network)||String(event.channel||'').split(/,\s*/).includes(networkLabel))&&(!source||(source==='elsewhere'?event.external:!event.external))&&(!assignee||(assignee==='me'?event.assignedTo&&event.assignedTo===activeUser?.id:!event.assignedTo&&!event.external))&&(!status||(status==='autopilot'?event.autopilot:status==='Failed'?['Failed','Partly published'].includes(event.status):event.status===status));}
 function calendarAutopilotEvents(){return autopilotCalendarEvents().map(event=>({...event,status:event.status==='in_review'?'In Review':'Scheduled'}));}
@@ -77,19 +77,21 @@ document.addEventListener('error',event=>{const img=event.target;if(img?.tagName
 let calendarHighlight='';
 function highlightCalendarPost(id){if(!id)return;calendarHighlight=id;clearTimeout(highlightCalendarPost.timer);highlightCalendarPost.timer=setTimeout(()=>{calendarHighlight='';$$('.just-scheduled').forEach(el=>el.classList.remove('just-scheduled'));},6000);setTimeout(()=>$(`.calendar-event[data-open-post="${CSS.escape(id)}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}),400);}
 // Color the calendar by client (the default), network, or status. Saved in this browser.
-const CAL_COLOR_KEY='signaldesk-cal-color',CAL_COLOR_MODES=[['client','Client'],['network','Network'],['status','Status']];
+const CAL_COLOR_KEY='signaldesk-cal-color',CAL_COLOR_MODES=[['client','Client'],['network','Network'],['status','Status'],['pillar','Pillar']];
 let calColorBy='client';try{calColorBy=localStorage.getItem(CAL_COLOR_KEY)||'client';}catch{}
 if(!CAL_COLOR_MODES.some(([key])=>key===calColorBy))calColorBy='client';
 const CAL_NETWORKS=[['facebook','Facebook'],['instagram','Instagram'],['threads','Threads'],['linkedin','LinkedIn'],['pinterest','Pinterest'],['x','X'],['youtube','YouTube'],['tiktok','TikTok'],['bluesky','Bluesky'],['several','Several networks'],['other','Other']];
 const CAL_STATUSES=[['scheduled','Scheduled'],['review','In review'],['published','Published'],['failed','Failed'],['draft','Draft']];
 function calNetworkKey(platform){const base=String(platform||'').replace(/_(story|page)$/,'');return base==='twitter'?'x':base;}
 function calEventColorKey(event){
+  if(calColorBy==='pillar'){const index=calPillarNames().indexOf(event.pillar||'');return index<0?'pl-none':`c${index%7}`;}
   if(calColorBy==='network'){const nets=[...new Set((event.platforms||[]).map(calNetworkKey).filter(Boolean))];if(nets.length>1)return 'net-several';return `net-${CAL_NETWORKS.some(([key])=>key===nets[0])?nets[0]:'other'}`;}
   const status=String(event.status||'').toLowerCase();
   return `st-${event.draftId||status==='draft'?'draft':/fail|partly/.test(status)?'failed':/review|change|approv|pending/.test(status)?'review':status==='published'?'published':'scheduled'}`;}
 function calColorEvent(event){return calColorBy==='client'?event:{...event,cls:`event-${calEventColorKey(event)}`};}
 function calColorPickerHtml(){return `<label class="legend-colorby">Color by <select class="field inline-select" id="cal-color-by" aria-label="Color the calendar by">${CAL_COLOR_MODES.map(([key,label])=>`<option value="${key}" ${key===calColorBy?'selected':''}>${label}</option>`).join('')}</select></label>`;}
 function calColorLegendHtml(){
+  if(calColorBy==='pillar')return calPillarLegendHtml();
   if(calColorBy==='status')return CAL_STATUSES.map(([key,label])=>`<span><i class="legend-dot st-${key}-dot"></i> ${label}</span>`).join('')+'<span><i class="legend-dot best-time-dot"></i> Good times to post</span>';
   const shown=new Set(calendarEvents().map(event=>calEventColorKey(event).replace('net-','')));
   const items=CAL_NETWORKS.filter(([key])=>shown.has(key));
@@ -127,3 +129,11 @@ $('#cal-select-move')?.addEventListener('click',async()=>{const days=parseInt($(
     try{await callSocialApi({action:'reschedule-post',postId:id,scheduleDate:when.toISOString()});moved+=1;}catch(error){failed.push(`“${post.title||'Untitled post'}”: ${error.message}`);}}
   button.textContent='Move';await loadServerPosts(true);calSelected.clear();markCalSelected();updateCalSelectBar();
   const span=`${Math.abs(days)} day${Math.abs(days)===1?'':'s'} ${days>0?'later':'earlier'}`;toast(failed.length?`Moved ${moved} of ${ids.length} ${span}. Not moved: ${failed.join(' ')}`:`Moved ${moved} post${moved===1?'':'s'} ${span}.`);});
+// Pillar colors use the client palette in the order pillars first appear across the brand kits.
+function calPillarNames(){const names=[];clients.forEach(client=>(client.pillars||[]).forEach(item=>{if(!names.includes(item.name))names.push(item.name);}));return names;}
+function calPillarLegendHtml(){const events=calendarEvents().filter(event=>!event.external),names=calPillarNames(),clientId=$('#calendar-client')?.value||'',client=clients.find(item=>item.id===clientId),targets=Object.fromEntries((client?.pillars||[]).map(item=>[item.name,item.target]));
+  const counts={};events.forEach(event=>{const key=event.pillar||'';counts[key]=(counts[key]||0)+1;});const total=events.length||1;
+  const share=name=>Math.round((counts[name]||0)/total*100);
+  const items=names.map((name,index)=>`<span><i class="legend-dot c${index%7}-dot"></i> ${escapeHtml(name)} · ${counts[name]||0} (${share(name)}%${targets[name]?`, goal ${targets[name]}%`:''})</span>`);
+  if(counts['']||!names.length)items.push(`<span><i class="legend-dot pl-none-dot"></i> No pillar · ${counts['']||0}</span>`);
+  return items.join('')+(names.length&&!client?'<span class="legend-break" aria-hidden="true"></span><span class="legend-tip">Filter to one client to see its goals.</span>':'');}

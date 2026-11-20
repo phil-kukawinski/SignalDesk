@@ -145,3 +145,24 @@ function renderAbFields(){const ab=postOptions.ab||{enabled:false,text:'',days:7
 $('#ab-enabled')?.addEventListener('change',event=>{postOptions.ab={...(postOptions.ab||{text:'',days:7}),enabled:event.target.checked};renderAbFields();if(event.target.checked)$('#ab-text')?.focus();scheduleDraftSave();});
 $('#ab-text')?.addEventListener('input',event=>{postOptions.ab={...(postOptions.ab||{days:7}),enabled:true,text:event.target.value};scheduleDraftSave();});
 $('#ab-days')?.addEventListener('change',event=>{postOptions.ab={...(postOptions.ab||{text:''}),enabled:true,days:Number(event.target.value)||7};scheduleDraftSave();});
+// Content pillars: each client's brand kit lists its pillars and the share of posts each should get; a
+// post can be tagged with one (More options), and the calendar can color by pillar and show the mix.
+function parsePillars(text){const out=[];for(const line of String(text).split(/\n|;/)){const match=line.trim().match(/^(.+?)\s*[-:,]?\s*(\d{1,3})\s*%?$/),name=(match?match[1]:line).trim().replace(/\s+/g,' ').slice(0,30),target=match?Math.min(100,Number(match[2])):0;if(name&&!out.some(item=>item.name.toLowerCase()===name.toLowerCase()))out.push({name,target});}return out.slice(0,8);}
+function studioClient(){const picked=$('#client-select')?.value;return clients.find(item=>item.name===picked||item.id===picked);}
+function renderPillarPick(){const box=$('#pillar-pick'),select=$('#post-pillar');if(!box||!select)return;const pillars=studioClient()?.pillars||[];box.hidden=!pillars.length;const current=postOptions.pillar||'';select.innerHTML=`<option value="">No pillar</option>${pillars.map(item=>`<option ${item.name===current?'selected':''}>${escapeHtml(item.name)}</option>`).join('')}${current&&!pillars.some(item=>item.name===current)?`<option selected>${escapeHtml(current)}</option>`:''}`;}
+$('#post-pillar')?.addEventListener('change',event=>{postOptions.pillar=event.target.value;scheduleDraftSave();});
+$('#client-select')?.addEventListener('change',renderPillarPick);
+$('#link-to-posts')?.addEventListener('click',()=>{if(typeof closeMoreActions==='function')closeMoreActions();openLinkBuilder();});
+// Reuse a top post with a fresh take: AI rewrites the caption so it can run again, then it opens in the
+// Studio as a new draft with the same client, network, and picture (when it has one).
+async function refreshTopPost({clientId,text,network,media,results}){if(!cloudFeaturesAvailable()){toast('Sign in to use AI help.');return;}toast('Writing a fresh take…');
+  try{const fresh=await callSocialApi({action:'refresh-post',clientId:clientId||'',text,network:platformLabel(network||''),results:results||''});const client=clients.find(item=>item.id===clientId);
+    showView('composer');if(client){const select=$('#client-select');if(select){select.value=client.name;select.dispatchEvent(new Event('change',{bubbles:true}));}}
+    if(typeof selectVariant==='function')selectVariant('all');const copy=$('#post-copy');copy.value=fresh.text;copy.dispatchEvent(new Event('input',{bubbles:true}));
+    if(media&&/^https:\/\//.test(media)&&!uploadedMedia.length){uploadedMedia=[{url:media,name:'From the original post',type:/\.(mp4|mov|m4v|webm)(\?|$)/i.test(media)?'video/mp4':'image/jpeg'}];sharedMediaPreview=null;updatePreview();}
+    scheduleDraftSave();toast(fresh.note?`Fresh take ready. ${fresh.note}`:'Fresh take ready in the Studio.');}
+  catch(error){toast(error.message);}}
+document.addEventListener('click',event=>{const button=event.target.closest('[data-refresh-post]');if(!button)return;event.preventDefault();event.stopPropagation();
+  const post=serverPosts.find(item=>item.id===button.dataset.refreshPost),network=typeof networkPostById==='function'?networkPostById(button.dataset.refreshPost):null;
+  if(post){$('#post-dialog')?.close();refreshTopPost({clientId:post.clientId,text:post.text,network:post.jobs.find(job=>job.status==='published')?.platform,media:(post.media||[])[0],results:''});return;}
+  if(network){$('#network-post-dialog')?.close();refreshTopPost({clientId:network.clientId,text:network.text,network:network.platform,media:network.mediaUrl,results:network.metrics?.engagements!==undefined?`${network.metrics.engagements} engagements`:''});}});

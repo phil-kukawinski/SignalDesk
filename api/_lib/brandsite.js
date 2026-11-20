@@ -126,6 +126,19 @@ function aboutLink(html, base) {
   return '';
 }
 
+// "Turn a link into posts": a blog post, article, or video page, read once for the campaign builder.
+// Prefers the <article> or <main> part of the page; video pages give their title and description.
+async function readArticle(rawUrl) {
+  const start = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  const page = await fetchHtml(start);
+  const title = meta(page.html, ['og:title', 'twitter:title']) || decode((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(page.html)?.[1] || '').trim());
+  const description = meta(page.html, ['og:description', 'description']);
+  const focus = /<article[\s\S]*?<\/article>/i.exec(page.html)?.[0] || /<main[\s\S]*?<\/main>/i.exec(page.html)?.[0] || page.html;
+  const body = pageText(focus).slice(0, 8000);
+  if (!title && !description && body.length < 200) throw httpError(400, 'That page didn’t have enough text to work from. Try another link, or describe it instead.');
+  return { kind: 'text', text: [`Source: ${title || page.url}`, page.url, description && `Summary: ${description}`, body].filter(Boolean).join('\n\n'), trimmed: false };
+}
+
 async function readSite(rawUrl) {
   const start = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
   const home = await fetchHtml(start);
@@ -171,4 +184,4 @@ async function brandFromSite({ url, clientName }) {
   };
 }
 
-module.exports = { brandFromSite, readSite, colorCandidates, logoCandidates, socialLinks };
+module.exports = { brandFromSite, readArticle, readSite, colorCandidates, logoCandidates, socialLinks };
