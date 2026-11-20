@@ -66,7 +66,7 @@ function showTourStep(index){
     $('#tour-progress').innerHTML=tourSteps.map((_,i)=>`<i class="${i===index?'on':i<index?'done':''}"></i>`).join('')+`<span>${index+1} of ${tourSteps.length}</span>`;
     $('#tour-back').hidden=index===0;
     $('#tour-next').textContent=index===tourSteps.length-1?'Finish':'Next';
-    if(target){const rect=target.getBoundingClientRect();if(rect.top<70||rect.bottom>innerHeight-20)target.scrollIntoView({block:rect.height>innerHeight*.6?'start':'center',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});}
+    if(target){const rect=target.getBoundingClientRect();if(rect.top<70||rect.bottom>innerHeight-20)target.scrollIntoView({block:rect.height>innerHeight*.6?'start':'center',behavior:prefersLessMotion()?'auto':'smooth'});}
     $('#tour-layer').dataset.target=target?'1':'';
     setTimeout(positionTour,target?260:0);positionTour();
     $('#tour-card').focus({preventScroll:true});
@@ -117,7 +117,7 @@ function maybeWelcome(){if(!cloudFeaturesAvailable()||tourSeen()||document.body.
 
 // Confetti for moments worth marking. Skipped when the person prefers less motion.
 function celebrate(){
-  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  if(prefersLessMotion())return;
   const canvas=document.createElement('canvas');canvas.className='confetti';canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;document.body.appendChild(canvas);
   const ctx=canvas.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
   const colors=['#0b5fdc','#5b9be0','#cf5f55','#b9861d','#3f8a5c','#7457c9','#e1306c'];
@@ -136,7 +136,7 @@ function celebrateFirstPost(){try{const key=`${FIRST_POST_KEY}:${activeWorkspace
 // Numbers on the Command Center count up the first time they appear.
 let countedUp=false;
 function countUpStats(){
-  if(countedUp||matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  if(countedUp||prefersLessMotion())return;
   const numbers=$$('#view-overview .stats-grid .stat-number').filter(el=>!el.querySelector('.skeleton'));
   if(!numbers.length||!$('#view-overview').classList.contains('active'))return;
   countedUp=true;

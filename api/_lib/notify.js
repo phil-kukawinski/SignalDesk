@@ -2,7 +2,7 @@ const { databaseRequest, getWorkspaceState, WORKSPACE_TIMEZONES, zonedParts, zon
 const { sendPush } = require('./push');
 
 const CATEGORIES = ['approvals', 'autopilot', 'reports', 'team', 'publishing', 'planning'];
-const DEFAULT_PREFERENCES = { email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, planning_leads: [30], planning_scope: 'major', last_digest_at: null };
+const DEFAULT_PREFERENCES = { week_ahead: true, email_frequency: 'monthly', email_categories: CATEGORIES, weekly_day: 1, monthly_day: 1, yearly_month: 1, custom_days: 14, planning_leads: [30], planning_scope: 'major', last_digest_at: null };
 const DIGEST_HOUR = 8;
 // Alerts that can't wait for a wrap-up: they're emailed right away (unless email is off or the
 // category is unticked) and left out of digests so they don't arrive twice.
@@ -297,6 +297,71 @@ async function processEmailDigests({ limit = 40, now = new Date() } = {}) {
   return { sent, configured: true };
 }
 
+// The week ahead, on each person's weekly day at 8 AM (Mondays unless they picked another day): what goes
+// out in the next 7 days, what's waiting on them (approvals for admins, posts assigned to them), and what
+// failed in the last 7 days. Separate from wrap-ups, which look back. Turned off per person in Settings →
+// Notifications. Skipped entirely until the database has the week_ahead column, so it can't resend.
+async function processWeekAhead({ limit = 40, now = new Date() } = {}) {
+  if (!emailConfigured()) return { sent: 0, configured: false };
+  const ready = await databaseRequest('notification_preferences?select=week_ahead,last_week_ahead_at&limit=1').then(() => true).catch(() => false);
+  if (!ready) return { sent: 0, ready: false };
+  const members = await databaseRequest('workspace_members?select=user_id,email,role,workspace_id') || [];
+  const preferences = await preferencesFor(members.map((member) => member.user_id));
+  const workspaces = new Map();
+  let sent = 0;
+  for (const member of members) {
+    if (sent >= limit) break;
+    const prefs = withDefaults(preferences.get(member.user_id));
+    if (prefs.week_ahead === false || prefs.email_frequency === 'off' || !member.email) continue;
+    if (!workspaces.has(member.workspace_id)) {
+      const state = await getWorkspaceState(member.workspace_id);
+      workspaces.set(member.workspace_id, { state, timeZone: WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York', posts: null });
+    }
+    const space = workspaces.get(member.workspace_id), { timeZone } = space;
+    const parts = zonedParts(now, timeZone), weekday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+    if (weekday !== clampInt(prefs.weekly_day, 0, 6, 1) || parts.hour < DIGEST_HOUR) continue;
+    if (prefs.last_week_ahead_at && localDateKey(new Date(prefs.last_week_ahead_at), timeZone) === localDateKey(now, timeZone)) continue;
+    if (!space.posts) {
+      const from = new Date(now.getTime() - 7 * 86400000).toISOString(), to = new Date(now.getTime() + 14 * 86400000).toISOString();
+      space.posts = await databaseRequest(`scheduled_posts?workspace_id=eq.${member.workspace_id}&parent_id=is.null&scheduled_for=gte.${from}&scheduled_for=lt.${to}&status=neq.canceled&select=id,title,client_id,status,scheduled_for,assigned_to,publish_jobs(platform,status)&order=scheduled_for.asc&limit=1000`).catch(() => []) || [];
+      const repeats = await databaseRequest(`scheduled_posts?workspace_id=eq.${member.workspace_id}&parent_id=not.is.null&scheduled_for=gte.${now.toISOString()}&scheduled_for=lt.${new Date(now.getTime() + 7 * 86400000).toISOString()}&status=neq.canceled&select=id,title,client_id,status,scheduled_for,assigned_to,publish_jobs(platform,status)&limit=500`).catch(() => []) || [];
+      space.posts = [...space.posts, ...repeats].sort((a, b) => Date.parse(a.scheduled_for) - Date.parse(b.scheduled_for));
+    }
+    const sections = weekAheadSections({ posts: space.posts, clients: space.state.clients || [], member, now, timeZone });
+    try {
+      if (sections.length) {
+        await sendEmail(member.email, 'Your week ahead in SignalDesk', renderEmail({ heading: 'Your week ahead', intro: 'What goes out this week, what’s waiting on you, and anything that needs a look.', sections, footer: 'Turn the week-ahead email off in SignalDesk under Settings → Notifications.' }));
+        sent += 1;
+      }
+      await databaseRequest('notification_preferences?on_conflict=user_id', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ user_id: member.user_id, workspace_id: member.workspace_id, last_week_ahead_at: now.toISOString() }) });
+    } catch (error) {
+      console.error('Week-ahead email failed:', error.message);
+    }
+  }
+  return { sent, configured: true };
+}
+
+function weekAheadSections({ posts, clients, member, now, timeZone }) {
+  const nameOf = (id) => clients.find((client) => client.id === id)?.name || 'Client';
+  const colorOf = (id) => clients.find((client) => client.id === id)?.color;
+  const when = (iso) => new Date(iso).toLocaleString('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const nets = (post) => [...new Set((post.publish_jobs || []).filter((job) => job.status !== 'canceled').map((job) => networkLabel(job.platform)))].join(', ');
+  const item = (post) => ({ color: colorOf(post.client_id), title: `${nameOf(post.client_id)} · ${post.title || 'Untitled post'}`, body: nets(post), meta: when(post.scheduled_for) });
+  const t = now.getTime(), week = t + 7 * 86400000;
+  const upcoming = posts.filter((post) => ['scheduled', 'pending_approval'].includes(post.status) && Date.parse(post.scheduled_for) >= t && Date.parse(post.scheduled_for) < week);
+  const waiting = posts.filter((post) => Date.parse(post.scheduled_for) >= t && ((member.role === 'admin' && post.status === 'pending_approval') || (post.assigned_to === member.user_id && ['scheduled', 'pending_approval'].includes(post.status))));
+  const failed = posts.filter((post) => ['failed', 'partial'].includes(post.status) && Date.parse(post.scheduled_for) < t);
+  const sections = [];
+  if (waiting.length) sections.push({ title: `Waiting on you (${waiting.length})`, items: waiting.slice(0, 10).map((post) => ({ ...item(post), badge: post.status === 'pending_approval' ? 'Needs approval' : 'Assigned to you', color: STATUS_LEVELS.attention.color })) });
+  if (upcoming.length) {
+    const byClient = new Map();
+    upcoming.forEach((post) => byClient.set(post.client_id, (byClient.get(post.client_id) || 0) + 1));
+    sections.push({ title: `Going out this week (${upcoming.length})`, items: [...upcoming.slice(0, 12).map(item), ...(upcoming.length > 12 ? [{ title: `And ${upcoming.length - 12} more`, body: [...byClient].map(([id, count]) => `${nameOf(id)}: ${count}`).join(' · ') }] : [])] });
+  }
+  if (failed.length) sections.push({ title: `Needs a look (${failed.length})`, items: failed.slice(0, 10).map((post) => ({ ...item(post), badge: post.status === 'partial' ? 'Partly published' : 'Failed', color: STATUS_LEVELS.warning.color })) });
+  return sections;
+}
+
 const pad = (value) => String(value).padStart(2, '0');
 
 function reportEmails(value) {
@@ -359,4 +424,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { NETWORK_COLORS, STATUS_LEVELS, LEVEL_ORDER, levelFor, levelLegend, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, renderEmail, processClientReports, reportEmails };
+module.exports = { NETWORK_COLORS, STATUS_LEVELS, LEVEL_ORDER, levelFor, levelLegend, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, processWeekAhead, weekAheadSections, renderEmail, processClientReports, reportEmails };

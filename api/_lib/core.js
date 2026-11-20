@@ -17,8 +17,22 @@ const VISIBILITY_OPTIONS = {
 const WORKSPACE_TIMEZONES = {
   'Eastern Time (US & Canada)': 'America/New_York',
   'Central Time (US & Canada)': 'America/Chicago',
-  'Pacific Time (US & Canada)': 'America/Los_Angeles'
+  'Mountain Time (US & Canada)': 'America/Denver',
+  'Arizona': 'America/Phoenix',
+  'Pacific Time (US & Canada)': 'America/Los_Angeles',
+  'Alaska': 'America/Anchorage',
+  'Hawaii': 'Pacific/Honolulu',
+  'Atlantic Time (Canada)': 'America/Halifax',
+  'London': 'Europe/London',
+  'Central Europe (Paris, Berlin)': 'Europe/Paris',
+  'Sydney': 'Australia/Sydney'
 };
+// A client's own time zone (Brand kit → Goals), else the workspace's. Repeats keep the same local time in it,
+// and the queue fills its slots in it.
+function clientTimeZone(state, clientId) {
+  const client = (state?.clients || []).find((item) => item.id === clientId);
+  return WORKSPACE_TIMEZONES[client?.timezone] || WORKSPACE_TIMEZONES[state?.settings?.timezone] || 'America/New_York';
+}
 const AYRSHARE_BASE = 'https://api.ayrshare.com/api';
 const COMMENT_RETRY_MINUTES = 30;
 const COMMENT_MAX_ATTEMPTS = 12;
@@ -80,7 +94,9 @@ async function databaseRequest(path, options = {}) {
     const detail = await response.json().catch(() => ({}));
     console.error('Database request failed:', response.status, detail.message || detail.code || '');
     if (detail.message === 'double_booked') throw httpError(409, 'Another post just took that time on the same network. Choose another time.');
-    throw httpError(response.status === 409 ? 409 : 500, 'Could not access workspace storage.');
+    const error = httpError(response.status === 409 ? 409 : 500, 'Could not access workspace storage.');
+    error.dbCode = detail.code || null; error.dbMessage = detail.message || null;
+    throw error;
   }
   return response.status === 204 || response.headers.get('content-length') === '0' ? null : response.json().catch(() => null);
 }
@@ -325,6 +341,8 @@ function validatePostOptions(options, platforms) {
   }
   if (options.utm === true) clean.utm = true;
   if (options.shortLinks === true) clean.shortLinks = true;
+  // A/B caption test: two posts share a group; A is the first caption, B the second.
+  if (options.abTest && typeof options.abTest === 'object' && /^[0-9a-f-]{8,40}$/i.test(String(options.abTest.group || '')) && ['A', 'B'].includes(options.abTest.version)) clean.abTest = { group: String(options.abTest.group).toLowerCase(), version: options.abTest.version };
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
     const repeat = Number(options.autoRepost.repeat);
     if (options.autoRepost.every === 'month') {
@@ -799,6 +817,7 @@ async function runAutopilot({ workspaceId, encryptionKey, staleMinutes = 0, limi
 }
 
 module.exports = {
+  clientTimeZone,
   fetchLinkPreview,
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getBearerToken, getUser, databaseRequest, ayrshareRequest,

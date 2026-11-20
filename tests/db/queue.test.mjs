@@ -505,15 +505,20 @@ r = await call({ action: 'overview' });
 assert.equal((await q(`select count(*)::int n from notifications where type='worker_stalled'`))[0].n, 1, 'alerts at most every 12 hours');
 await db.exec(`update publish_jobs set status='canceled' where post_id='${stuckId}'`);
 
-// --- Editing a scheduled post replaces it ---
+// --- Editing a scheduled post keeps its ID (adopt_post_edit) ---
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Original copy', platforms: ['facebook', 'instagram'], mediaUrls: ['https://cdn.example.com/kit.jpg'], scheduleDate: new Date(future).toISOString(), options: { followUpComments: [{ comment: 'Later', delayMinutes: 60 }] } });
 const editId = r.payload.post.id;
 r = await call({ action: 'update-post', postId: editId, clientId: 'pk-works', text: 'Edited copy', platforms: ['facebook'], scheduleDate: new Date(future + 600000).toISOString() });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 assert.equal(r.payload.replaced, editId);
 const editedId = r.payload.post.id;
-assert.equal((await q(`select count(*)::int n from scheduled_posts where id='${editId}'`))[0].n, 0, 'original removed');
-assert.equal((await q(`select count(*)::int n from scheduled_comments c join publish_jobs j on j.id=c.job_id where j.post_id='${editId}'`))[0].n, 0);
+assert.equal(editedId, editId, 'the edited post keeps its ID');
+assert.equal((await q(`select count(*)::int n from scheduled_posts where workspace_id='${WS}' and content->>'text' in ('Original copy','Edited copy')`))[0].n, 1, 'no leftover copy');
+assert.equal((await q(`select count(*)::int n from scheduled_comments c join publish_jobs j on j.id=c.job_id where j.post_id='${editId}'`))[0].n, 0, 'the old follow-up comment went with the old jobs');
+assert.deepEqual((await q(`select action from post_history where post_id='${editId}' order by id`)).map((h) => h.action), ['created', 'edited'], 'history stays on the post');
+const editedRow = (await q(`select options, scheduled_for from scheduled_posts where id='${editId}'`))[0];
+assert.ok(!('replaces' in editedRow.options), 'the edit marker is removed');
+assert.equal(new Date(editedRow.scheduled_for).getTime(), future + 600000, 'the new time is saved');
 const edited = (await q(`select content, status from scheduled_posts where id='${editedId}'`))[0];
 assert.equal(edited.content.text, 'Edited copy');
 assert.deepEqual((await q(`select platform from publish_jobs where post_id='${editedId}'`)).map((j) => j.platform), ['facebook']);
@@ -533,6 +538,38 @@ r = await call({ action: 'update-post', postId: r.payload.post.id, clientId: 'pk
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 assert.equal(r.payload.status, 'pending_approval');
 assert.equal((await q(`select created_by from scheduled_posts where id='${r.payload.post.id}'`))[0].created_by, USER);
+
+// --- Repeating posts: cancel just one, or this and the later ones; edits keep the series together ---
+r = await call({ action: 'publish', clientId: 'pk-works', text: 'Weekly tip', platforms: ['facebook'], scheduleDate: new Date(future + 7200000).toISOString(), options: { autoRepost: { repeat: 3, days: 7 } } });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+const rootId = r.payload.post.id;
+const repeats = (await q(`select id from scheduled_posts where parent_id='${rootId}' order by scheduled_for`)).map((row) => row.id);
+assert.equal(repeats.length, 3);
+r = await call({ action: 'update-post', postId: rootId, clientId: 'pk-works', text: 'Weekly tip v2', platforms: ['facebook'], scheduleDate: new Date(future + 7200000).toISOString(), options: { autoRepost: { repeat: 3, days: 7 } } });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.equal(r.payload.post.id, rootId, 'the series keeps its first post');
+const series = await q(`select id, content->>'text' as text, options->>'repostOf' as of from scheduled_posts where parent_id='${rootId}' and status <> 'canceled' order by scheduled_for`);
+assert.equal(series.length, 3, 'the repeats follow the edit');
+assert.ok(series.every((row) => row.text === 'Weekly tip v2' && row.of === rootId), JSON.stringify(series));
+r = await call({ action: 'cancel-post', postId: series[1].id, scope: 'following' });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.deepEqual((await q(`select status from scheduled_posts where id in ('${rootId}','${series[0].id}','${series[1].id}','${series[2].id}') order by scheduled_for`)).map((row) => row.status), ['scheduled', 'scheduled', 'canceled', 'canceled'], 'this and later canceled');
+r = await call({ action: 'cancel-post', postId: rootId, scope: 'one' });
+assert.deepEqual((await q(`select status from scheduled_posts where id in ('${rootId}','${series[0].id}') order by scheduled_for`)).map((row) => row.status), ['canceled', 'scheduled'], 'just the first one canceled');
+
+// --- Assigning a post: members only, the person is told, and it shows in the post list ---
+r = await call({ action: 'assign-post', postId: series[0].id, userId: USER });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.equal((await q(`select assigned_to from scheduled_posts where id='${series[0].id}'`))[0].assigned_to, USER);
+assert.equal((await q(`select count(*)::int n from notifications where type='post_assigned' and user_id='${USER}'`))[0].n, 1);
+r = await call({ action: 'assign-post', postId: series[0].id, userId: 'cccccccc-0000-0000-0000-000000000003' });
+assert.equal(r.status, 400, 'not a member');
+r = await call({ action: 'add-note', postId: series[0].id, body: 'Over to you', mentions: [USER, ADMIN] });
+assert.equal(r.status, 200, JSON.stringify(r.payload));
+assert.equal((await q(`select count(*)::int n from notifications where type='post_mention' and user_id='${USER}'`))[0].n, 1, 'mentioned teammate told');
+assert.equal((await q(`select count(*)::int n from notifications where type='post_mention' and user_id='${ADMIN}'`))[0].n, 0, 'never yourself');
+r = await call({ action: 'assign-post', postId: series[0].id, userId: null });
+assert.equal((await q(`select assigned_to from scheduled_posts where id='${series[0].id}'`))[0].assigned_to, null);
 
 // --- Metrics refresh for recent direct posts ---
 const { refreshRecentMetrics } = require(`${ROOT}/api/_lib/publishing.js`);

@@ -3,7 +3,7 @@ const { APIError } = require('@anthropic-ai/sdk');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
-  getMembership, personProfile, workspacePeople, getWorkspaceState, assertClientInWorkspace,
+  getMembership, personProfile, workspacePeople, clientTimeZone, getWorkspaceState, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms, decryptSecret, encryptSecret,
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
@@ -11,7 +11,7 @@ const {
 const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lookupInstagramAccount, instagramAccountPosts } = require('./_lib/platforms');
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
-  cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, replacePost,
+  cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, adoptEdit,
   nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
   allRows, openComments, setCommentState, recordWorkerRun
 } = require('./_lib/publishing');
@@ -47,7 +47,7 @@ const WORKSPACE_ACTIONS = new Set([
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'feed-hook', 'autopilot-run', 'ig-browse', 'ig-repost',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
   'posts', 'approve', 'reject', 'cancel-post', 'reschedule-post', 'set-cover', 'retry-job', 'oauth-session', 'oauth-finish', 'overview',
-  'post-notes', 'add-note', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
+  'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export', 'record-restore',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
   'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
@@ -57,7 +57,7 @@ const WORKSPACE_ACTIONS = new Set([
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
-  'post-notes', 'add-note', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
+  'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
   'stock-search', 'stock-use', 'ig-lookup', 'ig-browse', 'ig-repost', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 const ACCOUNT_ACTIONS = new Set(['account-plan', 'delete-account', 'send-feedback']);
@@ -838,17 +838,50 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const text = typeof body.body === 'string' ? body.body.trim() : '';
     if (!text || text.length > 2000) return send(res, 400, { error: 'Write a note up to 2,000 characters.' });
     const note = await addNote({ workspaceId, postId: post.id, authorId: user.id, authorName: membership.name, kind: 'team', body: text });
-    if (post.created_by && post.created_by !== user.id) {
+    const asked = Array.isArray(body.mentions) ? [...new Set(body.mentions.filter((id) => typeof id === 'string' && validUuid(id) && id !== user.id))].slice(0, 20) : [];
+    const mentioned = asked.length ? ((await databaseRequest(`workspace_members?workspace_id=eq.${workspaceId}&user_id=in.(${asked.join(',')})&select=user_id`)) || []).map((row) => row.user_id) : [];
+    if (mentioned.length) {
+      await notify({ workspaceId, audience: 'users', userIds: mentioned, type: 'post_mention', category: 'team', title: `${membership.name || 'A teammate'} mentioned you on “${post.title || 'a post'}”`, body: text.slice(0, 280), view: 'calendar', data: { postId: post.id } });
+    }
+    if (post.created_by && post.created_by !== user.id && !mentioned.includes(post.created_by)) {
       await notify({ workspaceId, audience: 'users', userIds: [post.created_by], type: 'post_note', category: 'approvals', title: `New note on “${post.title || 'your post'}”`, body: `${membership.email || 'A teammate'}: ${text.slice(0, 160)}`, view: 'calendar', data: { postId: post.id } });
     }
     return send(res, 200, { note });
+  }
+
+  // Send to my phone: a notification on your own devices that opens this post, to copy its caption and save
+  // its files where you'll post them by hand.
+  if (action === 'send-to-phone') {
+    const post = await getPost(workspaceId, body.postId);
+    const { pushConfigured, sendPush } = require('./_lib/push');
+    if (!pushConfigured()) return send(res, 400, { error: 'Phone notifications aren’t set up for SignalDesk yet.' });
+    const devices = await databaseRequest(`push_subscriptions?user_id=eq.${user.id}&select=endpoint&limit=1`) || [];
+    if (!devices.length) return send(res, 400, { error: 'Turn on notifications on your phone first: open SignalDesk there, then Settings → Notifications → Notifications on this device.' });
+    const networks = post.publish_jobs.filter((job) => job.provider === 'manual' && job.status !== 'canceled').map((job) => MANUAL_PLATFORMS[job.platform] || PLATFORM_LABELS[job.platform] || job.platform);
+    const sent = await sendPush([user.id], { title: `Ready to post: ${post.title || 'your post'}`, body: `${networks.length ? `For ${networks.join(', ')}. ` : ''}Tap to copy the caption and save the files.`, view: 'calendar', post: post.id });
+    if (!sent) return send(res, 400, { error: 'Your phone didn’t accept the notification. Turn notifications off and on again there.' });
+    return send(res, 200, { sent });
+  }
+
+  if (action === 'assign-post') {
+    const post = await getPost(workspaceId, body.postId);
+    const to = body.userId === null || body.userId === '' ? null : body.userId;
+    if (to !== null && (typeof to !== 'string' || !validUuid(to))) return send(res, 400, { error: 'Choose a teammate.' });
+    const people = await workspacePeople(workspaceId);
+    if (to && !people[to] && !((await databaseRequest(`workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${to}&select=user_id`)) || []).length) return send(res, 400, { error: 'That person isn’t in this workspace.' });
+    await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&id=eq.${post.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ assigned_to: to, updated_at: new Date().toISOString() }) });
+    await addHistory(workspaceId, post.id, 'assigned', { actorName: membership.name, detail: { to: to ? people[to] : null } });
+    if (to && to !== user.id) {
+      await notify({ workspaceId, audience: 'users', userIds: [to], type: 'post_assigned', category: 'team', title: `${membership.name || 'A teammate'} assigned you “${post.title || 'a post'}”`, body: `Scheduled for ${new Date(post.scheduled_for).toLocaleString('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`, view: 'calendar', data: { postId: post.id } });
+    }
+    return send(res, 200, { assignedTo: to });
   }
 
   if (action === 'next-slot') {
     await assertClientInWorkspace(workspaceId, body.clientId);
     const state = await getWorkspaceState(workspaceId);
     const client = (state.clients || []).find((item) => item.id === body.clientId);
-    return send(res, 200, { slot: new Date(await nextQueueSlot(workspaceId, client, WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York')).toISOString() });
+    return send(res, 200, { slot: new Date(await nextQueueSlot(workspaceId, client, clientTimeZone(state, client?.id))).toISOString() });
   }
 
   if (action === 'review-links') {
@@ -953,7 +986,8 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   if (action === 'cancel-post') {
-    const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin' });
+    const scope = ['one', 'following'].includes(body.scope) ? body.scope : null;
+    const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin', scope });
     await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.name, detail: { keptPublished: result.keptPublished } });
     return send(res, 200, result);
   }
@@ -1087,7 +1121,7 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
     if (recent.length >= postsPerDay) return send(res, 429, { error: `This workspace has created ${postsPerDay} posts in the last 24 hours, the limit. Try again later.` });
   }
   const state = await getWorkspaceState(membership.workspace_id);
-  const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
+  const timeZone = clientTimeZone(state, clientId);
   if (body.queue === true) {
     const client = (state.clients || []).find((item) => item.id === clientId);
     input.scheduledFor = await nextQueueSlot(membership.workspace_id, client, timeZone);
@@ -1103,7 +1137,7 @@ async function publish(body, { user, membership, clientId, encryptionKey }, res)
   // Post now has no time to clash over, and the queue already picks a free slot.
   if (body.scheduleDate && body.queue !== true) await assertTimeFree(membership.workspace_id, clientId, { platforms: [...input.platforms, ...input.manual], times: occurrenceTimes(input.scheduledFor, input.options.autoRepost, timeZone), original });
   const post = await createScheduledPost({ workspaceId: membership.workspace_id, clientId, userId: original?.created_by || user.id, ...input, held, encryptionKey, timeZone, actorName, replaces: original?.id || null });
-  if (original) await replacePost(membership.workspace_id, original, post.id, actorName);
+  if (original) post.id = await adoptEdit(membership.workspace_id, original, post.id, actorName);
   if (held) {
     await notify({
       workspaceId: membership.workspace_id, audience: 'admins', excludeUserId: user.id, type: 'approval_requested', category: 'approvals',

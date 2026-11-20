@@ -661,13 +661,13 @@ async function postJobComment(job, text, encryptionKey) {
 
 // --- Post management ---
 
-const JOB_FIELDS = 'id,platform,provider,status,attempts,run_at,external_url,last_error,error_kind,published_at,stage';
+const JOB_FIELDS = 'id,platform,provider,status,attempts,run_at,external_url,last_error,error_kind,published_at,stage,metrics';
 
 function publicPost(row, clicks = null) {
   return {
     id: row.id, clientId: row.client_id, title: row.title, status: row.status, source: row.source,
     scheduledFor: row.scheduled_for, createdBy: row.created_by, parentId: row.parent_id,
-    approvedAt: row.approved_at, approvedBy: row.approved_by || null, decisionNote: row.decision_note, createdAt: row.created_at,
+    approvedAt: row.approved_at, approvedBy: row.approved_by || null, assignedTo: row.assigned_to || null, decisionNote: row.decision_note, createdAt: row.created_at,
     campaign: row.campaign || '', evergreen: Boolean(row.evergreen), clientStatus: row.client_status || null,
     text: row.content?.text || '', media: row.content?.media || [], platformContent: row.content?.platformContent || {}, mediaAlt: row.content?.mediaAlt || {},
     options: row.options || {},
@@ -675,7 +675,7 @@ function publicPost(row, clicks = null) {
       id: job.id, platform: job.platform, provider: job.provider, status: job.status, attempts: job.attempts,
       runAt: job.run_at, url: job.external_url, error: job.last_error, errorKind: job.error_kind, publishedAt: job.published_at,
       copyText: job.provider === 'manual' && typeof job.stage?.text === 'string' ? job.stage.text : undefined,
-      clicks: clicks?.[job.id]
+      clicks: clicks?.[job.id], metrics: job.metrics || null
     }))
   };
 }
@@ -715,6 +715,13 @@ async function familyIds(workspaceId, post) {
   return [post.id, ...children.map((row) => row.id)];
 }
 
+// A repeating post and the repeats that come at or after it, for "cancel this and later ones".
+async function seriesFrom(workspaceId, post) {
+  const root = post.parent_id || post.id;
+  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&or=(id.eq.${root},parent_id.eq.${root})&scheduled_for=gte.${encodeURIComponent(post.scheduled_for)}&select=id`) || [];
+  return [post.id, ...rows.map((row) => row.id).filter((id) => id !== post.id)];
+}
+
 async function patchJobs(filter, patch) {
   return databaseRequest(`publish_jobs?${filter}`, { method: 'PATCH', headers: { prefer: 'return=representation' }, body: JSON.stringify({ ...patch, updated_at: nowIso() }) });
 }
@@ -746,17 +753,17 @@ async function rejectPost(workspaceId, postId, note) {
   return post;
 }
 
-async function cancelPost(workspaceId, postId, { userId, admin }) {
+async function cancelPost(workspaceId, postId, { userId, admin, scope = null }) {
   const post = await getPost(workspaceId, postId);
   if (!admin && !(post.created_by === userId && post.status === 'pending_approval')) throw httpError(403, 'Only admins can cancel scheduled posts.');
   if (post.publish_jobs.some((job) => job.status === 'publishing')) throw httpError(409, 'This post is publishing right now. Try again in a minute.');
-  const ids = await familyIds(workspaceId, post);
+  const ids = scope === 'one' ? [post.id] : scope === 'following' ? await seriesFrom(workspaceId, post) : await familyIds(workspaceId, post);
   const published = post.publish_jobs.some((job) => job.status === 'published');
   if (!published) await databaseRequest(`scheduled_posts?id=eq.${post.id}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'canceled', updated_at: nowIso() }) });
   const others = ids.filter((id) => id !== post.id);
   if (others.length) await databaseRequest(`scheduled_posts?id=in.(${others.join(',')})&status=in.(pending_approval,scheduled)`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ status: 'canceled', updated_at: nowIso() }) });
   await patchJobs(`post_id=in.(${ids.join(',')})&status=in.(held,queued)`, { status: 'canceled' });
-  return { canceled: true, keptPublished: published };
+  return { canceled: true, keptPublished: published, ids };
 }
 
 // The Prevent double-booking setting (on unless turned off): one post per client, network, and minute.
@@ -1391,6 +1398,32 @@ function assertEditable(post, { userId, admin }) {
 
 // Swaps an edited post in for the original. The new post is created first; the original is
 // removed only if none of its networks started publishing in the meantime.
+// Keeps the original post's ID when it's edited (adopt_post_edit in schema.sql). Until the database has
+// that function, falls back to replacePost, which gives the edited post a new ID. Returns the ID kept.
+async function adoptEdit(workspaceId, original, replacementId, editorName = null) {
+  try {
+    await databaseRequest('rpc/adopt_post_edit', { method: 'POST', body: JSON.stringify({ p_original: original.id, p_replacement: replacementId }) });
+  } catch (error) {
+    if (error.dbCode === 'PGRST202' || /adopt_post_edit/.test(error.dbMessage || '')) {
+      await replacePost(workspaceId, original, replacementId, editorName);
+      return replacementId;
+    }
+    await databaseRequest(`scheduled_posts?id=eq.${replacementId}`, { method: 'DELETE', headers: { prefer: 'return=minimal' } }).catch(() => {});
+    if (error.dbMessage === 'edit_started') throw httpError(409, 'The original started publishing while you were editing, so your changes weren’t saved.');
+    throw error;
+  }
+  await addHistory(workspaceId, original.id, 'edited', { actorName: editorName, detail: { previous: editSnapshot(original) } });
+  return original.id;
+}
+
+function editSnapshot(original) {
+  return {
+    title: original.title, text: original.content?.text || '', media: original.content?.media || [], platformContent: original.content?.platformContent || {},
+    mediaAlt: original.content?.mediaAlt || {}, networks: original.publish_jobs.filter((job) => job.status !== 'canceled').map((job) => job.platform),
+    scheduledFor: original.scheduled_for, campaign: original.campaign || '', options: original.options || {}
+  };
+}
+
 async function replacePost(workspaceId, original, replacementId, editorName = null) {
   const ids = await familyIds(workspaceId, original);
   const started = await databaseRequest(`publish_jobs?post_id=in.(${ids.join(',')})&status=in.(publishing,published)&select=id`) || [];
@@ -1421,7 +1454,7 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 }
 
 module.exports = {
-  assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
+  adoptEdit, assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, setPostCover, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

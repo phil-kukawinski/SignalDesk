@@ -15,12 +15,12 @@ function setup() {
 }
 
 // Sends a notification to each of these people's devices. Never throws.
-async function sendPush(userIds, { title, body = '', view = null }) {
+async function sendPush(userIds, { title, body = '', view = null, post = null }) {
   if (!pushConfigured() || !userIds.length) return 0;
   try {
     setup();
     const rows = await databaseRequest(`push_subscriptions?user_id=in.(${userIds.join(',')})&select=endpoint,p256dh,auth`) || [];
-    const payload = JSON.stringify({ title, body: body.slice(0, 300), view });
+    const payload = JSON.stringify({ title, body: body.slice(0, 300), view, ...(post ? { post } : {}) });
     let sent = 0;
     await Promise.all(rows.map(async (row) => {
       try {

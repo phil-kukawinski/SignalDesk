@@ -1,6 +1,6 @@
 // SignalDesk service worker: lets the app be installed, keeps a copy of the app shell for
-// spotty connections, and shows push notifications.
-const CACHE = 'signaldesk-shell-v3';
+// spotty connections, shows push notifications, and receives files shared from the phone's share sheet.
+const CACHE = 'signaldesk-shell-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png'])).catch(() => {}));
@@ -8,13 +8,28 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE && key !== 'signaldesk-share').map((key) => caches.delete(key)))).then(() => self.clients.claim()));
 });
 
 // App files: network first so updates show up right away, falling back to the cached copy offline.
 // API calls and other sites always go straight to the network.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  if (event.request.method === 'POST' && url.origin === self.location.origin && url.pathname === '/share-target') {
+    event.respondWith((async () => {
+      try {
+        const form = await event.request.formData();
+        const cache = await caches.open('signaldesk-share');
+        for (const key of await cache.keys()) await cache.delete(key);
+        const files = form.getAll('media').filter((file) => file && typeof file === 'object' && file.size).slice(0, 10);
+        await Promise.all(files.map((file, index) => cache.put(`/shared/${index}`, new Response(file, { headers: { 'content-type': file.type || 'application/octet-stream', 'x-name': encodeURIComponent(file.name || `shared-${index + 1}`) } }))));
+        const words = ['title', 'text', 'url'].map((key) => String(form.get(key) || '').trim()).filter(Boolean);
+        await cache.put('/shared/meta', new Response(JSON.stringify({ count: files.length, text: [...new Set(words)].join('\n'), at: Date.now() }), { headers: { 'content-type': 'application/json' } }));
+      } catch { /* the Studio opens empty */ }
+      return Response.redirect('/?shared=1#composer', 303);
+    })());
+    return;
+  }
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   event.respondWith(fetch(event.request).then((response) => {
     if (response.ok) {
@@ -29,16 +44,17 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data?.text() || 'SignalDesk' }; }
   event.waitUntil(self.registration.showNotification(data.title || 'SignalDesk', {
-    body: data.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { view: data.view || '' }
+    body: data.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { view: data.view || '', post: data.post || '' }
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = `/${event.notification.data?.view ? `#view=${encodeURIComponent(event.notification.data.view)}` : ''}`;
+  const post = event.notification.data?.post || '';
+  const target = `/${event.notification.data?.view ? `#view=${encodeURIComponent(event.notification.data.view)}${post ? `&post=${encodeURIComponent(post)}` : ''}` : ''}`;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
     const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
-    if (open) { open.postMessage({ type: 'signaldesk-open-view', view: event.notification.data?.view || '' }); return open.focus(); }
+    if (open) { open.postMessage({ type: 'signaldesk-open-view', view: event.notification.data?.view || '', post }); return open.focus(); }
     return self.clients.openWindow(target);
   }));
 });

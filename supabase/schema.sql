@@ -1226,3 +1226,72 @@ create policy "Users can manage their social media"
 --     body := '{}'::jsonb
 --   );
 -- $cron$);
+
+-- November 2026, roadmap batch 2: who a post is assigned to, and the Monday week-ahead email
+-- (on by default, sent on the person's weekly day at 8 AM).
+alter table public.scheduled_posts add column if not exists assigned_to uuid references auth.users (id) on delete set null;
+alter table public.notification_preferences add column if not exists week_ahead boolean not null default true;
+alter table public.notification_preferences add column if not exists last_week_ahead_at timestamptz;
+
+-- Editing a scheduled post keeps its ID: the edited version is built as a new post (so every check runs
+-- on it), then this moves its content, jobs, and repeats onto the original in one transaction and removes
+-- the temporary copy. Notes, history, assignment, and links to the post all stay put.
+create or replace function public.adopt_post_edit(p_original uuid, p_replacement uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  o public.scheduled_posts;
+  r public.scheduled_posts;
+begin
+  select * into o from public.scheduled_posts where id = p_original for update;
+  select * into r from public.scheduled_posts where id = p_replacement for update;
+  if o.id is null or r.id is null or o.workspace_id <> r.workspace_id then raise exception 'edit_mismatch'; end if;
+  if exists (select 1 from public.publish_jobs j join public.scheduled_posts p on p.id = j.post_id
+             where (p.id = o.id or p.parent_id = o.id) and j.status in ('publishing', 'published')) then
+    raise exception 'edit_started';
+  end if;
+  delete from public.scheduled_posts where parent_id = o.id;
+  delete from public.publish_jobs where post_id = o.id;
+  update public.scheduled_posts set title = r.title, content = r.content, options = r.options - 'replaces', scheduled_for = r.scheduled_for,
+    status = r.status, campaign = r.campaign, evergreen = r.evergreen, client_status = null, approved_by = null, approved_at = null,
+    decision_note = null, updated_at = now()
+    where id = o.id;
+  update public.publish_jobs set post_id = o.id where post_id = r.id;
+  update public.scheduled_posts set parent_id = o.id, options = jsonb_set(options - 'replaces', '{repostOf}', to_jsonb(o.id::text)) where parent_id = r.id;
+  update public.post_notes set post_id = o.id where post_id = r.id;
+  delete from public.scheduled_posts where id = r.id;
+end;
+$$;
+revoke all on function public.adopt_post_edit(uuid, uuid) from public;
+
+-- Live updates: when a workspace's posts, jobs, notes, or shared state change, Supabase Realtime gets a
+-- "changed" signal on the topic ws:<workspace id> (only the table name, never any content), and open
+-- copies of SignalDesk reload what changed. Does nothing where Realtime isn't available, and a failure
+-- here never blocks the change itself.
+create or replace function public.broadcast_workspace_change()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  ws uuid;
+begin
+  if tg_op = 'DELETE' then ws := old.workspace_id; else ws := new.workspace_id; end if;
+  if ws is not null and to_regprocedure('realtime.send(jsonb,text,text,boolean)') is not null then
+    begin
+      execute 'select realtime.send($1, $2, $3, false)' using jsonb_build_object('table', tg_table_name), 'changed', 'ws:' || ws::text;
+    exception when others then null;
+    end;
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public.broadcast_workspace_change() from public;
+drop trigger if exists broadcast_post_change on public.scheduled_posts;
+create trigger broadcast_post_change after insert or update or delete on public.scheduled_posts for each row execute function public.broadcast_workspace_change();
+drop trigger if exists broadcast_job_change on public.publish_jobs;
+create trigger broadcast_job_change after insert or update of status, run_at, post_id or delete on public.publish_jobs for each row execute function public.broadcast_workspace_change();
+drop trigger if exists broadcast_note_change on public.post_notes;
+create trigger broadcast_note_change after insert or update or delete on public.post_notes for each row execute function public.broadcast_workspace_change();
+drop trigger if exists broadcast_state_change on public.workspace_state;
+create trigger broadcast_state_change after update on public.workspace_state for each row execute function public.broadcast_workspace_change();

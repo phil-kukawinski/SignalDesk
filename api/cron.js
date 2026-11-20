@@ -3,7 +3,7 @@ const { send, getConfig, getBearerToken, processDueComments, runAutopilot } = re
 const { recordAppError, alertPlatformAdmins } = require('./_lib/platform');
 const { syncDueConnections } = require('./_lib/sync');
 const { processPublishQueue, maintainConnections, warnPostsAtRisk, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth, recycleEvergreen } = require('./_lib/publishing');
-const { processEmailDigests, processClientReports } = require('./_lib/notify');
+const { processEmailDigests, processWeekAhead, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia, syncMediaFiles } = require('./_lib/media');
 const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
@@ -48,6 +48,7 @@ module.exports = async function handler(req, res) {
     const feeds = await runAutopilot({ encryptionKey, staleMinutes: 10, limit: 25 });
     const reports = await runWeeklyReports({ encryptionKey, limit: 3 });
     const digests = await processEmailDigests({ limit: 40 });
+    const weekAhead = await processWeekAhead({ limit: 40 }).catch((error) => ({ error: error.message }));
     const clientReports = await processClientReports({ encryptionKey }).catch((error) => ({ error: error.message }));
     const reviewReminders = await require('./_lib/reminders').processReviewReminders({ encryptionKey }).catch((error) => ({ error: error.message }));
     const planning = await processPlanningReminders().catch((error) => ({ error: error.message }));
@@ -74,7 +75,7 @@ module.exports = async function handler(req, res) {
     const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
     if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, backup, media, health });
+    return send(res, 200, { weekAhead, weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, backup, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);

@@ -57,10 +57,10 @@ function hydrateTips(root=document){root.querySelectorAll('i[data-tip-key]').for
 hydrateTips();
 
 // Keyboard shortcuts (ignored while typing). ? lists them.
-const SHORTCUTS=[['N','New post'],['/','Search everything'],['G then H','Go to Command Center'],['G then C','Go to Content Calendar'],['G then A','Go to Analytics'],['G then S','Go to Social Accounts'],['?','Show shortcuts']];
+const SHORTCUTS=[['N','New post'],['/','Search everything'],['G then H','Go to Command Center'],['G then C','Go to Content Calendar'],['G then P','Go to Publishing Studio'],['G then L','Go to Content Library'],['G then A','Go to Analytics'],['G then S','Go to Social Accounts'],['?','Show shortcuts'],['In the calendar'],['T','Jump to today'],['← or J','Earlier'],['→ or K','Later'],['D','Day view'],['W','Week view'],['M','Month view'],['L','List view']];
 const GO_KEYS={h:'overview',c:'calendar',a:'analytics',s:'social-accounts',p:'composer',l:'library'};
 let goPending=0;
-function openShortcuts(){let dialog=$('#shortcuts-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='shortcuts-dialog';dialog.className='auth-dialog confirm-dialog';dialog.setAttribute('aria-labelledby','shortcuts-title');dialog.innerHTML=`<form method="dialog" class="auth-form"><h2 id="shortcuts-title">Keyboard shortcuts</h2><dl class="shortcut-list">${SHORTCUTS.map(([keys,label])=>`<dt>${keys.split(' then ').map(key=>`<kbd>${escapeHtml(key)}</kbd>`).join(' then ')}</dt><dd>${escapeHtml(label)}</dd>`).join('')}<dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything</dd></dl><div class="confirm-actions"><button class="text-button" type="button" data-start-tour>Replay the tour</button><button class="text-button" type="button" data-open-feedback>Send feedback</button><span class="push"></span><button class="secondary-button" value="close">Close</button></div></form>`;document.body.appendChild(dialog);}if(!dialog.open)dialog.showModal();}
+function openShortcuts(){let dialog=$('#shortcuts-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='shortcuts-dialog';dialog.className='auth-dialog confirm-dialog';dialog.setAttribute('aria-labelledby','shortcuts-title');dialog.innerHTML=`<form method="dialog" class="auth-form"><h2 id="shortcuts-title">Keyboard shortcuts</h2><dl class="shortcut-list">${SHORTCUTS.map(([keys,label])=>label===undefined?`<dt class="shortcut-group">${escapeHtml(keys)}</dt>`:`<dt>${keys.split(' then ').map(key=>`<kbd>${escapeHtml(key)}</kbd>`).join(' then ')}</dt><dd>${escapeHtml(label)}</dd>`).join('')}<dt><kbd>⌘</kbd> <kbd>K</kbd></dt><dd>Search everything</dd></dl><div class="confirm-actions"><button class="text-button" type="button" data-start-tour>Replay the tour</button><button class="text-button" type="button" data-open-feedback>Send feedback</button><span class="push"></span><button class="secondary-button" value="close">Close</button></div></form>`;document.body.appendChild(dialog);}if(!dialog.open)dialog.showModal();}
 document.addEventListener('keydown',event=>{
   if(event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey)return;
   const target=event.target;if(target.closest?.('input,textarea,select,[contenteditable=""],[contenteditable=true]'))return;
@@ -71,8 +71,13 @@ document.addEventListener('keydown',event=>{
   if(key==='g'){goPending=Date.now();return;}
   if(key==='n'){event.preventDefault();showView('composer');setTimeout(()=>$('#post-copy')?.focus(),50);return;}
   if(event.key==='/'){event.preventDefault();$('#search-button')?.click();return;}
-  if(event.key==='?'){event.preventDefault();openShortcuts();}
+  if(event.key==='?'){event.preventDefault();openShortcuts();return;}
+  if($('#view-calendar')?.classList.contains('active'))calendarKey(event,key);
 });
+// Calendar keys: T today, arrows or J/K to move, D/W/M/L to switch views.
+function calendarKey(event,key){const click=selector=>{const el=$(selector);if(el&&!el.disabled){event.preventDefault();el.click();}};
+  if(key==='t')click('#today-button');else if(key==='arrowleft'||key==='j')click('#prev-month');else if(key==='arrowright'||key==='k')click('#next-month');
+  else if({d:'day',w:'week',m:'month',l:'list'}[key])click(`[data-cal-view="${({d:'day',w:'week',m:'month',l:'list'})[key]}"]`);}
 $('#footer-shortcuts')?.addEventListener('click',openShortcuts);
 // Phone navigation: More opens a sheet with the rest of the pages.
 $('#mobile-more')?.addEventListener('click',()=>$('#mobile-more-sheet')?.showModal());
@@ -128,3 +133,10 @@ $('#profile-button')?.addEventListener('click',event=>{event.stopPropagation();$
 document.addEventListener('click',async event=>{const menu=$('#profile-menu');if(!menu||menu.hidden)return;if(!event.target.closest('#profile-menu')){closeProfileMenu();return;}const themeButton=event.target.closest('[data-profile-theme]');if(themeButton){try{localStorage.setItem(THEME_KEY,themeButton.dataset.profileTheme);}catch{}applyTheme();menu.innerHTML=profileMenuHtml();menu.querySelector(`[data-profile-theme="${themeButton.dataset.profileTheme}"]`)?.focus();return;}const action=event.target.closest('[data-profile-action]')?.dataset.profileAction;if(!action)return;closeProfileMenu();if(action==='account'){showView('settings');showSettingsSection('account');}else if(action==='shortcuts')openShortcuts();else if(action==='feedback')$('[data-open-feedback]')?.click();else if(action==='signin')openAuthDialog('signin');else if(action==='signout'){const{error}=await supabaseClient.auth.signOut();if(error){toast(friendlyError(error));return;}location.reload();}});
 document.addEventListener('keydown',event=>{const menu=$('#profile-menu');if(!menu||menu.hidden)return;if(event.key==='Escape'){event.preventDefault();closeProfileMenu(true);return;}if(!['ArrowDown','ArrowUp'].includes(event.key))return;const items=[...menu.querySelectorAll('button')],at=items.indexOf(document.activeElement);event.preventDefault();items[(at+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();});
 window.addEventListener('resize',()=>closeProfileMenu());
+// Less motion when the device asks for it or Settings → Motion is set to Reduce.
+function prefersLessMotion(){return document.documentElement.dataset.motion==='reduce'||Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);}
+// Time zones a workspace or client can use (matches WORKSPACE_TIMEZONES in api/_lib/core.js).
+const TIME_ZONES=[['Eastern Time (US & Canada)','America/New_York'],['Central Time (US & Canada)','America/Chicago'],['Mountain Time (US & Canada)','America/Denver'],['Arizona','America/Phoenix'],['Pacific Time (US & Canada)','America/Los_Angeles'],['Alaska','America/Anchorage'],['Hawaii','Pacific/Honolulu'],['Atlantic Time (Canada)','America/Halifax'],['London','Europe/London'],['Central Europe (Paris, Berlin)','Europe/Paris'],['Sydney','Australia/Sydney']];
+function clientZone(client){const own=TIME_ZONES.find(([name])=>name===client?.timezone);if(own)return{name:own[0],iana:own[1],own:true};const workspace=TIME_ZONES.find(([name])=>name===document.querySelector('#settings-timezone')?.value);return workspace?{name:workspace[0],iana:workspace[1],own:false}:null;}
+// "That's 12:00 PM Pacific Time for Revere Rum" when the client's zone shows a different clock than this device.
+function clientTimeNote(client,when){const zone=clientZone(client);if(!zone||!zone.own||!(when instanceof Date)||isNaN(when))return '';const fmt=options=>when.toLocaleString('en-US',options),theirs=fmt({timeZone:zone.iana,weekday:'short',hour:'numeric',minute:'2-digit'}),mine=fmt({weekday:'short',hour:'numeric',minute:'2-digit'});if(theirs===mine)return '';return `That’s ${theirs.replace(/^(\w+) /,'$1 at ')} ${zone.name.replace(/ \(.*\)$/,'')} for ${client.name}.`;}

@@ -25,7 +25,7 @@ function storedTheme(){try{return localStorage.getItem(THEME_KEY)||'system';}cat
 function applyTheme(){const choice=storedTheme(),dark=choice==='dark'||(choice==='system'&&darkQuery?.matches);document.documentElement.dataset.theme=dark?'dark':'light';const select=$('#theme-select');if(select)select.value=choice;$('meta[name="theme-color"]')?.setAttribute('content',dark?'#000000':'#5b8db8');}
 $('#theme-select')?.addEventListener('change',event=>{try{localStorage.setItem(THEME_KEY,event.target.value);}catch{}applyTheme();});
 // Text size and density, per browser like the theme. The page applies them before it draws (see index.html).
-const DISPLAY_PREFS=[['text','signaldesk-text','#text-size-select',['normal','large','larger']],['density','signaldesk-density','#density-select',['comfortable','compact']]];
+const DISPLAY_PREFS=[['text','signaldesk-text','#text-size-select',['normal','large','larger']],['density','signaldesk-density','#density-select',['comfortable','compact']],['motion','signaldesk-motion','#motion-select',['device','reduce']]];
 function applyDisplayPrefs(){DISPLAY_PREFS.forEach(([key,storage,selector,values])=>{let value=values[0];try{value=localStorage.getItem(storage)||value;}catch{}if(!values.includes(value))value=values[0];document.documentElement.dataset[key]=value;const select=$(selector);if(select)select.value=value;});}
 DISPLAY_PREFS.forEach(([key,storage,selector])=>$(selector)?.addEventListener('change',event=>{try{localStorage.setItem(storage,event.target.value);}catch{}applyDisplayPrefs();if(typeof timelineKey!=='undefined')timelineKey=null;if(typeof renderCalendar==='function')renderCalendar();}));
 applyDisplayPrefs();
@@ -34,7 +34,6 @@ applyTheme();
 
 // --- Data export ---
 function downloadFile(name,content,type){const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([content],{type}));link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),1500);}
-function csvCell(value){const text=String(value??'');return /[",\n]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;}
 $('#export-data')?.addEventListener('click',async()=>{if(!cloudFeaturesAvailable()){downloadFile(`signaldesk-${localIsoDate(new Date())}.json`,JSON.stringify({exportedAt:new Date().toISOString(),format:'signaldesk-export-1',workspace:collectWorkspaceState()},null,2),'application/json');toast('Exported this browser’s workspace.');return;}const button=$('#export-data');button.disabled=true;try{const data=await callSocialApi({action:'export'});const stamp=localIsoDate(new Date());downloadFile(`signaldesk-${stamp}.json`,JSON.stringify(data,null,2),'application/json');// The same columns as Import many posts, so this spreadsheet can be imported again to put posts back.
 downloadFile(`signaldesk-posts-${stamp}.csv`,backupPostsCsv(data.posts,clients),'text/csv');toast('Downloaded a full backup (JSON) and a posts spreadsheet (CSV).');}catch(error){toast(error.message);}finally{button.disabled=false;}});
 

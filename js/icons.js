@@ -17,7 +17,7 @@ const ICON_PATHS={
   zap:'<path d="M13 3 5 13.5h6.5L11 21l8-10.5h-6.5z"/>',
   image:'<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="9" cy="9" r="1.8"/><path d="m20.5 15-4.5-4.5-9.5 10"/>',
   x:'<path d="M18 6 6 18M6 6l12 12"/>',
-  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',scissors:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
   more:'<circle cx="5.5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18.5" cy="12" r="1.2"/>',
   printer:'<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="2"/><path d="M7 14.5h10v6H7z"/>',
   arrowRight:'<path d="M5 12h14M13 6l6 6-6 6"/>',
