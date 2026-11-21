@@ -752,6 +752,34 @@ const tagged = (await q(`select campaign, evergreen, content from scheduled_post
 assert.equal(tagged.campaign, 'Fall Launch');
 assert.equal(tagged.evergreen, true);
 assert.deepEqual(tagged.content.platformContent, {}, 'saved copy stays untagged');
+// Story series: each Story waits while an earlier one in its series is still on its way to the same network.
+{
+  const { earlierStoryWaiting } = require(`${ROOT}/api/_lib/publishing.js`);
+  const { validatePostOptions } = require(`${ROOT}/api/_lib/core.js`);
+  const group = crypto.randomUUID();
+  assert.deepEqual(validatePostOptions({ storySeries: { group, index: 1, count: 3 } }, ['instagram_story']).storySeries, { group, index: 1, count: 3 });
+  assert.equal(validatePostOptions({ storySeries: { group: 'x', index: 1, count: 3 } }, ['instagram_story']).storySeries, undefined, 'a bad series tag is dropped');
+  const start = Date.now() - 2 * 60000, ids = [0, 1, 2].map(() => crypto.randomUUID());
+  for (const [index, id] of ids.entries()) {
+    await db.query(`insert into scheduled_posts (id, workspace_id, client_id, scheduled_for, content, options) values ($1, $2, 'pk-works', $3, '{}', $4::jsonb)`, [id, WS, new Date(start + index * 60000).toISOString(), JSON.stringify({ storySeries: { group, index, count: 3 } })]);
+    await db.query(`insert into publish_jobs (post_id, workspace_id, client_id, platform, provider, run_at, status) values ($1, $2, 'pk-works', 'instagram_story', 'direct', now(), $3)`, [id, WS, index === 0 ? 'queued' : 'publishing']);
+  }
+  const posts = (await q(`select * from scheduled_posts where id in ('${ids.join("','")}')`)).sort((a, b) => a.options.storySeries.index - b.options.storySeries.index).map((row) => ({ ...row, scheduled_for: new Date(row.scheduled_for).toISOString() }));
+  const story = { platform: 'instagram_story', provider: 'direct' };
+  assert.equal(await earlierStoryWaiting(posts[0], story), false, 'the first Story never waits');
+  assert.equal(await earlierStoryWaiting(posts[1], story), true, 'Story 2 waits while Story 1 is still processing');
+  assert.equal(await earlierStoryWaiting(posts[2], story), true, 'Story 3 waits too');
+  assert.equal(await earlierStoryWaiting(posts[1], { platform: 'facebook_story', provider: 'direct' }), false, 'other networks don’t wait on it');
+  await db.query(`update publish_jobs set status = 'published' where post_id = $1`, [ids[0]]);
+  assert.equal(await earlierStoryWaiting(posts[1], story), false, 'once Story 1 is out, Story 2 goes');
+  assert.equal(await earlierStoryWaiting(posts[2], story), true, 'Story 3 still waits for Story 2');
+  await db.query(`update publish_jobs set status = 'failed' where post_id = $1`, [ids[1]]);
+  assert.equal(await earlierStoryWaiting(posts[2], story), false, 'a Story that failed for good doesn’t hold up the rest');
+  await db.query(`update publish_jobs set status = 'queued' where post_id = $1`, [ids[1]]);
+  assert.equal(await earlierStoryWaiting({ ...posts[2], scheduled_for: new Date(Date.now() - 31 * 60000).toISOString() }, story), false, 'after 30 minutes a Story goes out regardless');
+  await db.query(`delete from scheduled_posts where id in ('${ids.join("','")}')`);
+}
+
 const { tagLinks } = require(`${ROOT}/api/_lib/publishing.js`);
 assert.equal(tagLinks('Fall sale https://pkworks.com/sale. Also https://pkworks.com/?utm_source=x', { source: 'facebook', campaign: 'Fall Launch' }), 'Fall sale https://pkworks.com/sale?utm_source=facebook&utm_medium=social&utm_campaign=fall-launch. Also https://pkworks.com/?utm_source=x');
 // Tags are added per network when the post goes out

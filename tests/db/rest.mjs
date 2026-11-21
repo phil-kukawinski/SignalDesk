@@ -62,11 +62,11 @@ export async function createRest(db) {
         clauses.push(`(${items.map((item) => { const [col, ...rest] = item.split('.'); return one(col, rest.join('.')); }).join(' or ')})`);
         continue;
       }
-      const json = /^(\w+)->>(\w+)$/.exec(key);
+      const json = /^(\w+)((?:->\w+)*)->>(\w+)$/.exec(key);
       if (json) {
         if (!columns[table][json[1]] || !value.startsWith('eq.')) throw new Error(`bad json filter ${key}=${value}`);
         values.push(value.slice(3));
-        clauses.push(`t.${q(json[1])}->>'${json[2]}' = $${values.length}::text`);
+        clauses.push(`t.${q(json[1])}${json[2].split('->').filter(Boolean).map((part) => `->'${part}'`).join('')}->>'${json[3]}' = $${values.length}::text`);
         continue;
       }
       if (!columns[table][key]) throw new Error(`unknown column ${table}.${key}`);

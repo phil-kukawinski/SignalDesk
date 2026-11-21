@@ -417,6 +417,19 @@ function classify(error) {
   return 'temporary';
 }
 
+// Story series: a Story waits while an earlier one in its series is still on its way to the same network
+// (processing, retrying, or not yet due), so the series keeps its order. An earlier Story that failed for good
+// doesn't hold up the rest, and after 30 minutes past its own time a Story goes out regardless.
+const SERIES_WAIT_MS = 30 * 60000;
+async function earlierStoryWaiting(post, job) {
+  const series = post.options?.storySeries;
+  if (!series?.group || !(series.index > 0) || !String(job.platform).endsWith('_story')) return false;
+  if (Date.now() - Date.parse(post.scheduled_for) > SERIES_WAIT_MS) return false;
+  const rows = await databaseRequest(`scheduled_posts?workspace_id=eq.${post.workspace_id}&options->storySeries->>group=eq.${series.group}&status=neq.canceled&select=id,options,publish_jobs(platform,status)`) || [];
+  return rows.some((row) => row.id !== post.id && row.options?.storySeries?.index < series.index
+    && (row.publish_jobs || []).some((item) => item.platform === job.platform && ['held', 'queued', 'publishing'].includes(item.status)));
+}
+
 async function runJob(job, encryptionKey) {
   const startedAt = nowIso();
   const guard = `publish_jobs?id=eq.${job.id}&lock_token=eq.${job.lock_token}`;
@@ -432,6 +445,11 @@ async function runJob(job, encryptionKey) {
     if (!post || post.status === 'canceled') {
       await patchJob({ status: 'canceled', ...unlock });
       return 'canceled';
+    }
+    if (job.provider !== 'manual' && await earlierStoryWaiting(post, job)) {
+      // Not sent yet, so this doesn't use up an attempt.
+      await patchJob({ status: 'queued', attempts: Math.max(0, job.attempts - 1), run_at: new Date(Date.now() + 60000).toISOString(), ...unlock });
+      return 'pending';
     }
     const tracked = withTracking(post, job.platform, contentFor(post, job.platform), post.options || {});
     const { content, options: postOptions } = await withShortLinks(job, tracked.content, tracked.options);
@@ -1455,6 +1473,6 @@ async function replacePost(workspaceId, original, replacementId, editorName = nu
 
 module.exports = {
   adoptEdit, assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
-  processPublishQueue, runJob, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
+  processPublishQueue, runJob, earlierStoryWaiting, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, setPostCover, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
   refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };

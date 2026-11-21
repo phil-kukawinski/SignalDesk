@@ -345,6 +345,11 @@ function validatePostOptions(options, platforms) {
   if (typeof options.pillar === 'string' && options.pillar.trim()) clean.pillar = options.pillar.trim().replace(/\s+/g, ' ').slice(0, 30);
   // A/B caption test: two posts share a group; A is the first caption, B the second.
   if (options.abTest && typeof options.abTest === 'object' && /^[0-9a-f-]{8,40}$/i.test(String(options.abTest.group || '')) && ['A', 'B'].includes(options.abTest.version)) clean.abTest = { group: String(options.abTest.group).toLowerCase(), version: options.abTest.version };
+  // Story series: Stories that go out in order. The publisher holds each until the ones before it are out.
+  if (options.storySeries && typeof options.storySeries === 'object') {
+    const { group, index, count } = options.storySeries;
+    if (/^[0-9a-f-]{36}$/i.test(String(group || '')) && Number.isInteger(index) && Number.isInteger(count) && count >= 2 && count <= 50 && index >= 0 && index < count) clean.storySeries = { group: String(group).toLowerCase(), index, count };
+  }
   if (options.autoRepost !== undefined && options.autoRepost !== null) {
     const repeat = Number(options.autoRepost.repeat);
     if (options.autoRepost.every === 'month') {

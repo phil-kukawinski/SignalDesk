@@ -79,7 +79,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (moved.length !== 2 || !moved.every((item) => item.startsWith('10:'))) fail('moving should keep each post’s time');
 
   // Copy the week.
-  await evaluate(`showView('calendar');calView='week';calCursor=startOfDay(new Date());renderCalendar()`); await wait(400);
+  await evaluate(`showView('calendar');calView='week';calCursor=startOfDay(new Date(serverPosts.filter(p=>p.status!=='canceled'&&Date.parse(p.scheduledFor)>Date.now()).sort((a,b)=>Date.parse(a.scheduledFor)-Date.parse(b.scheduledFor))[0].scheduledFor));renderCalendar()`); await wait(400);
   const copyLabel = await evaluate(`document.querySelector('#copy-week')?.textContent||''`);
   if (!/Copy week/.test(copyLabel)) fail('week view should have a Copy week button');
   await evaluate(`document.querySelector('#copy-week').click()`); await wait(300);
