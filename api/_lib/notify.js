@@ -62,14 +62,14 @@ function renderEmail({ heading, intro, sections, legend = [], status = null, cta
   const url = showCta ? ctaUrl || appUrl() : '';
   const sectionHtml = sections.map((section) => `
     <h2 style="font:700 14px Arial,sans-serif;color:#101828;margin:24px 0 8px">${escapeHtml(section.title)}</h2>
-    ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;${item.color ? `border-left:4px solid ${safeColor(item.color)};` : ''}border-radius:10px;padding:12px 14px;margin:0 0 8px">
+    ${section.items.map((item) => `<div style="border:1px solid #e4e7ec;border-radius:12px;padding:12px 14px;margin:0 0 8px;background:#ffffff">
       <div style="font:700 13px Arial,sans-serif;color:#101828">${item.color ? `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${safeColor(item.color)};margin-right:6px"></span>` : ''}${escapeHtml(item.title)}${item.badge ? ` <span style="display:inline-block;margin-left:6px;padding:2px 8px;border-radius:10px;background:${safeColor(item.color || '#5d6676')};color:#fff;font:700 10px Arial,sans-serif;letter-spacing:.04em;vertical-align:1px">${escapeHtml(item.badge.toUpperCase())}</span>` : ''}</div>
       ${item.bar !== undefined ? `<div style="background:#eef0f3;border-radius:4px;height:8px;margin-top:8px"><div style="width:${Math.max(2, Math.min(100, Math.round(item.bar)))}%;background:${safeColor(item.color || '#0b5fdc')};height:8px;border-radius:4px"></div></div>` : ''}
       ${item.body ? `<div style="font:13px/1.5 Arial,sans-serif;color:#5d6676;margin-top:4px">${escapeHtml(item.body)}</div>` : ''}
       ${item.meta ? `<div style="font:11px Arial,sans-serif;color:#8d95a3;margin-top:6px">${escapeHtml(item.meta)}</div>` : ''}
     </div>`).join('')}`).join('');
-  const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;${status ? `border-top:6px solid ${safeColor(status.color)};` : ''}border-radius:16px;padding:28px">
-    <div style="margin:0 0 18px"><span style="display:inline-block;vertical-align:middle;width:28px;height:28px;line-height:28px;border-radius:7px;background:#001d51;color:#ffffff;text-align:center;font:800 13px Arial,sans-serif;letter-spacing:-.04em">S<span style="color:#4d9bff">D</span></span> <span style="vertical-align:middle;font:700 16px Arial,sans-serif;color:#001d51">Signal<span style="color:#0469fa">Desk</span></span></div>
+  const html = `<div style="background:#f5f6f8;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:28px">
+    <div style="margin:0 0 20px;font:800 19px Arial,sans-serif;letter-spacing:-.02em;color:#101828">Signal<span style="color:#0b5fdc">Desk</span></div>
     <div style="font:600 10px Arial,sans-serif;letter-spacing:.08em;color:#0b5fdc">${escapeHtml(eyebrow)}</div>
     ${status ? `<div style="margin:12px 0 0"><span style="display:inline-block;padding:3px 10px;border-radius:10px;background:${safeColor(status.color)};color:#fff;font:700 10px Arial,sans-serif;letter-spacing:.06em">${escapeHtml(status.label.toUpperCase())}</span></div>` : ''}
     <h1 style="font:800 20px Arial,sans-serif;color:#101828;margin:10px 0 6px">${escapeHtml(heading)}</h1>

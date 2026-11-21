@@ -29,6 +29,8 @@ const TABLES = {
   app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id', client_uploads: 'id', email_reply_codes: 'code', credit_ledger: 'id', stripe_events: 'id'
 };
 const SKIPPED = ['oauth_sessions'];
+// Tables every copy must have, whenever it was made.
+const CORE_TABLES = ['workspaces', 'workspace_members', 'workspace_state', 'scheduled_posts', 'publish_jobs', 'social_connections'];
 // Tables whose id the database numbers itself. A restore keeps the old numbers and moves the counter past them.
 const NUMBERED = ['publish_attempts', 'post_history', 'app_errors', 'ai_usage', 'activity_log', 'credit_ledger'];
 
@@ -88,7 +90,8 @@ async function authUsers() {
 async function exportDatabase({ now = new Date() } = {}) {
   const tables = {};
   for (const [table, order] of Object.entries(TABLES)) tables[table] = await tableRows(table, order);
-  return { format: 'signaldesk-backup', version: 1, createdAt: now.toISOString(), skipped: SKIPPED, users: await authUsers(), tables };
+  // tableList records which tables this copy was meant to hold, so a later check knows what to expect.
+  return { format: 'signaldesk-backup', version: 1, createdAt: now.toISOString(), skipped: SKIPPED, tableList: Object.keys(TABLES), users: await authUsers(), tables };
 }
 
 const dayOf = (date) => date.toISOString().slice(0, 10);
@@ -190,7 +193,11 @@ async function verifyLatestBackup({ now = Date.now() } = {}) {
   if (!response.ok) problem(`The newest copy (${latest.path}) couldn’t be downloaded: HTTP ${response.status}.`);
   let data;
   try { data = JSON.parse(require('node:zlib').gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8')); } catch { problem(`The newest copy (${latest.path}) doesn’t open.`); }
-  const missing = Object.keys(TABLES).filter((table) => !Array.isArray(data?.tables?.[table]));
+  // Judge the copy by what it should hold: the core tables always, and every table its own list names
+  // (a copy made before an update can't contain tables that update added).
+  const listed = Array.isArray(data?.tableList) ? data.tableList : Object.keys(data?.tables || {});
+  const expected = [...new Set([...CORE_TABLES, ...listed])];
+  const missing = expected.filter((table) => !Array.isArray(data?.tables?.[table]));
   if (missing.length) problem(`The newest copy is missing ${missing.length} table${missing.length === 1 ? '' : 's'}: ${missing.slice(0, 5).join(', ')}.`);
   if (!data.tables.workspaces.length) problem('The newest copy has no workspaces in it.');
   return { path: latest.path, tables: Object.keys(data.tables).length, rows: Object.values(data.tables).reduce((sum, rows) => sum + rows.length, 0) };

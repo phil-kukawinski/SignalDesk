@@ -24,7 +24,7 @@
   <meta property="og:site_name" content="SignalDesk by PK Works">
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/bricolage-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/app.min.css?v=c47792fb98">
+  <link rel="stylesheet" href="css/app.min.css?v=716675a32d">
 </head>
 <body class="signed-out">
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="sd-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0096ff"/><stop offset="1" stop-color="#0058eb"/></linearGradient></defs></svg>
@@ -222,8 +222,8 @@
         <section class="page" id="view-library">
           <div class="page-heading"><div><div class="eyebrow">YOUR CREATIVE HUB</div><h1>Content library</h1><p class="subheading">Keep brand files, reusable copy, and trend ideas in one place.</p></div><button class="primary-button" id="add-asset"><i data-icon="plus"></i>Add asset</button></div>
           <div class="panel client-files-panel" id="client-files-panel" hidden><div class="panel-header"><div><h2>From clients</h2><p>Photos and videos clients sent through their review link. Add them to the library or straight to a post.</p></div></div><div class="client-files" id="client-files"></div></div>
-          <div class="panel trends-panel" id="trends-panel"><div class="panel-header"><div><h2>Trend signals</h2><p>AI research on what’s moving right now: hashtags, audio, formats, and standout posts, with sources. Each workspace gets one scan a week.</p></div><span class="live-label" id="trends-updated">NOT LOADED</span></div>
-<div class="trends-controls"><select id="trends-focus" class="field" aria-label="Focus"></select><input id="trends-custom" class="field" placeholder="Describe a niche, e.g. craft spirits in New England" maxlength="200" hidden aria-label="Custom niche"><div class="trend-platforms" id="trend-platforms"></div><button class="primary-button" id="refresh-trends" type="button"><i data-icon="sparkles"></i>Scan for trends</button><button class="secondary-button" id="quick-trends" type="button" title="One network, a smaller scan. Up to 3 a week, on top of the weekly full scan.">Quick check, 1 network</button></div>
+          <div class="panel trends-panel" id="trends-panel"><div class="panel-header"><div><h2>Trend signals</h2><p>AI research on what’s moving right now: hashtags, audio, formats, and standout posts, with sources. Each workspace gets one full scan a week, plus 3 quick checks of a single network.</p></div><span class="live-label" id="trends-updated">NOT LOADED</span></div>
+<div class="trends-controls"><select id="trends-focus" class="field" aria-label="Focus"></select><input id="trends-custom" class="field" placeholder="Describe a niche, e.g. craft spirits in New England" maxlength="200" hidden aria-label="Custom niche"><div class="trend-platforms" id="trend-platforms"></div><button class="primary-button" id="refresh-trends" type="button"><i data-icon="sparkles"></i>Scan for trends</button><button class="text-button" id="quick-trends" type="button" title="One network, a smaller scan. Up to 3 a week, on top of the weekly full scan.">Quick check, 1 network</button></div>
 <p class="autopilot-status" id="trends-status" role="status"></p><div id="trends-body" class="trends-body"></div></div>
 <div class="library-toolbar"><input class="field search-field" id="library-search" placeholder="Search content library"><select id="library-client" class="field calendar-filter" aria-label="Filter by client"><option value="">All clients</option></select><select id="library-type" class="field calendar-filter" aria-label="Filter by type"><option value="">All types</option><option value="image/">Images</option><option value="video/">Videos</option></select><input type="file" id="asset-input" accept="image/*,video/*" multiple hidden></div><p class="option-hint" id="library-public-note">Files are stored at public links so the networks can fetch them, so don’t upload anything confidential.</p><div class="asset-grid" id="asset-grid"></div>
         </section>
@@ -297,7 +297,7 @@
         </div>
         <div class="panel health-panel" id="health-panel" hidden><div class="panel-header"><div><h2>Setup &amp; health</h2><p id="health-summary">Checks what’s configured, whether the scheduler is running, and what failed recently.</p></div><button class="secondary-button" type="button" id="health-refresh"><i data-icon="refresh"></i>Check again</button></div><div class="health-body" id="health-body"></div></div>
         </section>
-        <footer class="app-footer"><span>SignalDesk, a product of <a href="https://www.pkworks.co" target="_blank" rel="noopener">PK Works</a></span><span class="legal-links"><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a></span><button type="button" class="text-button footer-shortcuts" id="footer-shortcuts"><kbd>?</kbd> Shortcuts</button></footer>
+        <footer class="app-footer"><span>SignalDesk, a product of <a href="https://www.pkworks.co" target="_blank" rel="noopener">PK Works</a></span><span class="legal-links"><a href="/help" target="_blank" rel="noopener">Help</a><a href="/status" target="_blank" rel="noopener">Status</a><a href="/privacy" target="_blank" rel="noopener">Privacy</a><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a></span><button type="button" class="text-button footer-shortcuts" id="footer-shortcuts"><kbd>?</kbd> Shortcuts</button></footer>
       </div>
     </main>
 
@@ -585,7 +585,7 @@ Community 30"></textarea></div><div><label for="client-language">Language on cli
   </template>
   <!-- Loads the app (js/app-files.json lists its sources, combined by `npm run bundle`). Anyone who might be signed in, or who followed
        an invite or password link, gets it right away; other visitors get it when they start to sign in or request an invite. -->
-  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=4ceb6c7259'],started=false,ready=false,signin=false,form=null;
+  <script>(function(){var scripts=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','js/config.js','js/app.min.js?v=7907bb874a'],started=false,ready=false,signin=false,form=null;
 function start(){if(started)return;started=true;var markup=document.getElementById('app-markup');markup.replaceWith(markup.content);scripts.forEach(function(src,index){var script=document.createElement('script');script.src=src;script.async=false;if(index===scripts.length-1){script.onload=script.onerror=function(){ready=true;document.documentElement.style.cursor='';if(signin){var button=document.querySelector('[data-open-signin]');if(button)button.click();}if(form)form.requestSubmit();};}document.body.appendChild(script);});}
 function needed(){try{if(location.protocol==='file:'||location.search||(location.hash&&!/^#(features|networks|how|request)$/.test(location.hash))||sessionStorage.length)return true;for(var i=0;i<localStorage.length;i++)if(/^sb-.*-auth-token/.test(localStorage.key(i)))return true;return false;}catch(e){return true;}}
 if(needed()){start();return;}

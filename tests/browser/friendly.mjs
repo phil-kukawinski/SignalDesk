@@ -42,7 +42,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`(()=>{localStorage.setItem(tourSeenKey(),'done');localStorage.removeItem('signaldesk-whats-new-seen');showView('overview');renderCommandCenter();})()`); await wait(400);
   const news = await evaluate(`document.querySelector('#whats-new')?.innerText.replace(/\\s+/g,' ')||'(none)'`);
   log.push('whats new: ' + news.slice(0, 120));
-  await check(/New in SignalDesk/.test(news) && /Failed posts now say/.test(news), 'Home shows what’s new: ' + news);
+  await check(/New in SignalDesk/.test(news) && /Assign posts to teammates/.test(news), 'Home shows what’s new: ' + news);
   await evaluate(`document.querySelector('[data-whats-new-close]').click()`); await wait(200);
   await evaluate(`renderCommandCenter()`); await wait(300);
   await check(await evaluate(`!document.querySelector('#whats-new')`), 'Got it hides it for good');

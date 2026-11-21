@@ -1,11 +1,12 @@
 // A short "New in SignalDesk" note on Home, shown once per device after an update, so people notice
 // what changed without a tour. Bump WHATS_NEW.id when the list changes. Brand-new people skip it:
 // they get the welcome tour instead.
-const WHATS_NEW={id:'2026-11-17',items:[
-  'Failed posts now say what went wrong and how to fix it.',
-  'Type @ in a caption to tag accounts this client has used before.',
-  'The Publishing Studio opens on your last client and networks.',
-  'Emails are color coded: red needs fixing, yellow needs a look, green went well.'
+const WHATS_NEW={id:'2026-11-20',items:[
+  'Assign posts to teammates, @mention them in notes, and get a week-ahead email on Mondays.',
+  'The calendar can color by network, status, or content pillar, show gaps, and move several posts at once.',
+  'Clients can send you photos and see their results from their review link.',
+  'Analytics has What works and a Compare tab, and client reports download as a PDF.',
+  'Bluesky and Mastodon now post directly. Turn on two-factor sign-in under Settings → Security.'
 ]};
 const WHATS_NEW_KEY='signaldesk-whats-new-seen';
 function whatsNewSeen(){try{return localStorage.getItem(WHATS_NEW_KEY)===WHATS_NEW.id;}catch{return true;}}

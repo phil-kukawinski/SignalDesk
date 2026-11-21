@@ -1646,7 +1646,7 @@ assert.ok('pk-works' in r.payload.clients, JSON.stringify(r.payload.clients));
     assert.equal(checkMails[0].subject, 'SignalDesk weekly check: all good');
     assert.ok(/test password email/.test(checkMails[0].text));
     assert.equal(check.worst, 'ok');
-    assert.ok(/border-left:4px solid #16a34a/.test(checkMails[0].html) && />GOOD</.test(checkMails[0].html), 'working items are green');
+    assert.ok(/border-radius:4px;background:#16a34a/.test(checkMails[0].html) && />GOOD</.test(checkMails[0].html), 'working items are green');
     assert.ok(['Good', 'Attention', 'Warning', 'Emergency'].every((label) => checkMails[0].html.includes(`</span>${label}</span>`)), 'the legend lists every level');
     // Supabase failing to send, or its confirmation emails being off, is a problem. An existing test account isn't.
     recoverStatus = 500;

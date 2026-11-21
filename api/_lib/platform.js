@@ -113,6 +113,9 @@ async function recentErrors(hours = 24) {
 }
 
 // Emails platform owners about new server errors and widespread publishing failures, at most every 6 hours.
+// Plain names for where an error came from, in alert emails.
+const ERROR_SOURCES = { 'backup-check': 'Daily backup check', backup: 'Daily backup', browser: 'Someone’s browser', 'api/social': 'App server', 'api/review': 'Client review page', 'api/cron': 'Scheduled jobs', 'api/stripe': 'Payments (Stripe)', 'api/inbound': 'Email replies', 'api/oauth': 'Account connections' };
+
 async function alertPlatformAdmins({ lastAlert } = {}) {
   const admins = platformAdmins();
   if (!admins.length || !emailConfigured()) return { sent: 0, reason: !admins.length ? 'no platform admins' : 'email not configured' };
@@ -125,10 +128,10 @@ async function alertPlatformAdmins({ lastAlert } = {}) {
   // Widespread failures (several workspaces, or many posts) are an emergency; the rest is a warning.
   const status = failedWorkspaces >= 3 || failed.length >= 20 ? STATUS_LEVELS.emergency : STATUS_LEVELS.warning;
   const content = renderEmail({
-    eyebrow: 'SIGNALDESK · PLATFORM', status, heading: 'Something needs a look',
+    eyebrow: 'PLATFORM ALERT', status, heading: 'Something needs a look',
     intro: `${errors.length} new server error${errors.length === 1 ? '' : 's'}${failed.length ? ` and ${failed.length} failed post${failed.length === 1 ? '' : 's'} across ${failedWorkspaces} workspace${failedWorkspaces === 1 ? '' : 's'}` : ''} in the last few hours.`,
     sections: [
-      ...(errors.length ? [{ title: 'Server errors', items: errors.map((row) => ({ color: STATUS_LEVELS.warning.color, title: row.source, body: row.message, meta: `${row.count}× · last ${new Date(row.last_seen).toUTCString()}` })) }] : []),
+      ...(errors.length ? [{ title: 'Server errors', items: errors.map((row) => ({ color: STATUS_LEVELS.warning.color, title: ERROR_SOURCES[row.source] || row.source, body: row.message, meta: `${row.count === 1 ? 'Once' : `${row.count} times`}, last on ${new Date(row.last_seen).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` })) }] : []),
       ...(failed.length ? [{ title: 'Failed posts', items: Object.entries(failed.reduce((sum, job) => ({ ...sum, [`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)]: (sum[`${job.platform}: ${job.last_error || 'failed'}`.slice(0, 160)] || 0) + 1 }), {})).slice(0, 8).map(([title, count]) => ({ title, color: NETWORK_COLORS[title.split(':')[0]] || STATUS_LEVELS.warning.color, meta: `${count}×` })) }] : [])
     ],
     ctaLabel: 'Open Setup & health', footer: 'You get this because your email is in PLATFORM_ADMIN_EMAILS.'

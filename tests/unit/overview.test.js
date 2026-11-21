@@ -43,7 +43,7 @@ const { overviewData } = require(ROOT + '/api/_lib/publishing.js');
     const app = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../js/overview.js'), 'utf8');
     for (const [platform, color] of Object.entries(NETWORK_COLORS)) assert.ok(app.includes(`${platform}:'${color}'`), `${platform} has the same color in the app and in emails`);
     const email = renderEmail({ heading: 'H', intro: 'I', sections: [{ title: 'By network', items: [{ title: 'Facebook', color: '#2563eb', bar: 50 }, { title: 'Bad', color: 'red;x:y', bar: 500 }] }] });
-    assert.match(email.html, /border-left:4px solid #2563eb/);
+    assert.match(email.html, /border-radius:4px;background:#2563eb/);
     assert.match(email.html, /width:50%;background:#2563eb/);
     assert.ok(!email.html.includes('red;x:y') && email.html.includes('width:100%'), 'colors are checked and bars capped');
   }

@@ -154,7 +154,7 @@ const future = new Date(Date.now() + 86400000).toISOString();
   await notifyNow({ workspaceId: 'ws-1', audience: 'all', type: 'approval_requested', category: 'approvals', title: 'Please review' });
   const sentNow = calls.filter((c) => c.url === 'https://api.resend.com/emails');
   assert.deepEqual(sentNow.map((c) => [c.body.to[0], c.body.subject]), [['admin@x.com', 'Warning: Post failed']], 'only the urgent one, and not to someone with email off; the subject says how serious');
-  assert.match(sentNow[0].body.html, /border-top:6px solid #dc2626/); assert.match(sentNow[0].body.html, />WARNING</); assert.match(sentNow[0].body.text, /^\[WARNING\] Post failed/);
+  assert.match(sentNow[0].body.html, /border-radius:10px;background:#dc2626;color:#fff/); assert.match(sentNow[0].body.html, />WARNING</); assert.match(sentNow[0].body.text, /^\[WARNING\] Post failed/);
   {
     const stored = calls.filter((c) => c.url.endsWith('/rest/v1/notifications') && c.method === 'POST').map((c) => c.body[0].data.level);
     assert.deepEqual(stored, ['warning', 'attention'], 'each notification keeps its level for the wrap-ups');
@@ -175,7 +175,7 @@ const future = new Date(Date.now() + 86400000).toISOString();
     assert.equal((await processEmailDigests({ now: new Date('2026-10-16T13:00:00Z') })).sent, 1);
     const wrap = calls.filter((c) => c.url === 'https://api.resend.com/emails').pop().body;
     assert.match(wrap.text, /\[ATTENTION\] Acme asked for changes[\s\S]*\[GOOD\] Acme approved it[\s\S]*- A note on your post/);
-    assert.match(wrap.html, /border-left:4px solid #ca8a04/); assert.ok(wrap.html.includes('</span>Good</span>') && wrap.html.includes('</span>Attention</span>') && !wrap.html.includes('</span>Emergency</span>') && !wrap.html.includes('</span>Update</span>'), 'the legend lists only the levels shown');
+    assert.match(wrap.html, /border-radius:4px;background:#ca8a04/); assert.ok(wrap.html.includes('</span>Good</span>') && wrap.html.includes('</span>Attention</span>') && !wrap.html.includes('</span>Emergency</span>') && !wrap.html.includes('</span>Update</span>'), 'the legend lists only the levels shown');
     delete global.__digestRows;
   }
   console.log('feature tests passed');

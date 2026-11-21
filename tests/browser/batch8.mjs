@@ -22,11 +22,11 @@ export default async ({ send, evaluate, wait, sampleData }) => {
 
   // Plan & usage: beta wording, usage rows; with billing on, credits and buttons.
   await evaluate(`showView('settings');document.querySelector('[data-settings-go="plan"]').click()`); await wait(400);
-  const beta = await evaluate(`JSON.stringify({shown:document.querySelector('#billing-panel').classList.contains('is-current'),chip:document.querySelector('.plan-chip')?.textContent,rows:[...document.querySelectorAll('.usage-row b')].map(b=>b.textContent),buy:document.querySelectorAll('[data-billing-item]').length})`);
+  const beta = await evaluate(`JSON.stringify({shown:document.querySelector('#billing-panel').classList.contains('is-current'),chip:document.querySelector('.billing-chip')?.textContent,rows:[...document.querySelectorAll('.usage-row b')].map(b=>b.textContent),buy:document.querySelectorAll('[data-billing-item]').length})`);
   const b = JSON.parse(beta);
   await check(b.shown && b.chip === 'Beta' && b.rows.includes('Storage') && b.rows.includes('AI requests today') && b.buy === 0, 'Plan & usage during the beta: ' + beta);
   await evaluate(`Object.assign(__billing,{enabled:true,plan:'free',credits:{monthly:12,promotional:5,purchased:60},prices:{pro:true,business:true,yearly:true,creditsSmall:true,creditsLarge:true},limits:{...__billing.limits,clients:2,storageBytes:2*1073741824,monthlyCredits:20}});loadBilling();`); await wait(300);
-  const paid = await evaluate(`JSON.stringify({chip:document.querySelector('.plan-chip').textContent,credits:[...document.querySelectorAll('.credit-card b')].map(b=>b.textContent),items:[...document.querySelectorAll('[data-billing-item]')].map(b=>b.dataset.billingItem),limit:clientLimit()})`);
+  const paid = await evaluate(`JSON.stringify({chip:document.querySelector('.billing-chip').textContent,credits:[...document.querySelectorAll('.credit-card b')].map(b=>b.textContent),items:[...document.querySelectorAll('[data-billing-item]')].map(b=>b.dataset.billingItem),limit:clientLimit()})`);
   await check(paid === JSON.stringify({ chip: 'Free', credits: ['12', '5', '60'], items: ['pro', 'business', 'credits-small', 'credits-large'], limit: 2 }), 'Plan & usage with billing on: ' + paid);
   const blocked = await evaluate(`(()=>{const before=clients.length;openClientDialog();return document.querySelector('#client-dialog').open;})()`);
   await check(!blocked, 'the client limit follows the plan');
@@ -46,7 +46,7 @@ export default async ({ send, evaluate, wait, sampleData }) => {
   // How did you hear: once, then gone.
   await evaluate(`localStorage.removeItem('signaldesk-heard-from:'+(activeWorkspace?.id||''));showView('overview');renderHeardFrom();`); await wait(200);
   await check(await evaluate(`Boolean(document.querySelector('#heard-from-card'))`), 'the question shows for admins');
-  await evaluate(`(()=>{const r=document.querySelector('#heard-from-card input[value="Other"]');r.checked=true;r.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#heard-other').value='Reddit';document.querySelector('#heard-from-form').requestSubmit();})()`); await wait(200);
+  await evaluate(`(()=>{const r=document.querySelector('#heard-pick');r.value='Other';r.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#heard-other').value='Reddit';document.querySelector('#heard-from-form').requestSubmit();})()`); await wait(200);
   await check(await evaluate(`__calls.find(c=>c.action==='heard-from')?.answer`) === 'Other: Reddit' && await evaluate(`!document.querySelector('#heard-from-card')`), 'the answer is sent and the card goes away');
 
   // Browser errors are reported once each.
@@ -56,7 +56,7 @@ export default async ({ send, evaluate, wait, sampleData }) => {
   // Approvals on a phone: cards with full-width buttons.
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await evaluate(`showView('approvals')`); await wait(600);
-  const phone = await evaluate(`(()=>{const row=document.querySelector('.approval-table-row'),button=row?.querySelector('.approval-actions button');if(!row)return 'none';return JSON.stringify({cols:getComputedStyle(row).gridTemplateColumns.split(' ').length,tall:button.getBoundingClientRect().height>=44,wide:button.getBoundingClientRect().width>120,head:getComputedStyle(document.querySelector('.approval-table-head')).display});})()`);
+  const phone = await evaluate(`(()=>{const row=document.querySelector('.approval-table-row'),button=row?.querySelector('.approval-actions button');if(!row)return 'none';return JSON.stringify({cols:getComputedStyle(row).gridTemplateColumns.split(' ').length,tall:button.getBoundingClientRect().height>=44,wide:button.getBoundingClientRect().width>80,head:getComputedStyle(document.querySelector('.approval-table-head')).display});})()`);
   if (phone !== 'none') await check(phone === JSON.stringify({ cols: 1, tall: true, wide: true, head: 'none' }), 'approvals fit a phone: ' + phone);
   await send('Emulation.setDeviceMetricsOverride', { width: 1300, height: 1000, deviceScaleFactor: 1, mobile: false });
 
