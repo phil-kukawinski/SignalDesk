@@ -13,7 +13,7 @@ const VIDEO_PATTERN = /\.(mp4|mov|m4v|webm)(?:[?#]|$)/i;
 
 const DIRECT_PLATFORMS = {
   facebook: 'meta', facebook_story: 'meta', instagram: 'meta', instagram_story: 'meta', linkedin: 'linkedin', pinterest: 'pinterest',
-  twitter: 'x', youtube: 'google', tiktok: 'tiktok', threads: 'threads'
+  twitter: 'x', youtube: 'google', tiktok: 'tiktok', threads: 'threads', bluesky: 'bluesky', mastodon: 'mastodon'
 };
 // Instagram Stories post through the client's Instagram connection.
 const CONNECTION_PLATFORM = { instagram_story: 'instagram', facebook_story: 'facebook' };
@@ -44,6 +44,8 @@ function providerConfigured(provider) {
   if (provider === 'google') return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   if (provider === 'tiktok') return Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
   if (provider === 'threads') return Boolean(process.env.THREADS_APP_ID && process.env.THREADS_APP_SECRET);
+  // Bluesky and Mastodon connect with the account's own app password or token; nothing to set up.
+  if (provider === 'bluesky' || provider === 'mastodon') return true;
   return false;
 }
 
@@ -1006,7 +1008,8 @@ async function accountHistory(platform, connection, since) {
   return { posts: [], account: {} };
 }
 
-const PROVIDERS = { meta, linkedin, pinterest, ...require('./networks')({ request, tokenRequest, PublishError, httpKind, redirectUri, downloadMedia, mediaKind, expiresAt, firstLine }) };
+const { bluesky, mastodon } = require('./fediverse')({ request, PublishError, httpKind, downloadMedia, mediaKind, assertPublicUrl });
+const PROVIDERS = { meta, linkedin, pinterest, bluesky, mastodon, ...require('./networks')({ request, tokenRequest, PublishError, httpKind, redirectUri, downloadMedia, mediaKind, expiresAt, firstLine }) };
 const COMMENTABLE = new Set(['facebook', 'instagram', 'linkedin']);
 
 function adapterFor(platform) {

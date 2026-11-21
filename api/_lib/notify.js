@@ -362,6 +362,30 @@ function weekAheadSections({ posts, clients, member, now, timeZone }) {
   return sections;
 }
 
+// Three days before a Pro trial ends, admins get one email saying what changes on Free and how to keep Pro.
+async function processTrialReminders({ now = Date.now() } = {}) {
+  if (!emailConfigured() || !await require('./billing').billingEnabled()) return { sent: 0 };
+  const soon = new Date(now + 3 * 86400000).toISOString();
+  const rows = await databaseRequest(`workspaces?plan_status=eq.trialing&trial_ends_at=gt.${new Date(now).toISOString()}&trial_ends_at=lte.${soon}&select=id,name,trial_ends_at`).catch(() => []) || [];
+  const { lastWorkerRun, recordWorkerRun } = require('./publishing');
+  let sent = 0;
+  for (const row of rows) {
+    const key = `trial-reminder:${row.id}`;
+    if (await lastWorkerRun(key)) continue;
+    const admins = await databaseRequest(`workspace_members?workspace_id=eq.${row.id}&role=eq.admin&select=email`) || [];
+    const ends = new Date(row.trial_ends_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const content = renderEmail({ heading: `Your Pro trial ends ${ends}`, intro: 'Everything you scheduled keeps publishing either way. On the Free plan, these change:', sections: [{ title: 'On Free', items: [
+      { title: 'Up to 2 clients', body: 'Clients beyond that stay viewable and exportable, but can’t get new posts until you choose which stay active.' },
+      { title: '20 AI credits a month', body: 'Pro has 100: about 10 trend scans, or many more captions and rewrites.' },
+      { title: 'No client approval links or client-ready reports', body: 'Links already shared stop accepting new approvals.' },
+      { title: '90 days of analytics history', body: 'Pro keeps a year.' }] }],
+      ctaLabel: 'Keep Pro', ctaUrl: `${appUrl().replace(/\/+$/, '')}/#settings`, footer: 'You get this because you’re an admin of this SignalDesk workspace.' });
+    for (const admin of admins) if (admin.email && await sendEmail(admin.email, `Your SignalDesk Pro trial ends ${ends}`, content).catch(() => false)) sent += 1;
+    await recordWorkerRun(key, { sent: admins.length });
+  }
+  return { sent };
+}
+
 const pad = (value) => String(value).padStart(2, '0');
 
 function reportEmails(value) {
@@ -428,4 +452,4 @@ async function processClientReports({ encryptionKey, now = new Date(), limit = 2
   return { sent, configured: true };
 }
 
-module.exports = { NETWORK_COLORS, STATUS_LEVELS, LEVEL_ORDER, levelFor, levelLegend, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, processWeekAhead, weekAheadSections, renderEmail, processClientReports, reportEmails };
+module.exports = { NETWORK_COLORS, STATUS_LEVELS, LEVEL_ORDER, levelFor, levelLegend, URGENT_TYPES, CATEGORIES, DEFAULT_PREFERENCES, digestSchedule, emailConfigured, sendEmail, appUrl, notify, processEmailDigests, processWeekAhead, processTrialReminders, weekAheadSections, renderEmail, processClientReports, reportEmails };

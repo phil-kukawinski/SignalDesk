@@ -3,12 +3,12 @@ const { send, getConfig, getBearerToken, processDueComments, runAutopilot } = re
 const { recordAppError, alertPlatformAdmins } = require('./_lib/platform');
 const { syncDueConnections } = require('./_lib/sync');
 const { processPublishQueue, maintainConnections, warnPostsAtRisk, refreshRecentMetrics, recordWorkerRun, lastWorkerRun, checkWorkerHealth, recycleEvergreen } = require('./_lib/publishing');
-const { processEmailDigests, processWeekAhead, processClientReports } = require('./_lib/notify');
+const { processEmailDigests, processWeekAhead, processTrialReminders, processClientReports } = require('./_lib/notify');
 const { runWeeklyReports } = require('./_lib/reports');
 const { cleanupMedia, syncMediaFiles } = require('./_lib/media');
 const { processPlanningReminders, processPlanningNotes } = require('./_lib/planning');
 const { maybeRunWeeklyCheck } = require('./_lib/weekly-check');
-const { maybeRunBackup } = require('./_lib/backup');
+const { maybeRunBackup, verifyLatestBackup } = require('./_lib/backup');
 
 const DAY_MS = 86400000;
 
@@ -49,6 +49,9 @@ module.exports = async function handler(req, res) {
     const reports = await runWeeklyReports({ encryptionKey, limit: 3 });
     const digests = await processEmailDigests({ limit: 40 });
     const weekAhead = await processWeekAhead({ limit: 40 }).catch((error) => ({ error: error.message }));
+    // Plans and credits (only does anything once billing is on): this month's credits, and trial reminders.
+    const credits = await require('./_lib/billing').grantMonthlyCredits().catch((error) => ({ error: error.message }));
+    const trials = await processTrialReminders().catch((error) => ({ error: error.message }));
     const clientReports = await processClientReports({ encryptionKey }).catch((error) => ({ error: error.message }));
     const reviewReminders = await require('./_lib/reminders').processReviewReminders({ encryptionKey }).catch((error) => ({ error: error.message }));
     const planning = await processPlanningReminders().catch((error) => ({ error: error.message }));
@@ -59,6 +62,13 @@ module.exports = async function handler(req, res) {
       await recordAppError('backup', error);
       return { error: error.message };
     }) : { skipped: true };
+    // Once a day, check the newest copy opens and is complete; a problem emails platform admins.
+    let backupCheck = { skipped: true };
+    const lastCheck = await lastWorkerRun('backup-check');
+    if ((!lastCheck || Date.now() - Date.parse(lastCheck) > DAY_MS) && Date.now() - started < 200000) {
+      backupCheck = await verifyLatestBackup().catch(async (error) => { await recordAppError('backup-check', error); return { error: error.message }; });
+      await recordWorkerRun('backup-check', backupCheck).catch(() => {});
+    }
     let media = null;
     const lastCleanup = await lastWorkerRun('media-cleanup');
     if (!lastCleanup || Date.now() - Date.parse(lastCleanup) > DAY_MS) {
@@ -75,7 +85,7 @@ module.exports = async function handler(req, res) {
     const platformAlert = await alertPlatformAdmins({ lastAlert: await lastWorkerRun('platform-alert') }).catch((error) => ({ error: error.message }));
     if (platformAlert.sent) await recordWorkerRun('platform-alert', platformAlert);
     await recordWorkerRun('worker', { feeds: feeds.length });
-    return send(res, 200, { weekAhead, weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, backup, media, health });
+    return send(res, 200, { weekAhead, credits, trials, backupCheck, weeklyCheck, publishing, comments, connections, postsAtRisk, metrics, accountSync, evergreen, feeds: feeds.length, created: feeds.reduce((sum, feed) => sum + feed.created, 0), reports, digests, clientReports, reviewReminders, planning, planningNotes, backup, media, health });
   } catch (error) {
     console.error('Scheduled run failed:', error.message);
     await recordAppError(`api/cron${only ? `?only=${only}` : ''}`, error);

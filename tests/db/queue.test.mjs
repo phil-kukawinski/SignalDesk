@@ -92,7 +92,7 @@ const body = (c) => (c.body ? (typeof c.body === 'string' ? (c.body.startsWith('
 // --- Accounts before connecting ---
 let r = await call({ action: 'accounts', clientId: 'pk-works' });
 assert.equal(r.status, 200, JSON.stringify(r.payload));
-assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, linkedinPages: false, pinterest: true, x: false, youtube: false, tiktok: false, threads: false, ayrshare: false, stock: false });
+assert.deepEqual(r.payload.integrations, { meta: true, linkedin: true, linkedinPages: false, pinterest: true, x: false, youtube: false, tiktok: false, threads: false, bluesky: true, mastodon: true, ayrshare: false, stock: false });
 assert.ok(r.payload.accounts.every((a) => !a.linked));
 assert.equal(r.payload.accounts.find((a) => a.platform === 'tiktok').available, false);
 r = await call({ action: 'connect', clientId: 'pk-works' });
@@ -622,6 +622,73 @@ assert.equal((await q(`select options->>'pillar' p from scheduled_posts where id
   assert.equal(r.status, 404);
   r = await call({ action: 'campaign-questions', clientId: 'pk-works', networks: ['facebook'], sourceUrl: 'http://127.0.0.1/private' });
   assert.equal(r.status, 400, 'links to private addresses are refused: ' + JSON.stringify(r.payload));
+}
+
+// --- Plans and credits (api/_lib/billing.js), off until app_settings billing_enabled is true ---
+{
+  const billing = require(`${ROOT}/api/_lib/billing.js`);
+  billing.resetBillingCache();
+  r = await call({ action: 'billing' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.equal(r.payload.enabled, false);
+  assert.equal(r.payload.plan, 'beta');
+  assert.equal((await q(`select public.workspace_client_limit('${WS}') n`))[0].n, 50, 'beta limit while billing is off');
+  let ran = 0;
+  assert.equal(await billing.withCredits(WS, 'campaign-plan', async () => { ran += 1; return 'ok'; }), 'ok', 'no credits needed while off');
+
+  await db.exec(`insert into app_settings (key, value) values ('billing_enabled', 'true'::jsonb) on conflict (key) do update set value = excluded.value`);
+  await db.exec(`update workspaces set plan = 'free', plan_status = null where id = '${WS}'`);
+  billing.resetBillingCache();
+  assert.equal((await q(`select public.workspace_client_limit('${WS}') n`))[0].n, 2, 'Free allows 2 clients');
+  assert.deepEqual(await billing.grantMonthlyCredits(), { granted: 1, enabled: true });
+  assert.deepEqual(await billing.grantMonthlyCredits(), { granted: 1, enabled: true }, 'a second run in the month changes nothing');
+  assert.deepEqual(await billing.creditBalance(WS), { monthly: 20, promotional: 0, purchased: 0 });
+  await db.exec(`insert into credit_ledger (workspace_id, kind, amount, reason, key) values ('${WS}', 'promotional', 5, 'Welcome', 'promo:test')`);
+  await billing.withCredits(WS, 'trends-refresh', async () => 'scan');
+  await billing.withCredits(WS, 'trends-refresh', async () => 'scan');
+  assert.deepEqual(await billing.creditBalance(WS), { monthly: 0, promotional: 5, purchased: 0 }, 'monthly credits go first');
+  await assert.rejects(billing.withCredits(WS, 'trends-refresh', async () => 'scan'), /out\./, 'not enough credits');
+  await assert.rejects(billing.withCredits(WS, 'campaign-plan', async () => { throw new Error('AI failed'); }), /AI failed/);
+  assert.deepEqual(await billing.creditBalance(WS), { monthly: 0, promotional: 5, purchased: 0 }, 'a failed request gives its credits back');
+  r = await call({ action: 'billing' });
+  assert.equal(r.payload.plan, 'free');
+  assert.deepEqual(r.payload.credits, { monthly: 0, promotional: 5, purchased: 0 });
+  assert.equal(r.payload.limits.clients, 2);
+
+  // Stripe events: a credit pack purchase, then a subscription to Pro (and a duplicate delivery).
+  process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro';
+  let out = await billing.handleStripeEvent({ id: 'evt_1', type: 'checkout.session.completed', data: { object: { id: 'cs_1', mode: 'payment', payment_status: 'paid', metadata: { workspace_id: WS, item: 'credits-small' } } } });
+  assert.equal(out.credits, 60);
+  out = await billing.handleStripeEvent({ id: 'evt_1', type: 'checkout.session.completed', data: { object: {} } });
+  assert.equal(out.duplicate, true, 'each event once');
+  assert.equal((await billing.creditBalance(WS)).purchased, 60);
+  out = await billing.handleStripeEvent({ id: 'evt_2', type: 'customer.subscription.updated', data: { object: { id: 'sub_1', status: 'active', current_period_end: 1893456000, metadata: { workspace_id: WS }, items: { data: [{ price: { id: 'price_pro' }, quantity: 1 }] } } } });
+  assert.equal(out.plan, 'pro');
+  assert.equal((await q(`select plan from workspaces where id='${WS}'`))[0].plan, 'pro');
+  assert.equal((await q(`select public.workspace_client_limit('${WS}') n`))[0].n, 5);
+  await billing.handleStripeEvent({ id: 'evt_3', type: 'customer.subscription.deleted', data: { object: { id: 'sub_1', status: 'canceled', metadata: { workspace_id: WS }, items: { data: [] } } } });
+  assert.equal((await q(`select plan from workspaces where id='${WS}'`))[0].plan, 'free', 'canceling returns to Free');
+
+  // New workspaces start a 14-day Pro trial once billing is on.
+  await db.exec(`insert into workspaces (id, name) values ('99999999-9999-9999-9999-999999999999', 'Trial test')`);
+  const trial = (await q(`select plan, plan_status, trial_ends_at > now() + interval '13 days' as long from workspaces where id='99999999-9999-9999-9999-999999999999'`))[0];
+  assert.deepEqual([trial.plan, trial.plan_status, trial.long], ['pro', 'trialing', true]);
+  await db.exec(`delete from workspaces where id='99999999-9999-9999-9999-999999999999'`);
+
+  await db.exec(`update app_settings set value = 'false'::jsonb where key = 'billing_enabled'`);
+  await db.exec(`update workspaces set plan = 'beta', plan_status = null where id = '${WS}'`);
+  billing.resetBillingCache();
+
+  r = await call({ action: 'heard-from', answer: '  A friend  ' });
+  assert.equal((await q(`select heard_from from workspaces where id='${WS}'`))[0].heard_from, 'A friend');
+  r = await call({ action: 'report-error', message: 'TypeError: x is undefined at https://site.example/a.js for me@mail.com', where: 'https://site.example/js/app.min.js:1' });
+  assert.equal(r.status, 200);
+  const logged = (await q(`select message from app_errors where source='browser' order by id desc limit 1`))[0].message;
+  assert.ok(logged.includes('[link]') && logged.includes('[email]') && !logged.includes('me@mail.com'), logged);
+  r = await call({ action: 'connect-credentials', clientId: 'pk-works', platform: 'bluesky', handle: 'me', password: 'nope' });
+  assert.equal(r.status, 400, 'bad Bluesky details are refused before any network call');
+  r = await call({ action: 'connect-credentials', clientId: 'pk-works', platform: 'myspace' });
+  assert.equal(r.status, 400);
 }
 
 // --- Metrics refresh for recent direct posts ---

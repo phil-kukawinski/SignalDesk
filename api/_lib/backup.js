@@ -26,11 +26,11 @@ const TABLES = {
   post_history: 'id', push_subscriptions: 'endpoint', bio_pages: 'slug', short_links: 'code', link_click_days: 'code,day', network_posts: 'id',
   account_stats: 'connection_id,day', post_metric_days: 'workspace_id,platform,external_id,day', planning_notes: 'id', comment_states: 'workspace_id,job_id,comment_id',
   invite_requests: 'id', data_deletion_requests: 'code', worker_runs: 'name', beta_invites: 'code', beta_redemptions: 'code,user_id', app_settings: 'key',
-  app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id', client_uploads: 'id', email_reply_codes: 'code'
+  app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id', client_uploads: 'id', email_reply_codes: 'code', credit_ledger: 'id', stripe_events: 'id'
 };
 const SKIPPED = ['oauth_sessions'];
 // Tables whose id the database numbers itself. A restore keeps the old numbers and moves the counter past them.
-const NUMBERED = ['publish_attempts', 'post_history', 'app_errors', 'ai_usage', 'activity_log'];
+const NUMBERED = ['publish_attempts', 'post_history', 'app_errors', 'ai_usage', 'activity_log', 'credit_ledger'];
 
 function serviceHeaders(extra = {}) {
   return { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, ...extra };
@@ -178,10 +178,28 @@ async function maybeRunBackup({ now = new Date() } = {}) {
 }
 
 // When the last copy was made, and what it held.
+// Once a day: is the newest daily copy recent, does it open, and does it hold every table? A problem goes to
+// the platform error list, which emails platform admins (alertPlatformAdmins).
+async function verifyLatestBackup({ now = Date.now() } = {}) {
+  const [latest] = await listCopies('daily');
+  const problem = (message) => { const error = new Error(message); error.backupCheck = true; throw error; };
+  if (!latest) problem('There’s no daily database copy at all.');
+  const age = now - Date.parse(latest.createdAt || `${latest.day}T00:00:00Z`);
+  if (age > 36 * 3600000) problem(`The newest database copy is ${Math.round(age / 3600000)} hours old.`);
+  const response = await fetch(`${process.env.SUPABASE_URL}/storage/v1/object/${BUCKET}/${latest.path}`, { headers: serviceHeaders({}) });
+  if (!response.ok) problem(`The newest copy (${latest.path}) couldn’t be downloaded: HTTP ${response.status}.`);
+  let data;
+  try { data = JSON.parse(require('node:zlib').gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8')); } catch { problem(`The newest copy (${latest.path}) doesn’t open.`); }
+  const missing = Object.keys(TABLES).filter((table) => !Array.isArray(data?.tables?.[table]));
+  if (missing.length) problem(`The newest copy is missing ${missing.length} table${missing.length === 1 ? '' : 's'}: ${missing.slice(0, 5).join(', ')}.`);
+  if (!data.tables.workspaces.length) problem('The newest copy has no workspaces in it.');
+  return { path: latest.path, tables: Object.keys(data.tables).length, rows: Object.values(data.tables).reduce((sum, rows) => sum + rows.length, 0) };
+}
+
 async function lastBackup() {
   const rows = await databaseRequest('worker_runs?name=in.(backup,backup-try)&select=name,last_run_at,last_result').catch(() => []) || [];
   const done = rows.find((row) => row.name === 'backup'), tried = rows.find((row) => row.name === 'backup-try');
   return { at: done?.last_run_at || null, ...(done?.last_result || {}), error: tried?.last_result?.error && (!done || Date.parse(tried.last_run_at) > Date.parse(done.last_run_at)) ? tried.last_result.error : null };
 }
 
-module.exports = { restoreSql, NUMBERED, maybeRunBackup, lastBackup, BUCKET, KEEP_DAILY, KEEP_WEEKLY, TABLES, SKIPPED, exportDatabase, runBackup, listBackups, backupDownloadUrl };
+module.exports = { verifyLatestBackup, restoreSql, NUMBERED, maybeRunBackup, lastBackup, BUCKET, KEEP_DAILY, KEEP_WEEKLY, TABLES, SKIPPED, exportDatabase, runBackup, listBackups, backupDownloadUrl };

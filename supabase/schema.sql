@@ -1330,3 +1330,121 @@ create table if not exists public.email_reply_codes (
   created_at timestamptz not null default now()
 );
 alter table public.email_reply_codes enable row level security;
+
+-- November 2026, roadmap batch 8: Bluesky and Mastodon connect directly.
+alter table public.social_connections drop constraint if exists social_connections_platform_check;
+alter table public.social_connections add constraint social_connections_platform_check check (platform in ('facebook', 'instagram', 'linkedin', 'pinterest', 'twitter', 'youtube', 'tiktok', 'threads', 'bluesky', 'mastodon'));
+
+-- November 2026, roadmap batch 9: plans and credits (docs/pricing-plan.md). Nothing changes while
+-- billing is off (app_settings billing_enabled is not true and BILLING_ENABLED isn't set): every
+-- workspace keeps the beta allowances. Existing and new workspaces start on 'beta', a permanent comp.
+alter table public.workspaces add column if not exists plan text not null default 'beta';
+alter table public.workspaces drop constraint if exists workspaces_plan_check;
+alter table public.workspaces add constraint workspaces_plan_check check (plan in ('beta', 'free', 'pro', 'business', 'internal'));
+alter table public.workspaces add column if not exists plan_status text;
+alter table public.workspaces add column if not exists current_period_end timestamptz;
+alter table public.workspaces add column if not exists trial_ends_at timestamptz;
+alter table public.workspaces add column if not exists stripe_customer_id text;
+alter table public.workspaces add column if not exists stripe_subscription_id text;
+alter table public.workspaces add column if not exists extra_clients integer not null default 0;
+alter table public.workspaces add column if not exists heard_from text;
+
+-- Every grant, purchase, spend, and refund is one row with a unique key, so a retry can't count twice.
+-- Kinds are spent in this order: monthly, promotional, purchased.
+create table if not exists public.credit_ledger (
+  id bigint generated always as identity primary key,
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  kind text not null check (kind in ('monthly', 'promotional', 'purchased')),
+  amount integer not null,
+  reason text not null default '',
+  key text not null unique,
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists credit_ledger_workspace_idx on public.credit_ledger (workspace_id, kind);
+alter table public.credit_ledger enable row level security;
+drop policy if exists "Members read their credits" on public.credit_ledger;
+create policy "Members read their credits" on public.credit_ledger for select to authenticated using (public.workspace_role(workspace_id) is not null);
+
+create table if not exists public.stripe_events (
+  id text primary key,
+  type text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table public.stripe_events enable row level security;
+
+-- Balance per kind. Monthly credits stop counting when their month ends.
+create or replace function public.credit_balance(p_workspace uuid)
+returns table (monthly integer, promotional integer, purchased integer)
+language sql stable security definer set search_path = public
+as $$
+  select
+    coalesce(sum(amount) filter (where kind = 'monthly' and (expires_at is null or expires_at > now())), 0)::integer,
+    coalesce(sum(amount) filter (where kind = 'promotional'), 0)::integer,
+    coalesce(sum(amount) filter (where kind = 'purchased' and (expires_at is null or expires_at > now())), 0)::integer
+  from public.credit_ledger where workspace_id = p_workspace
+$$;
+revoke all on function public.credit_balance(uuid) from public, anon;
+
+-- Spends credits in one step (monthly, then promotional, then purchased) or not at all. The same key
+-- twice spends once. Spends of monthly credits carry the grant's expiry so they leave the balance with it.
+create or replace function public.spend_credits(p_workspace uuid, p_amount integer, p_reason text, p_key text)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  left_to_spend integer := p_amount;
+  m integer; pr integer; pu integer; take integer; month_end timestamptz;
+begin
+  if p_amount is null or p_amount < 1 then return true; end if;
+  if exists (select 1 from public.credit_ledger where key like p_key || ':%') then return true; end if;
+  perform 1 from public.workspaces where id = p_workspace for update;
+  select monthly, promotional, purchased into m, pr, pu from public.credit_balance(p_workspace);
+  if m + pr + pu < p_amount then return false; end if;
+  select max(expires_at) into month_end from public.credit_ledger where workspace_id = p_workspace and kind = 'monthly' and amount > 0 and (expires_at is null or expires_at > now());
+  take := least(m, left_to_spend);
+  if take > 0 then insert into public.credit_ledger (workspace_id, kind, amount, reason, key, expires_at) values (p_workspace, 'monthly', -take, p_reason, p_key || ':monthly', month_end); left_to_spend := left_to_spend - take; end if;
+  take := least(pr, left_to_spend);
+  if take > 0 then insert into public.credit_ledger (workspace_id, kind, amount, reason, key) values (p_workspace, 'promotional', -take, p_reason, p_key || ':promotional'); left_to_spend := left_to_spend - take; end if;
+  take := least(pu, left_to_spend);
+  if take > 0 then insert into public.credit_ledger (workspace_id, kind, amount, reason, key) values (p_workspace, 'purchased', -take, p_reason, p_key || ':purchased'); end if;
+  return true;
+end;
+$$;
+revoke all on function public.spend_credits(uuid, integer, text, text) from public, anon, authenticated;
+
+-- Gives back what a spend took, to the same kinds, when the AI request it paid for fails.
+create or replace function public.refund_credits(p_key text)
+returns void
+language sql security definer set search_path = public
+as $$
+  insert into public.credit_ledger (workspace_id, kind, amount, reason, key, expires_at)
+  select workspace_id, kind, -amount, 'Refund: ' || reason, key || ':refund', expires_at from public.credit_ledger
+  where key like p_key || ':%' and key not like '%:refund' and amount < 0
+  on conflict (key) do nothing
+$$;
+revoke all on function public.refund_credits(text) from public, anon, authenticated;
+
+-- The client limit follows the plan once billing is on; until then it stays 50.
+create or replace function public.workspace_client_limit(p_workspace uuid)
+returns integer
+language sql stable security definer set search_path = public
+as $$
+  select case when coalesce((select value #>> '{}' from public.app_settings where key = 'billing_enabled'), 'false') <> 'true' then 50
+    else coalesce((select case plan when 'free' then 2 when 'pro' then 5 when 'business' then 15 + greatest(extra_clients, 0) when 'internal' then 1000 else 50 end from public.workspaces where id = p_workspace), 50) end
+$$;
+
+-- With billing on, a new workspace starts a 14-day Pro trial (no card).
+create or replace function public.start_trial()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if coalesce((select value #>> '{}' from public.app_settings where key = 'billing_enabled'), 'false') = 'true' and new.plan = 'beta' then
+    new.plan := 'pro'; new.plan_status := 'trialing'; new.trial_ends_at := now() + interval '14 days';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists start_trial on public.workspaces;
+create trigger start_trial before insert on public.workspaces for each row execute function public.start_trial();

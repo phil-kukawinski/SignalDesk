@@ -4,7 +4,7 @@ const net = require('node:net');
 
 const PLATFORM_KEYS = new Set([
   'bluesky', 'facebook', 'facebook_story', 'gmb', 'instagram', 'instagram_story', 'linkedin', 'pinterest', 'reddit',
-  'snapchat', 'telegram', 'threads', 'tiktok', 'twitter', 'whatsapp', 'youtube'
+  'snapchat', 'telegram', 'threads', 'tiktok', 'twitter', 'whatsapp', 'youtube', 'mastodon'
 ]);
 const MESSAGE_PLATFORMS = new Set(['facebook', 'instagram', 'twitter', 'whatsapp']);
 const MEDIA_REQUIRED_PLATFORMS = new Set(['facebook_story', 'instagram', 'instagram_story', 'pinterest', 'tiktok', 'youtube']);

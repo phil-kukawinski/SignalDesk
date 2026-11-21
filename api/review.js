@@ -103,7 +103,7 @@ module.exports = async function handler(req, res) {
       // Clients see their own comments, never the team's internal notes.
       const notes = rows.length ? await listNotes(link.workspace_id, rows.map((row) => row.id), { clientOnly: true }) : [];
       return send(res, 200, {
-        client: { name: client.name, initials: client.initials, color: client.brand?.colors?.[0] || client.text || '#5b8db8', logo: /^https:\/\//.test(client.brand?.logo || '') ? client.brand.logo : '' },
+        client: { name: client.name, language: client.language === 'es' ? 'es' : 'en', initials: client.initials, color: client.brand?.colors?.[0] || client.text || '#5b8db8', logo: /^https:\/\//.test(client.brand?.logo || '') ? client.brand.logo : '' },
         workspace: state.settings?.name || 'SignalDesk',
         expiresAt: link.expires_at,
         campaign,

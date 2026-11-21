@@ -180,6 +180,7 @@
     try {
       const data = await api({ action: 'load', campaign });
       posts = data.posts;
+      if (data.client.language === 'es' && window.reviewLanguage) window.reviewLanguage('es');
       document.title = `${data.client.name} · Content review`;
       $('#review-client').textContent = data.client.name;
       $('#review-workspace').textContent = `Content review from ${data.workspace}`;

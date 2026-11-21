@@ -39,7 +39,7 @@ function serviceProviders() {
 }
 
 function layout({ title, active, body }) {
-  const nav = [['privacy', 'Privacy'], ['terms', 'Terms'], ['data-deletion', 'Data deletion'], ['backups', 'Backups']]
+  const nav = [['help', 'Help'], ['status', 'Status'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['data-deletion', 'Data deletion'], ['backups', 'Backups']]
     .map(([slug, label]) => `<a href="/${slug}"${slug === active ? ' aria-current="page"' : ''}>${label}</a>`).join('');
   return `<!doctype html>
 <html lang="en">
@@ -289,6 +289,44 @@ ${status}
 }
 
 // /backups: what SignalDesk copies for you, how to keep a copy of your own, and how to get things back.
+// Public status: is the publisher running, and how each network did in the last 24 hours. Counts only,
+// never which workspaces or posts.
+function statusPage({ lastRun, networks }) {
+  const minutes = lastRun ? Math.round((Date.now() - Date.parse(lastRun)) / 60000) : null;
+  const running = minutes !== null && minutes <= 10;
+  const label = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest', threads: 'Threads', twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', bluesky: 'Bluesky', mastodon: 'Mastodon' };
+  const rows = Object.entries(networks).sort((a, b) => (b[1].published + b[1].failed) - (a[1].published + a[1].failed)).map(([platform, n]) => {
+    const total = n.published + n.failed, rate = total ? n.failed / total : 0;
+    const state = n.failed >= 3 && rate >= 0.25 ? ['Problems', 'bad'] : n.failed >= 2 && rate >= 0.1 ? ['Some failures', 'warn'] : ['Working', 'ok'];
+    return `<tr><td>${escapeHtml(label[platform] || platform)}</td><td><span class="dot ${state[1]}"></span>${state[0]}</td><td class="num">${n.published}</td><td class="num">${n.failed}</td></tr>`;
+  }).join('');
+  const overall = !running ? ['Publishing is delayed', 'bad', minutes === null ? 'The publisher hasn’t checked in yet.' : `The publisher last ran ${minutes} minutes ago. Posts go out when it’s back.`] : ['Publishing is running', 'ok', `The publisher checked in ${minutes <= 1 ? 'in the last minute' : `${minutes} minutes ago`}.`];
+  return layout({ title: 'Status', active: 'status', body: `
+<style>.status-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--card);margin:18px 0}.status-head b{font-size:20px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:1px}.dot.ok{background:#16a34a}.dot.warn{background:#ca8a04}.dot.bad{background:#dc2626}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{font-size:13px;color:var(--muted)}td.num,th.num{text-align:right}</style>
+<h1>SignalDesk status</h1>
+<div class="status-head"><span class="dot ${overall[1]}"></span><div><b>${overall[0]}</b><br><span class="updated">${escapeHtml(overall[2])}</span></div></div>
+<h2>The last 24 hours, by network</h2>
+${rows ? `<table><tr><th>Network</th><th>Status</th><th class="num">Published</th><th class="num">Failed</th></tr>${rows}</table>` : '<p>No posts went out in the last 24 hours.</p>'}
+<p class="updated">A failure can be one account’s problem (an expired sign-in, a file the network rejected), not the network’s. Checked ${new Date().toUTCString()}.</p>` });
+}
+
+// Help: short answers to what people ask most, linked from the app's footer and menus.
+function helpPage() {
+  const article = (id, title, body) => `<section id="${id}"><h2>${title}</h2>${body}</section>`;
+  return layout({ title: 'Help', active: 'help', body: `
+<h1>Help</h1>
+<p class="updated">Short answers to common questions. Something missing? Use Send feedback in the app.</p>
+<p>${[['start', 'Getting started'], ['connect', 'Connecting accounts'], ['schedule', 'Scheduling and approvals'], ['clients', 'Working with clients'], ['reports', 'Results and reports'], ['ai', 'AI help and credits'], ['failed', 'When a post fails'], ['security', 'Two-factor sign-in']].map(([id, label]) => `<a href="#${id}">${label}</a>`).join(' · ')}</p>
+${article('start', 'Getting started', '<p>Add a client, fill in their brand kit (voice, hashtags, words to avoid), connect their accounts, and schedule a first post in the Publishing Studio. The Getting started list on the Command Center walks through it.</p>')}
+${article('connect', 'Connecting accounts', '<p>Open Social Accounts, pick the client, and choose Connect on a network. Facebook, Instagram, LinkedIn, Pinterest, Threads, X, YouTube, and TikTok use their own sign-in pages.</p><p><b>Bluesky:</b> make an app password in Bluesky (Settings → Privacy and security → App passwords), then enter your handle and that password. <b>Mastodon:</b> on your server, open Preferences → Development → New application, keep read and write, save, and paste “Your access token”.</p><p>A network that isn’t connected can still get a reminder at the scheduled time, with the caption ready to paste.</p>')}
+${article('schedule', 'Scheduling and approvals', '<p>Write once, adjust per network, pick a time (or Add to queue), and schedule. Posts from team members with the User role wait in Approvals for an admin. Repeating posts, A/B caption tests, and Story series are under More options and the Story preview.</p>')}
+${article('clients', 'Working with clients', '<p>Clients → Review link gives a client a private page to approve posts, see results, send you photos and videos, and add the schedule to their calendar. No account needed. Monthly report emails go out on the day set in their brand kit.</p>')}
+${article('reports', 'Results and reports', '<p>Analytics shows every post on connected accounts, including ones made outside SignalDesk. Compare two time frames or campaigns, see what works, and download a client report as a PDF.</p>')}
+${article('ai', 'AI help and credits', '<p>AI drafts captions, plans campaigns, scans trends, suggests replies, and describes images. Some features cost credits on paid plans: a trend scan is 10, a quick trend check 4, a campaign plan 2, and a caption draft or rewrite 1. If an AI request fails, its credits come back. Settings → Plan &amp; usage shows your balance.</p>')}
+${article('failed', 'When a post fails', '<p>The post’s details say why and what to do. Most failures are an expired sign-in (reconnect the account) or a file the network won’t take (the checklist in the Studio catches most of these before you schedule). Temporary problems retry on their own. Check this site’s Status page if several networks fail at once.</p>')}
+${article('security', 'Two-factor sign-in', '<p>Settings → Security → Turn on two-factor sign-in, then scan the code with an authenticator app (Google Authenticator, 1Password, Authy). After that, signing in asks for a 6-digit code.</p>')}` });
+}
+
 function backupsPage() {
   const s = settings();
   return layout({
@@ -340,4 +378,4 @@ function backupsPage() {
   });
 }
 
-module.exports = { privacyPage, termsPage, deletionPage, backupsPage, escapeHtml };
+module.exports = { privacyPage, termsPage, deletionPage, backupsPage, statusPage, helpPage, escapeHtml };

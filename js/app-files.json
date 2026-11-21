@@ -52,5 +52,6 @@
   "js/inbox.js",
   "js/tour.js",
   "js/auth.js",
+  "js/billing.js",
   "js/app.js"
 ]

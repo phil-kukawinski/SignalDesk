@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const assert = require('node:assert');
 const acorn = require('acorn');
 const files = JSON.parse(fs.readFileSync(`${ROOT}/js/app-files.json`, 'utf8'));
-const standalone = new Set(['config.js', 'review.js', 'bio-page.js', 'app.min.js']);
+const standalone = new Set(['config.js', 'review.js', 'review-es.js', 'bio-page.js', 'app.min.js']);
 const onDisk = fs.readdirSync(`${ROOT}/js`).filter((name) => name.endsWith('.js') && !standalone.has(name));
 assert.deepEqual(onDisk.filter((name) => !files.includes(`js/${name}`)), [], 'every app file is in js/app-files.json');
 assert.equal(new Set(files).size, files.length, 'no file is listed twice');

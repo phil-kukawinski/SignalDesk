@@ -32,7 +32,7 @@ const ctx = (extra) => { const stage = {}; return { stage, saveStage: async (pat
   // --- Every network's sign-in page is on the browser's allowed list (js/publishing.js)
   const hosts = JSON.parse(require('node:fs').readFileSync(ROOT + '/js/publishing.js', 'utf8').match(/const OAUTH_HOSTS=(\[[^\]]*\])/)[1].replace(/'/g, '"'));
   for (const [name, adapter] of Object.entries(PROVIDERS)) {
-    if (!providerConfigured(name)) continue;
+    if (!providerConfigured(name) || !adapter.authorizeUrl) continue; // Bluesky and Mastodon have no sign-in page
     const signIn = new URL(adapter.authorizeUrl('state-' + 'b'.repeat(40)));
     assert.ok(hosts.includes(signIn.hostname), `${name} signs in at ${signIn.hostname}, which js/publishing.js would block`);
   }

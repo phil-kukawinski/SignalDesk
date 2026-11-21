@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { send, getConfig, databaseRequest } = require('./_lib/core');
-const { privacyPage, termsPage, deletionPage, backupsPage } = require('./_lib/legal');
+const { privacyPage, termsPage, deletionPage, backupsPage, statusPage, helpPage } = require('./_lib/legal');
 
 // Serves /privacy, /terms, /data-deletion, and /backups (see the rewrites in vercel.json), and receives
 // Meta's two callbacks for when someone removes SignalDesk from their Facebook settings:
@@ -97,10 +97,21 @@ module.exports = async function handler(req, res) {
     if (page === 'privacy') html = privacyPage();
     else if (page === 'terms') html = termsPage();
     else if (page === 'backups') html = backupsPage();
+    else if (page === 'help') html = helpPage();
+    else if (page === 'status') {
+      const since = new Date(Date.now() - 86400000).toISOString();
+      const [runs, jobs] = await Promise.all([
+        databaseRequest('worker_runs?name=eq.publish&select=last_run_at').catch(() => []),
+        databaseRequest(`publish_jobs?provider=eq.direct&updated_at=gte.${since}&status=in.(published,failed)&select=platform,status&limit=20000`).catch(() => [])
+      ]);
+      const networks = {};
+      for (const job of jobs || []) { const base = String(job.platform).replace(/_story$/, ''); const entry = networks[base] ||= { published: 0, failed: 0 }; entry[job.status === 'published' ? 'published' : 'failed'] += 1; }
+      html = statusPage({ lastRun: runs?.[0]?.last_run_at || null, networks });
+    }
     else if (page === 'data-deletion') html = deletionPage(await deletionRequest(url.searchParams.get('code')));
     else return send(res, 404, { error: 'Not found.' });
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    res.setHeader('cache-control', url.searchParams.get('code') ? 'no-store' : 'public, max-age=300');
+    res.setHeader('cache-control', url.searchParams.get('code') ? 'no-store' : page === 'status' ? 'public, max-age=60' : 'public, max-age=300');
     res.setHeader('x-content-type-options', 'nosniff');
     res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     res.setHeader('referrer-policy', 'strict-origin-when-cross-origin');

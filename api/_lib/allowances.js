@@ -27,9 +27,14 @@ const BETA = Object.freeze({
 // Daily counters and the allowance each one is held to.
 const DAILY_COUNTERS = { 'ai-usage': 'aiPerDay', 'campaign-usage': 'campaignPlansPerDay', 'trend-tries': 'trendTriesPerDay' };
 
-// eslint-disable-next-line no-unused-vars -- the workspace decides the plan once billing exists
+// With billing on (api/_lib/billing.js), a workspace on a plan gets that plan's client, team, and
+// storage allowances; the daily AI caps stay as a backstop. Beta workspaces keep BETA.
 async function workspaceAllowances(workspaceId) {
-  return { ...BETA };
+  const billing = require('./billing');
+  if (!workspaceId || !await billing.billingEnabled()) return { ...BETA };
+  const plan = billing.activePlan(await billing.workspacePlan(workspaceId));
+  if (!plan) return { ...BETA };
+  return { ...BETA, plan: plan.plan, clients: plan.clients, teamMembers: plan.teamMembers, storageBytes: plan.storageBytes, monthlyCredits: plan.monthlyCredits, historyDays: plan.historyDays, approvalLinks: plan.approvalLinks, clientReports: plan.clientReports };
 }
 
 module.exports = { BETA, DAILY_COUNTERS, workspaceAllowances };

@@ -80,7 +80,7 @@ function highlightCalendarPost(id){if(!id)return;calendarHighlight=id;clearTimeo
 const CAL_COLOR_KEY='signaldesk-cal-color',CAL_COLOR_MODES=[['client','Client'],['network','Network'],['status','Status'],['pillar','Pillar']];
 let calColorBy='client';try{calColorBy=localStorage.getItem(CAL_COLOR_KEY)||'client';}catch{}
 if(!CAL_COLOR_MODES.some(([key])=>key===calColorBy))calColorBy='client';
-const CAL_NETWORKS=[['facebook','Facebook'],['instagram','Instagram'],['threads','Threads'],['linkedin','LinkedIn'],['pinterest','Pinterest'],['x','X'],['youtube','YouTube'],['tiktok','TikTok'],['bluesky','Bluesky'],['several','Several networks'],['other','Other']];
+const CAL_NETWORKS=[['facebook','Facebook'],['instagram','Instagram'],['threads','Threads'],['linkedin','LinkedIn'],['pinterest','Pinterest'],['x','X'],['youtube','YouTube'],['tiktok','TikTok'],['bluesky','Bluesky'],['mastodon','Mastodon'],['several','Several networks'],['other','Other']];
 const CAL_STATUSES=[['scheduled','Scheduled'],['review','In review'],['published','Published'],['failed','Failed'],['draft','Draft']];
 function calNetworkKey(platform){const base=String(platform||'').replace(/_(story|page)$/,'');return base==='twitter'?'x':base;}
 function calEventColorKey(event){

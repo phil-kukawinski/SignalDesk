@@ -3,7 +3,7 @@ const { APIError } = require('@anthropic-ai/sdk');
 const {
   PLATFORM_KEYS, MESSAGE_PLATFORMS, MEDIA_REQUIRED_PLATFORMS, COMMENT_PLATFORMS,
   httpError, send, getConfig, ayrshareConfigured, getUser, databaseRequest, ayrshareRequest,
-  getMembership, personProfile, workspacePeople, clientTimeZone, getWorkspaceState, assertClientInWorkspace,
+  getBearerToken, getMembership, personProfile, workspacePeople, clientTimeZone, getWorkspaceState, assertClientInWorkspace,
   getProfile, getOrCreateProfile, requirePlatforms, decryptSecret, encryptSecret,
   validatePostOptions, processDueComments,
   readFeed, baselineFeed, runFeed, runAutopilot, WORKSPACE_TIMEZONES
@@ -43,7 +43,7 @@ const CLIENT_ACTIONS = new Set([
 // Actions that go through Ayrshare and need its per-client profile.
 const AYRSHARE_ACTIONS = new Set(['connect', 'analytics', 'comments', 'post-comment', 'messages', 'reply']);
 const WORKSPACE_ACTIONS = new Set([
-  'client-uploads', 'client-upload-dismiss', 'content-insights', 'compare-periods', 'suggest-reply', 'refresh-post', 'report-summary',
+  'billing', 'billing-checkout', 'billing-portal', 'heard-from', 'report-error', 'connect-credentials', 'client-uploads', 'client-upload-dismiss', 'content-insights', 'compare-periods', 'suggest-reply', 'refresh-post', 'report-summary',
   'members', 'invite', 'update-member', 'remove-member', 'remove-invite',
   'autopilot', 'feed-preview', 'feed-save', 'feed-delete', 'feed-hook', 'autopilot-run', 'ig-browse', 'ig-repost',
   'notification-settings', 'top-posts', 'trends', 'trends-refresh', 'check-links', 'proofread', 'best-times',
@@ -57,6 +57,7 @@ const WORKSPACE_ACTIONS = new Set([
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
 const USER_ACTIONS = new Set([
+  'billing', 'report-error',
   'accounts', 'publish', 'update-post', 'posts', 'overview', 'cancel-post', 'notification-settings', 'trends', 'trends-refresh', 'check-links', 'proofread',
   'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'client-uploads', 'client-upload-dismiss', 'content-insights', 'compare-periods', 'suggest-reply', 'refresh-post', 'report-summary', 'next-slot', 'post-history', 'manual-done', 'draft-captions', 'alt-text', 'push-config', 'push-subscribe', 'push-unsubscribe',
   'stock-search', 'stock-use', 'ig-lookup', 'ig-browse', 'ig-repost', 'link-preview', 'network-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'planning-note', 'campaign-questions', 'campaign-plan', 'campaign-post'
@@ -90,7 +91,7 @@ function allowedOrigin(req) {
 function integrations() {
   return {
     meta: providerConfigured('meta'), linkedin: providerConfigured('linkedin'), linkedinPages: providerConfigured('linkedin_pages'), pinterest: providerConfigured('pinterest'),
-    x: providerConfigured('x'), youtube: providerConfigured('google'), tiktok: providerConfigured('tiktok'), threads: providerConfigured('threads'),
+    x: providerConfigured('x'), youtube: providerConfigured('google'), tiktok: providerConfigured('tiktok'), threads: providerConfigured('threads'), bluesky: true, mastodon: true,
     ayrshare: ayrshareConfigured(), stock: stockConfigured()
   };
 }
@@ -322,6 +323,50 @@ async function trendFocus(workspaceId, body) {
 }
 
 async function handleWorkspaceAction(action, body, { user, membership, encryptionKey, origin = '' }, res) {
+  // Settings → Plan & usage: the plan, credit balances, and this month's use. Works with billing off too.
+  if (action === 'billing') {
+    const billing = require('./_lib/billing');
+    const workspaceId = membership.workspace_id, enabled = await billing.billingEnabled();
+    const [row, allowances, credits, storage, postsToday, postsMonth, aiToday] = await Promise.all([
+      billing.workspacePlan(workspaceId), workspaceAllowances(workspaceId), enabled ? billing.creditBalance(workspaceId) : null,
+      databaseRequest(`media_files?workspace_id=eq.${workspaceId}&select=size_bytes&limit=20000`).catch(() => []),
+      databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&created_at=gte.${new Date(Date.now() - 86400000).toISOString()}&select=id&limit=1000`).catch(() => []),
+      databaseRequest(`scheduled_posts?workspace_id=eq.${workspaceId}&created_at=gte.${new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()}&select=id&limit=5000`).catch(() => []),
+      databaseRequest(`worker_runs?name=eq.${encodeURIComponent(`ai-usage:${workspaceId}:${new Date().toISOString().slice(0, 10)}`)}&select=last_result`).catch(() => [])
+    ]);
+    return send(res, 200, {
+      enabled, plan: enabled ? (billing.activePlan(row)?.plan || 'beta') : 'beta', status: row.plan_status || null, trialEndsAt: row.trial_ends_at || null, periodEnd: row.current_period_end || null,
+      hasBillingAccount: Boolean(row.stripe_customer_id), credits,
+      prices: { pro: Boolean(process.env.STRIPE_PRICE_PRO_MONTHLY), business: Boolean(process.env.STRIPE_PRICE_BUSINESS_MONTHLY), yearly: Boolean(process.env.STRIPE_PRICE_PRO_YEARLY), creditsSmall: Boolean(process.env.STRIPE_PRICE_CREDITS_SMALL), creditsLarge: Boolean(process.env.STRIPE_PRICE_CREDITS_LARGE) },
+      limits: { clients: allowances.clients, teamMembers: allowances.teamMembers, storageBytes: allowances.storageBytes, postsPerDay: allowances.postsPerDay, aiPerDay: allowances.aiPerDay, monthlyCredits: allowances.monthlyCredits || null },
+      usage: { storageBytes: (storage || []).reduce((sum, file) => sum + (Number(file.size_bytes) || 0), 0), postsToday: (postsToday || []).length, postsThisMonth: (postsMonth || []).length, aiToday: Number(aiToday?.[0]?.last_result?.count) || 0 }
+    });
+  }
+  if (action === 'billing-checkout' || action === 'billing-portal') {
+    if (membership.role !== 'admin') return send(res, 403, { error: 'Only workspace admins can change the plan.' });
+    const billing = require('./_lib/billing');
+    const returnUrl = (origin || process.env.APP_URL || '').replace(/\/+$/, '');
+    if (!/^https:\/\//.test(returnUrl)) return send(res, 400, { error: 'Open SignalDesk from its web address to change the plan.' });
+    if (action === 'billing-portal') return send(res, 200, { url: await billing.portalSession({ workspaceId: membership.workspace_id, returnUrl }) });
+    return send(res, 200, { url: await billing.checkoutSession({ workspaceId: membership.workspace_id, email: membership.email || user.email, item: String(body.item || ''), interval: body.interval === 'year' ? 'year' : 'month', returnUrl }) });
+  }
+  // "How did you hear about SignalDesk?" Asked once on the getting-started list; admins only.
+  if (action === 'heard-from') {
+    if (membership.role !== 'admin') return send(res, 403, { error: 'Only admins answer this one.' });
+    const answer = typeof body.answer === 'string' ? body.answer.trim().replace(/\s+/g, ' ').slice(0, 120) : '';
+    if (!answer) return send(res, 400, { error: 'Pick or type an answer.' });
+    await databaseRequest(`workspaces?id=eq.${membership.workspace_id}&heard_from=is.null`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ heard_from: answer }) });
+    return send(res, 200, { ok: true });
+  }
+  // Errors in someone's browser, so problems show up without them having to report it. Messages only.
+  if (action === 'report-error') {
+    const message = typeof body.message === 'string' ? body.message.replace(/https?:\/\/\S+/g, '[link]').replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]').slice(0, 300) : '';
+    if (!message) return send(res, 400, { error: 'No error to report.' });
+    const allowed = await databaseRequest('rpc/use_daily_allowance', { method: 'POST', body: JSON.stringify({ p_name: `browser-errors:${user.id}:${new Date().toISOString().slice(0, 10)}`, p_limit: 20 }) }).catch(() => false);
+    if (allowed !== false) await require('./_lib/platform').recordAppError('browser', Object.assign(new Error(`${message}${typeof body.where === 'string' ? ` (at ${body.where.replace(/https?:\/\/[^/]+/g, '').slice(0, 80)})` : ''}`), {}), membership.workspace_id);
+    return send(res, 200, { ok: true });
+  }
+
   // AI helpers: reply suggestions (Social Inbox), a fresh take on a past top post, and the "What worked"
   // paragraph for client reports. Each uses the workspace's daily AI allowance.
   if (action === 'suggest-reply' || action === 'refresh-post' || action === 'report-summary') {
@@ -336,9 +381,10 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!await useAiCredit(membership.workspace_id)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
     const { suggestReplies, refreshPost, reportSummary } = require('./_lib/assist');
     if (action === 'suggest-reply') return send(res, 200, { replies: await suggestReplies({ client, post: text(body.post, 1200), comment: text(body.comment, 1500), author: text(body.author, 60), network: text(body.network, 30) }) });
-    if (action === 'refresh-post') return send(res, 200, await refreshPost({ client, text: text(body.text, 3000), network: text(body.network, 30), results: text(body.results, 200) }));
+    const { withCredits } = require('./_lib/billing');
+    if (action === 'refresh-post') return send(res, 200, await withCredits(membership.workspace_id, 'refresh-post', () => refreshPost({ client, text: text(body.text, 3000), network: text(body.network, 30), results: text(body.results, 200) })));
     const safe = (value) => JSON.parse(JSON.stringify(value ?? null, (key, item) => (typeof item === 'string' ? item.slice(0, 300) : item)));
-    return send(res, 200, { summary: await reportSummary({ client, periodLabel: text(body.periodLabel, 60), totals: safe(body.totals), previous: safe(body.previous), top: safe(Array.isArray(body.top) ? body.top.slice(0, 5) : []), byNetwork: safe(body.byNetwork), highlights: safe(Array.isArray(body.highlights) ? body.highlights.slice(0, 6) : []) }) });
+    return send(res, 200, { summary: await withCredits(membership.workspace_id, 'report-summary', () => reportSummary({ client, periodLabel: text(body.periodLabel, 60), totals: safe(body.totals), previous: safe(body.previous), top: safe(Array.isArray(body.top) ? body.top.slice(0, 5) : []), byNetwork: safe(body.byNetwork), highlights: safe(Array.isArray(body.highlights) ? body.highlights.slice(0, 6) : []) })) });
   }
 
   // Analytics → Posts → What works, and Analytics → Compare.
@@ -649,7 +695,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       if (allowed === false) return send(res, 429, { error: `This workspace has used its ${QUICK_TRENDS_PER_WEEK} quick checks this week.` });
       const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
       const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
-      const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms, searches: 2 });
+      const result = await require('./_lib/billing').withCredits(workspaceId, 'trends-quick', () => generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms, searches: 2 }));
       const [report] = await databaseRequest('trend_reports', { method: 'POST', headers: { prefer: 'return=representation' }, body: JSON.stringify({ workspace_id: workspaceId, focus: `quick:${focus.key}`, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources, quick: true }, model: result.model, created_by: user.id }) });
       return send(res, 200, { report, cached: false, quick: true });
     }
@@ -666,7 +712,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     if (!await useAiCredit(workspaceId, 'trend-tries')) return send(res, 429, { error: 'Trend scans didn’t finish after a couple of tries today. Try again tomorrow.' });
     const today = new Intl.DateTimeFormat('en-US', { timeZone: await workspaceTimeZone(workspaceId), weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date());
     const watchTerms = [...new Set(focus.clients.flatMap((item) => String(item.brand?.watchTerms || '').split(',').map((term) => term.trim()).filter(Boolean)))].slice(0, 12);
-    const result = await generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms });
+    const result = await require('./_lib/billing').withCredits(workspaceId, 'trends-refresh', () => generateTrendReport({ clients: focus.clients, focus: focus.label, platforms, today, watchTerms }));
     const [report] = await databaseRequest('trend_reports', {
       method: 'POST', headers: { prefer: 'return=representation' },
       body: JSON.stringify({ workspace_id: workspaceId, focus: focus.key, platforms, data: { ...result.report, focusLabel: focus.label, sources: result.sources }, model: result.model, created_by: user.id })
@@ -713,7 +759,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const platforms = Array.isArray(body.platforms) ? [...new Set(body.platforms)].filter((platform) => PLATFORM_KEYS.has(platform)).slice(0, 8) : [];
     if (!platforms.length) return send(res, 400, { error: 'Choose at least one network.' });
     const brandClient = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
-    return send(res, 200, { variants: await draftCaptions({ idea, brandClient, platforms }) });
+    return send(res, 200, { variants: await require('./_lib/billing').withCredits(workspaceId, 'draft-captions', () => draftCaptions({ idea, brandClient, platforms })) });
   }
 
   if (action === 'campaign-questions' || action === 'campaign-plan' || action === 'campaign-post') {
@@ -735,13 +781,13 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       const networks = request.networks;
       if (!await useAiCredit(workspaceId)) return send(res, 429, { error: 'This workspace has reached today’s limit for AI help. Try again tomorrow.' });
       const clip = (value, max) => String(value ?? '').slice(0, max);
-      return send(res, 200, { post: await rewritePost({ client, ...request, angle: clip(body.angle, 1000), change: clip(body.change, 500).trim(), others: (Array.isArray(body.others) ? body.others : []).slice(0, 30).map((title) => clip(title, 100)), post: { networks, date: clip(post.date, 10), title: clip(post.title, 100), format: clip(post.format, 80), text: clip(post.text, 5000), creativeIdea: clip(post.creativeIdea, 3000) } }) });
+      return send(res, 200, { post: await require('./_lib/billing').withCredits(workspaceId, 'campaign-post', () => rewritePost({ client, ...request, angle: clip(body.angle, 1000), change: clip(body.change, 500).trim(), others: (Array.isArray(body.others) ? body.others : []).slice(0, 30).map((title) => clip(title, 100)), post: { networks, date: clip(post.date, 10), title: clip(post.title, 100), format: clip(post.format, 80), text: clip(post.text, 5000), creativeIdea: clip(post.creativeIdea, 3000) } })) });
     }
     const timeZone = WORKSPACE_TIMEZONES[state.settings?.timezone] || 'America/New_York';
     const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     const schedule = cleanSchedule(body, today);
     if (!await useAiCredit(workspaceId, 'campaign-usage')) return send(res, 429, { error: `This workspace has used its ${(await workspaceAllowances(workspaceId)).campaignPlansPerDay} campaign plans for today. Try again tomorrow.` });
-    return send(res, 200, { plan: await writePlan({ workspaceId, client, timeZone, ...request, ...schedule, postLimit }) });
+    return send(res, 200, { plan: await require('./_lib/billing').withCredits(workspaceId, 'campaign-plan', () => writePlan({ workspaceId, client, timeZone, ...request, ...schedule, postLimit })) });
   }
 
   if (action === 'save-bio') {
@@ -1085,6 +1131,24 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     return send(res, 200, await retryJob(workspaceId, body.jobId, { confirmed: body.confirmed === true }));
   }
 
+  // Bluesky (handle + app password) and Mastodon (server + access token): checked with the network, then
+  // saved like any other connection. The password or token is encrypted; nothing else is kept.
+  if (action === 'connect-credentials') {
+    const platform = body.platform === 'bluesky' || body.platform === 'mastodon' ? body.platform : null;
+    if (!platform) return send(res, 400, { error: 'Choose Bluesky or Mastodon.' });
+    const clientId = body.clientId;
+    await assertClientInWorkspace(workspaceId, clientId);
+    let result;
+    try {
+      result = await PROVIDERS[platform].login(platform === 'bluesky' ? { handle: body.handle, password: body.password } : { instance: body.instance, token: body.token });
+    } catch (error) {
+      return send(res, 400, { error: error.kind === 'auth' ? (platform === 'bluesky' ? 'Bluesky didn’t accept that handle and app password.' : 'Mastodon didn’t accept that token. Check it has read and write access.') : error.message });
+    }
+    await saveConnection({ workspaceId, clientId, userId: user.id, candidate: result.candidate, connection: result.connection, encryptionKey });
+    await recordActivity(workspaceId, membership.name, 'account_connected', { clientId, platform });
+    return send(res, 200, { connected: { platform, displayName: result.candidate.displayName, username: result.candidate.username } });
+  }
+
   if (action === 'oauth-session' || action === 'oauth-finish') {
     if (!validUuid(body.sessionId)) return send(res, 400, { error: 'Start connecting again.' });
     const rows = await databaseRequest(`oauth_sessions?id=eq.${body.sessionId}&workspace_id=eq.${workspaceId}&user_id=eq.${user.id}&select=*`);
@@ -1234,6 +1298,12 @@ module.exports = async function handler(req, res) {
       return send(res, 200, await deleteAccount(user));
     }
     if (action === 'send-feedback') return send(res, 200, await sendFeedback(user, body));
+    // Two-factor sign-in: once someone has turned it on, their sessions must have given a code (aal2).
+    if ((user.factors || []).some((factor) => factor.status === 'verified')) {
+      let aal = 'aal1';
+      try { aal = JSON.parse(Buffer.from(String(getBearerToken(req)).split('.')[1], 'base64url').toString('utf8')).aal || 'aal1'; } catch { /* treat as not verified */ }
+      if (aal !== 'aal2') return send(res, 401, { error: 'Enter your two-factor code to continue. Reload SignalDesk to get the prompt.', mfa: true });
+    }
     const membership = await getMembership(user.id);
     if (!membership) return send(res, 403, { error: 'Reload SignalDesk to finish setting up your workspace.' });
     membership.name = personProfile(user).name || membership.email || user.email || 'Teammate';
