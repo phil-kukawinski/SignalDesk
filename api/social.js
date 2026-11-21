@@ -12,7 +12,7 @@ const { DIRECT_PLATFORMS, CONNECTION_PLATFORM, PROVIDERS, providerConfigured, lo
 const {
   PLATFORM_LABELS, listConnections, loadConnection, saveConnection, createScheduledPost, assertTimeFree, occurrenceTimes, listPosts, getPost, approvePost, rejectPost,
   cancelPost, reschedulePost, setPostCover, retryJob, overviewData, checkWorkerHealth, assertEditable, adoptEdit,
-  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, postsById, OVERVIEW_RANGES,
+  nextQueueSlot, listNotes, addNote, listJobComments, replyToComment, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, copyPosts, campaignSummary, campaignPosts, renameCampaign, postsById, OVERVIEW_RANGES,
   allRows, openComments, setCommentState, recordWorkerRun
 } = require('./_lib/publishing');
 const { draftCaptions, describeImage } = require('./_lib/captions');
@@ -51,7 +51,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-notes', 'add-note', 'assign-post', 'send-to-phone', 'review-links', 'create-review-link', 'revoke-review-link', 'client-report', 'job-comments', 'reply-comment', 'next-slot',
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export', 'record-restore',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
-  'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
+  'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'rename-campaign', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
   'planning-note', 'open-comments', 'comment-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
@@ -1098,6 +1098,12 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
     const result = await cancelPost(workspaceId, body.postId, { userId: user.id, admin: membership.role === 'admin', scope });
     await addHistory(workspaceId, body.postId, 'canceled', { actorName: membership.name, detail: { keptPublished: result.keptPublished } });
     return send(res, 200, result);
+  }
+
+  if (action === 'rename-campaign') {
+    await assertClientInWorkspace(workspaceId, body.clientId);
+    const client = ((await getWorkspaceState(workspaceId)).clients || []).find((item) => item.id === body.clientId);
+    return send(res, 200, await renameCampaign(workspaceId, { client, from: body.from, to: body.to, actorName: membership.name }));
   }
 
   if (action === 'copy-posts') {

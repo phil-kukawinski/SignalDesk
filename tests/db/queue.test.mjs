@@ -866,6 +866,40 @@ assert.equal(reviewed.status, 'waiting');
 assert.deepEqual(reviewed.notes, [], 'internal notes stay internal');
 assert.ok(r.payload.posts.every((p) => p.versions.length), 'every post shows its networks');
 assert.ok(!JSON.stringify(r.payload).includes('created_by'));
+
+// Renaming a campaign: scheduled and published posts, its drafts, and its review links all follow.
+{
+  const soon = new Date(Date.now() + 3 * 86400000).toISOString();
+  r = await call({ action: 'publish', clientId: 'pk-works', text: 'Fall one', platforms: ['facebook'], scheduleDate: soon, campaign: 'Fall launch' });
+  const fallA = r.payload.post.id;
+  r = await call({ action: 'publish', clientId: 'pk-works', text: 'Fall two', platforms: ['facebook'], scheduleDate: soon, campaign: 'Fall launch', requiresApproval: true });
+  const fallB = r.payload.post.id;
+  await db.query(`update scheduled_posts set status = 'published' where id = $1`, [fallA]);
+  r = await call({ action: 'publish', clientId: 'pk-works', text: 'Winter', platforms: ['facebook'], scheduleDate: soon, campaign: 'Winter' });
+  await db.query(`insert into saved_drafts (workspace_id, id, draft) values ($1, 'fall-draft', $2::jsonb), ($1, 'other-client-draft', $3::jsonb)`, [WS, JSON.stringify({ client: 'PK Works', state: { text: 'Draft', postOptions: { campaign: 'Fall launch' } } }), JSON.stringify({ client: 'Someone Else', state: { postOptions: { campaign: 'Fall launch' } } })]);
+  r = await call({ action: 'create-review-link', clientId: 'pk-works', label: 'Campaign: Fall launch', days: 14 });
+  const fallToken = r.payload.token;
+
+  r = await call({ action: 'rename-campaign', clientId: 'pk-works', from: 'Fall launch', to: 'Winter' });
+  assert.equal(r.status, 409, 'a name the client already uses is refused');
+  r = await call({ action: 'rename-campaign', clientId: 'pk-works', from: 'Fall launch', to: '  Fall   kickoff ' }, 'user');
+  assert.equal(r.status, 403, 'only admins rename campaigns');
+  r = await call({ action: 'rename-campaign', clientId: 'pk-works', from: 'Fall launch', to: '  Fall   kickoff ' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.deepEqual(r.payload, { name: 'Fall kickoff', posts: 2, drafts: 1 });
+  const named = Object.fromEntries((await q(`select id, campaign from scheduled_posts where id in ('${fallA}','${fallB}')`)).map((row) => [row.id, row.campaign]));
+  assert.deepEqual(named, { [fallA]: 'Fall kickoff', [fallB]: 'Fall kickoff' }, 'published and waiting posts are renamed');
+  const drafts = Object.fromEntries((await q(`select id, draft from saved_drafts where id in ('fall-draft','other-client-draft')`)).map((row) => [row.id, row.draft.state.postOptions.campaign]));
+  assert.deepEqual(drafts, { 'fall-draft': 'Fall kickoff', 'other-client-draft': 'Fall launch' }, 'only this client’s drafts change');
+  assert.equal((await q(`select label from review_links where label like 'Campaign: Fall%'`))[0].label, 'Campaign: Fall kickoff');
+  assert.equal((await q(`select count(*)::int as n from post_history where action = 'campaign_renamed'`))[0].n, 2);
+  // A link sent before the rename still carries the old name, and opens the renamed campaign.
+  r = await reviewCall({ token: fallToken, action: 'load', campaign: 'Fall launch' });
+  assert.equal(r.status, 200, JSON.stringify(r.payload));
+  assert.equal(r.payload.campaign, 'Fall kickoff');
+  assert.deepEqual(r.payload.posts.map((post) => post.id), [fallB], 'the old link shows the renamed campaign’s upcoming posts');
+  await db.exec(`delete from saved_drafts where id in ('fall-draft','other-client-draft'); delete from review_links where label = 'Campaign: Fall kickoff'`);
+}
 r = await reviewCall({ token: reviewToken, action: 'decide', postId: reviewPostId, decision: 'changes_requested', name: 'Dana (client)' });
 assert.equal(r.status, 400, 'changes need a comment');
 r = await reviewCall({ token: reviewToken, action: 'decide', postId: reviewPostId, decision: 'changes_requested', name: 'Dana (client)', comment: 'Use the new logo' });

@@ -1133,6 +1133,34 @@ async function copyPosts(workspaceId, { postIds, offsetDays, userId, timeZone = 
 // Results per campaign (posts tagged with a campaign name), over a time frame: posts sent and
 // upcoming, reach, engagement, link clicks, and the best post. Numbers come from the networks via
 // the account sync when available, otherwise from the post's own metrics.
+// Renames a campaign everywhere it's used: its posts (scheduled, waiting, published, and canceled), the saved
+// drafts that belong to it, and campaign review links, whose label the review page reads so links already
+// sent keep working under the new name.
+const CAMPAIGN_LINK_PREFIX = 'Campaign: ';
+async function renameCampaign(workspaceId, { client, from, to, actorName = null }) {
+  const oldName = typeof from === 'string' ? from.trim() : '';
+  const newName = typeof to === 'string' ? to.trim().replace(/\s+/g, ' ') : '';
+  if (!oldName) throw httpError(400, 'Choose a campaign to rename.');
+  if (!newName) throw httpError(400, 'Give the campaign a name.');
+  if (newName.length > 60) throw httpError(400, 'Campaign names can be up to 60 characters.');
+  if (newName === oldName) return { name: newName, posts: 0, drafts: 0 };
+  const scope = `workspace_id=eq.${workspaceId}&client_id=eq.${encodeURIComponent(client.id)}`;
+  const draftCampaign = (draft) => String(draft?.state?.postOptions?.campaign || '').trim();
+  const draftRows = (await databaseRequest(`saved_drafts?workspace_id=eq.${workspaceId}&select=id,draft`) || []).filter((row) => row.draft?.client === client.name);
+  const taken = (await databaseRequest(`scheduled_posts?${scope}&campaign=eq.${encodeURIComponent(newName)}&select=id&limit=1`) || []).length || draftRows.some((row) => draftCampaign(row.draft) === newName);
+  if (taken) throw httpError(409, `${client.name} already has a campaign called “${newName}”. Choose another name.`);
+  const posts = await databaseRequest(`scheduled_posts?${scope}&campaign=eq.${encodeURIComponent(oldName)}&select=id`) || [];
+  if (posts.length) await databaseRequest(`scheduled_posts?${scope}&campaign=eq.${encodeURIComponent(oldName)}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ campaign: newName, updated_at: nowIso() }) });
+  const drafts = draftRows.filter((row) => draftCampaign(row.draft) === oldName);
+  for (const row of drafts) {
+    const draft = { ...row.draft, state: { ...row.draft.state, postOptions: { ...row.draft.state.postOptions, campaign: newName } } };
+    await databaseRequest(`saved_drafts?workspace_id=eq.${workspaceId}&id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ draft, updated_at: nowIso() }) });
+  }
+  await databaseRequest(`review_links?${scope}&label=eq.${encodeURIComponent((CAMPAIGN_LINK_PREFIX + oldName).slice(0, 80))}`, { method: 'PATCH', headers: { prefer: 'return=minimal' }, body: JSON.stringify({ label: (CAMPAIGN_LINK_PREFIX + newName).slice(0, 80) }) });
+  if (posts.length) await addHistory(workspaceId, posts.map((post) => post.id), 'campaign_renamed', { actorName, detail: { from: oldName, to: newName } });
+  return { name: newName, posts: posts.length, drafts: drafts.length };
+}
+
 async function campaignSummary(workspaceId, { clientId = null, days = 90 } = {}) {
   const { finishMetrics } = require('./reports');
   const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -1475,4 +1503,4 @@ module.exports = {
   adoptEdit, assertTimeFree, firstFreeTime, occurrenceTimes, ensureFreshToken, PLATFORM_LABELS, listConnections, loadConnection, saveConnection, markNeedsReauth, resolveDestinations, createScheduledPost,
   processPublishQueue, runJob, earlierStoryWaiting, maintainConnections, warnPostsAtRisk, campaignPosts, postsById, postJobComment, listPosts, getPost, approvePost, rejectPost, cancelPost,
   reschedulePost, setPostCover, retryJob, publicPost, directPostRows, contentFor, recordWorkerRun, lastWorkerRun, checkWorkerHealth,
-  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary };
+  refreshRecentMetrics, overviewData, linkClickSummary, shortLinkBase, assertEditable, replacePost, queueConfig, nextQueueSlot, recycleEvergreen, listNotes, addNote, listJobComments, replyToComment, setCommentState, openComments, tagLinks, MANUAL_PLATFORMS, addHistory, listHistory, markManualDone, OVERVIEW_RANGES, allRows, copyPosts, campaignSummary, renameCampaign, CAMPAIGN_LINK_PREFIX };

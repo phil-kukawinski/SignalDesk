@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { send, getConfig, databaseRequest, getWorkspaceState } = require('./_lib/core');
-const { approvePost, listNotes, addNote, contentFor, addHistory } = require('./_lib/publishing');
+const { approvePost, listNotes, addNote, contentFor, addHistory, CAMPAIGN_LINK_PREFIX } = require('./_lib/publishing');
 const { notify } = require('./_lib/notify');
 const UPLOAD_MAX_BYTES = 50 * 1024 * 1024, UPLOAD_MAX_FILES = 10, UPLOADS_PER_DAY = 40;
 
@@ -17,7 +17,7 @@ const PLATFORM_LABELS = { facebook: 'Facebook', facebook_story: 'Facebook Story'
 async function findLink(token) {
   if (typeof token !== 'string' || !/^[\w-]{40,64}$/.test(token)) return null;
   const hash = crypto.createHash('sha256').update(token).digest('hex');
-  const rows = await databaseRequest(`review_links?token_hash=eq.${hash}&revoked_at=is.null&select=id,workspace_id,client_id,expires_at`);
+  const rows = await databaseRequest(`review_links?token_hash=eq.${hash}&revoked_at=is.null&select=id,workspace_id,client_id,expires_at,label`);
   const link = rows?.[0];
   return link && Date.parse(link.expires_at) > Date.now() ? link : null;
 }
@@ -95,7 +95,10 @@ module.exports = async function handler(req, res) {
         select: 'id,title,status,scheduled_for,client_status,campaign,content,publish_jobs(platform,status)',
         workspace_id: `eq.${link.workspace_id}`, client_id: `eq.${link.client_id}`, status: 'in.(pending_approval,scheduled)', order: 'scheduled_for.asc', limit: '200'
       });
-      const campaign = typeof body.campaign === 'string' ? body.campaign.trim().slice(0, 60) : '';
+      // Campaign links: the link's own label names the campaign, so the link follows a rename.
+      const asked = typeof body.campaign === 'string' ? body.campaign.trim().slice(0, 60) : '';
+      const named = String(link.label || '').startsWith(CAMPAIGN_LINK_PREFIX) ? link.label.slice(CAMPAIGN_LINK_PREFIX.length).trim() : '';
+      const campaign = asked ? named || asked : '';
       if (campaign) query.set('campaign', `eq.${campaign}`);
       query.append('scheduled_for', `gte.${new Date(now - 86400000).toISOString()}`);
       query.append('scheduled_for', `lte.${new Date(now + (campaign ? CAMPAIGN_LOOKAHEAD_DAYS : LOOKAHEAD_DAYS) * 86400000).toISOString()}`);

@@ -148,6 +148,15 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   const raced = await json(`(async()=>{let finish;__from(name=>name==='saved_drafts'&&({select:()=>({eq:()=>({order:()=>new Promise(done=>{finish=()=>done({data:[{draft:{id:'stale',state:{}}}]});})})}),upsert:async()=>({})}));draftsInTable=true;storedDrafts.clear();savedDrafts=[];const reading=loadSavedDrafts({fresh:true});await new Promise(done=>setTimeout(done,20));savedDrafts.unshift({id:'just-saved',state:{}});await __realStore();finish();await reading;const list=savedDrafts.map(item=>item.id);__from(__offline);return list;})()`);
   if (raced.join() !== 'just-saved') fail('a stale refresh should not replace a newer save: ' + raced);
 
+  // Rename a campaign, even with posts scheduled: the name is sent once and the page follows it.
+  await evaluate(`showView('campaigns');openBoardCampaign('pk-works','Launch')`); await wait(300);
+  await evaluate(`(()=>{window.__renames=[];const real=callSocialApi;callSocialApi=async body=>{if(body.action==='rename-campaign'){__renames.push(body);return{name:body.to.trim(),posts:1,drafts:0};}return real(body);};window.__undoRename=()=>{callSocialApi=real;};document.querySelector('[data-board-rename]').click();})()`); await wait(100);
+  await evaluate(`(()=>{const input=document.querySelector('#board-rename-name');input.value=' Big launch ';document.querySelector('#board-rename').requestSubmit();})()`); await wait(300);
+  const renamed = await evaluate(`JSON.stringify({sent:__renames.map(c=>[c.clientId,c.from,c.to]),open:boardOpen.name,form:Boolean(document.querySelector('#board-rename')),toast:document.querySelector('#toast').textContent})`);
+  log.push('rename: ' + renamed);
+  const rn = JSON.parse(renamed);
+  if (JSON.stringify(rn.sent) !== JSON.stringify([['pk-works', 'Launch', 'Big launch']]) || rn.open !== 'Big launch' || rn.form || !/Renamed to “Big launch”\. 1 post updated/.test(rn.toast)) fail('renaming a campaign should send the new name and show it');
+  await evaluate(`__undoRename();boardOpen={clientId:'pk-works',name:'Launch'};boardRenaming=false`);
   // Duplicate a campaign: new drafts at new dates, spacing kept, nothing scheduled, missing files dropped.
   await evaluate(`(()=>{const later=window.__day;__post.status='scheduled';__post.media=['https://media.test/ok.jpg','https://media.test/gone.jpg'];savedDrafts=[{id:'d9',title:'Draft to copy',client:'PK Works',platforms:['facebook'],manual:[],date:later(3),time:'09:30',state:{uploadedMedia:[],draft:'Draft to copy',draftOverrides:{},postOptions:{...defaultPostOptions(),campaign:'Launch'}},savedAt:new Date().toISOString()}];window.__realFetch=window.fetch;window.fetch=async(url,options)=>options?.method==='HEAD'?new Response(null,{status:/gone/.test(url)?404:200}):__realFetch(url,options);__calls.length=0;})()`);
   await evaluate(`showView('campaigns')`); await wait(300);

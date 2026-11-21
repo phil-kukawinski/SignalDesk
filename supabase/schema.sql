@@ -1448,3 +1448,7 @@ end;
 $$;
 drop trigger if exists start_trial on public.workspaces;
 create trigger start_trial before insert on public.workspaces for each row execute function public.start_trial();
+
+-- Weekly planning reminders use their own notification category.
+alter table public.notifications drop constraint if exists notifications_category_check;
+alter table public.notifications add constraint notifications_category_check check (category in ('approvals', 'autopilot', 'reports', 'team', 'publishing', 'planning'));
