@@ -9,7 +9,7 @@ Copy-ready answers and screencast scripts for the reviews are in [app-review.md]
 ## A few minutes each
 
 - [x] **New: reconnect X.** Done November 12. Its connection expires November 12. In Social Accounts, choose PK Works and select **Switch** on the X card.
-- [ ] **New: test a Facebook Story.** In the Publishing Studio, pick **Facebook Story** and schedule one photo and one short video (under 60 seconds, 9:16). If the video fails, send me the error from the post's panel.
+- [x] **New: test a Facebook Story.** Done November 22: a video Story posted fine. In the Publishing Studio, pick **Facebook Story** and schedule one photo and one short video (under 60 seconds, 9:16). If the video fails, send me the error from the post's panel.
 - [x] **New: try the video cover tools on real posts.** Looked good, November 12. On a scheduled video in the calendar, use **Choose a frame**. Also import a CSV that uses media file names and the `cover` column.
 - [ ] **New: send the usage export after the November 17 trend scan,** to confirm what a 6-search scan costs.
 - [x] **New: delete the old `signaldesk` Anthropic key.** Done November 12; `signaldesk-new` is the only key.

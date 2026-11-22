@@ -995,6 +995,12 @@ assert.equal(r.status, 400, 'Pinterest has no comments');
 
 // --- Manual reminders ---
 await db.exec(`update publish_jobs set run_at = now() + interval '60 days' where status='queued'`);
+// Story reminders show no caption, so they don't need copy; other reminders do.
+r = await call({ action: 'publish', clientId: 'pk-works', text: '', platforms: [], manual: ['tiktok'], mediaUrls: ['https://cdn.example.com/kit.jpg'] });
+assert.equal(r.status, 400, 'a TikTok reminder needs copy');
+r = await call({ action: 'publish', clientId: 'pk-works', text: '', platforms: [], manual: ['instagram_story'], mediaUrls: ['https://cdn.example.com/kit.jpg'], scheduleDate: new Date(Date.now() + 5 * 86400000).toISOString() });
+assert.equal(r.status, 200, 'a Story reminder needs no copy: ' + JSON.stringify(r.payload));
+await call({ action: 'cancel-post', postId: r.payload.post.id });
 r = await call({ action: 'publish', clientId: 'pk-works', text: 'Story: new kits!', platforms: [], manual: ['instagram_story', 'tiktok'], mediaUrls: ['https://cdn.example.com/kit.jpg'] }, 'user');
 assert.equal(r.status, 200, JSON.stringify(r.payload));
 const manualPostId = r.payload.post.id;

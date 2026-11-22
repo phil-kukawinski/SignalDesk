@@ -1203,7 +1203,7 @@ function validatePublishInput(body) {
   const platforms = Array.isArray(body.platforms) && !body.platforms.length && manual.length ? [] : body.platforms;
   if (platforms.length || !manual.length) requirePlatforms(platforms);
   if (new Set(platforms).size !== platforms.length) throw httpError(400, 'Choose each network once.');
-  if (manual.length && !text) throw httpError(400, 'Write the shared post copy for your reminders.');
+  if (manual.some((platform) => !platform.endsWith('_story')) && !text) throw httpError(400, 'Write the shared post copy for your reminders.');
   const mediaUrls = body.mediaUrls || [];
   const isMediaList = (urls) => Array.isArray(urls) && urls.length <= 10 && urls.every((url) => typeof url === 'string' && url.startsWith('https://') && url.length <= 2000);
   if (!isMediaList(mediaUrls)) throw httpError(400, 'Media must use publicly accessible HTTPS URLs.');
@@ -1344,7 +1344,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === 'oauth-start') {
-      if (!PROVIDERS[body.provider]) return send(res, 400, { error: 'Choose a network to connect.' });
+      if (!PROVIDERS[body.provider]?.authorizeUrl) return send(res, 400, { error: 'Choose a network to connect.' });
       const providerName = { meta: 'Meta', linkedin: 'LinkedIn', pinterest: 'Pinterest', x: 'X', google: 'YouTube', tiktok: 'TikTok', threads: 'Threads' }[body.provider];
       if (!providerConfigured(body.provider) && !(body.provider === 'linkedin' && body.variant === 'pages')) return send(res, 503, { error: `${providerName} isn't set up on the server yet. Add its app keys in Vercel.` });
       const pages = body.provider === 'linkedin' && body.variant === 'pages';

@@ -82,7 +82,20 @@ export async function createRest(db) {
     return extra.length ? `${base} || jsonb_build_object(${extra.join(',')})` : base;
   }
 
-  return async function handle(path, { method = 'GET', headers = {}, body } = {}) {
+  // A value the schema doesn't allow (a check constraint) fails the test run, even when the app catches the
+  // error and carries on, as a planning reminder once did with a category the schema didn't list.
+  return async function guarded(path, options = {}) {
+    try {
+      return await handle(path, options);
+    } catch (error) {
+      if (error.code === '23514') {
+        console.error(`Schema mismatch: ${options.method || 'GET'} ${String(path).split('?')[0]} wrote a value the schema doesn't allow (${error.constraint || error.message}).`);
+        process.exitCode = 1;
+      }
+      throw error;
+    }
+  };
+  async function handle(path, { method = 'GET', headers = {}, body } = {}) {
     const url = new URL(path, 'http://x/');
     const table = url.pathname.replace(/^\//, '');
     const params = [...url.searchParams.entries()];
