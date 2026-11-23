@@ -38,6 +38,7 @@ function otherPerson(connection, participants) {
 function messageError(error) {
   const text = String(error.message || '');
   if (/outside (of )?(the )?allowed window|24 hour/i.test(text)) return httpError(400, 'It’s been more than 24 hours since they last wrote, so Meta doesn’t let a business answer from another app. Reply in the Facebook or Instagram app instead.');
+  if (/app role|role on (the )?app|tester|development mode|not.*(live|public)/i.test(text)) return httpError(400, 'Until Meta approves messaging, SignalDesk can only answer people who have a role on the SignalDesk app (for example a Tester). Reply in the Facebook or Instagram app for now.');
   if (/permission|not authorized|access/i.test(text) || error.kind === 'auth') return httpError(400, 'This account hasn’t allowed SignalDesk to read and answer messages. Reconnect it in Social Accounts and allow messages.');
   if (/isn.t available|not available|551/i.test(text)) return httpError(400, 'This person isn’t available to message right now.');
   return httpError(502, text || 'Meta didn’t answer. Try again in a minute.');
@@ -53,7 +54,9 @@ async function messagingConnection(workspaceId, connectionId, encryptionKey) {
 }
 
 // The latest conversations on each connected Page and Instagram account. A conversation needs a reply
-// when the last message is theirs; `replyBy` is when Meta's 24-hour window closes.
+// when the last message is theirs; `replyBy` is when Meta's 24-hour window closes. The window runs from
+// THEIR last message, so when ours is the latest the list can only rule replies out (ours is over 24 hours
+// old); opening the conversation settles it from the full history.
 async function listConversations(workspaceId, { clientId = '', encryptionKey, now = Date.now() } = {}) {
   const accounts = (await listConnections(workspaceId, clientId || null)).filter((row) => MESSAGE_NETWORKS[row.platform] && row.status === 'active');
   // Archived conversations (null until the database has the table).
@@ -67,7 +70,7 @@ async function listConversations(workspaceId, { clientId = '', encryptionKey, no
       const needsReply = Boolean(last && !last.mine);
       const replyBy = needsReply && last.at ? new Date(Date.parse(last.at) + MESSAGE_WINDOW_MS).toISOString() : null;
       const archived = archivedAt.get(`${row.id}:${item.id}`);
-      return { archived: Boolean(archived && archived >= Date.parse(last?.at || item.updated_time || 0)), id: item.id, connectionId: row.id, clientId: row.client_id, platform: row.platform, account: row.username ? `@${row.username}` : row.display_name || '', with: otherPerson(connection, item.participants), updatedAt: item.updated_time || last?.at || null, last, needsReply, replyBy, canReply: !replyBy || Date.parse(replyBy) > now };
+      return { archived: Boolean(archived && archived >= Date.parse(last?.at || item.updated_time || 0)), id: item.id, connectionId: row.id, clientId: row.client_id, platform: row.platform, account: row.username ? `@${row.username}` : row.display_name || '', with: otherPerson(connection, item.participants), updatedAt: item.updated_time || last?.at || null, last, needsReply, replyBy, canReply: needsReply ? Date.parse(replyBy) > now : Boolean(last?.at && now - Date.parse(last.at) < MESSAGE_WINDOW_MS) };
     });
   }));
   const conversations = [], problems = [];
@@ -82,14 +85,18 @@ async function listConversations(workspaceId, { clientId = '', encryptionKey, no
 }
 
 // One conversation's recent messages, oldest first. Meta returns only the 20 most recent.
-async function conversationMessages(workspaceId, { connectionId, conversationId, encryptionKey }) {
+async function conversationMessages(workspaceId, { connectionId, conversationId, encryptionKey, now = Date.now() }) {
   if (typeof conversationId !== 'string' || !ID.test(conversationId)) throw httpError(400, 'Choose a conversation.');
   const connection = await messagingConnection(workspaceId, connectionId, encryptionKey);
   try {
     const fields = (extra) => `participants,messages.limit(20){id,message,from,created_time${extra ? `,${extra}` : ''}}`;
     const result = await graph(conversationId, { token: connection.token, params: { fields: fields(DETAIL_FIELDS[connection.platform]) } })
       .catch((error) => (error.kind === 'invalid' ? graph(conversationId, { token: connection.token, params: { fields: fields('') } }) : Promise.reject(error)));
-    return { with: otherPerson(connection, result.participants), messages: (result.messages?.data || []).map((item) => shapeMessage(connection, item)).reverse() };
+    const messages = (result.messages?.data || []).map((item) => shapeMessage(connection, item)).reverse();
+    // Meta's window runs from their latest message, even when ours (an auto-reply, say) came after it.
+    const theirs = [...messages].reverse().find((item) => !item.mine && item.at);
+    const replyBy = theirs ? new Date(Date.parse(theirs.at) + MESSAGE_WINDOW_MS).toISOString() : null;
+    return { with: otherPerson(connection, result.participants), messages, replyBy, canReply: Boolean(replyBy && Date.parse(replyBy) > now) };
   } catch (error) {
     throw messageError(error);
   }

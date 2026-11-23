@@ -3,6 +3,13 @@
 // last message, so each conversation that needs a reply shows how long is left.
 const MESSAGES_TTL=2*60000;
 let messagesCache={key:null,at:0,data:null,loading:false,error:''},activeDm=null,inboxClient=null;
+// Opened conversations, so going back to one is instant (it still refreshes quietly).
+const dmThreads=new Map(),DM_PREFETCH=3;
+// The last list, kept for this browser tab so a reload shows it straight away while Meta is asked again.
+const MESSAGES_SESSION_KEY='signaldesk-messages-list';
+function sessionMessagesKey(){return`${MESSAGES_SESSION_KEY}:${activeUser?.id||''}:${activeWorkspace?.id||''}`;}
+function restoreMessagesList(){try{const saved=JSON.parse(sessionStorage.getItem(sessionMessagesKey())||'null');if(saved?.data?.conversations)messagesCache={key:'all',at:0,data:saved.data,loading:false,error:''};}catch{/* nothing kept */}}
+function keepMessagesList(){try{sessionStorage.setItem(sessionMessagesKey(),JSON.stringify({data:messagesCache.data}));}catch{/* too big or blocked: fine */}}
 const MESSAGES_CLIENT_KEY='signaldesk-messages-client',MESSAGES_FOLDER_KEY='signaldesk-messages-folder';
 // Unread: their message is the latest and nobody has answered. Inbox: everything not marked done. Done: handled
 // (stored as "archived"; Meta's copy is unchanged). Counts include only unread from the last 3 business days.
@@ -28,7 +35,7 @@ async function archiveConversation(connectionId,conversationId,archived){
   try{await callSocialApi({action:'message-state',connectionId,conversationId,archived});if(item)item.archived=archived;toast(archived?'Marked done. It comes back to the inbox if they write again.':'Moved back to the inbox.');renderMessagesPanel();renderInboxCount();openConversation(connectionId,conversationId);}
   catch(error){toast(error.message);}
 }
-function pickInboxClient(id){inboxClient=id;try{localStorage.setItem(MESSAGES_CLIENT_KEY,id);}catch{/* not remembered */}
+function pickInboxClient(id){inboxClient=id;try{localStorage.setItem(MESSAGES_CLIENT_KEY,id);}catch{/* not remembered */}prefetchThreads();
   activeDm=null;const thread=$('#message-thread');if(thread)thread.innerHTML='<p class="option-hint">Choose a conversation to read it and reply.</p>';
   activeCommentJob=null;const comments=$('#comment-thread');if(comments)comments.innerHTML='<p class="option-hint">Choose a post to see its comments.</p>';
   renderMessagesPanel();renderCommentsPanel();loadOpenComments();}
@@ -48,10 +55,15 @@ async function loadMessages(force=false){
   const panel=$('#messages-panel');if(!panel)return;const show=cloudFeaturesAvailable()&&currentRole==='admin';panel.hidden=!show;if(!show)return;
   const key='all';
   if(!force&&messagesCache.key===key&&Date.now()-messagesCache.at<MESSAGES_TTL){renderMessagesPanel();return;}
-  if(messagesCache.loading)return;messagesCache.loading=true;renderMessagesPanel();
-  try{const data=await callSocialApi({action:'conversations'});messagesCache={key,at:Date.now(),data,loading:false,error:''};}
+  if(messagesCache.loading)return;if(!messagesCache.data)restoreMessagesList();messagesCache.loading=true;renderMessagesPanel();
+  try{const data=await callSocialApi({action:'conversations'});messagesCache={key,at:Date.now(),data,loading:false,error:''};keepMessagesList();prefetchThreads();}
   catch(error){messagesCache={...messagesCache,key,at:Date.now(),loading:false,error:error.message};}
   renderMessagesPanel();renderInboxCount();
+}
+// Loads the first few conversations of the chosen client in the background, so they open instantly.
+function prefetchThreads(){
+  const current=currentInboxClient();(messagesCache.data?.conversations||[]).filter(item=>item.clientId===current&&inMessageFolder(item,messagesFolder)).slice(0,DM_PREFETCH)
+    .forEach(item=>{const key=`${item.connectionId}:${item.id}`;if(dmThreads.has(key))return;callSocialApi({action:'conversation',connectionId:item.connectionId,conversationId:item.id}).then(data=>{if(!dmThreads.has(key))dmThreads.set(key,data);}).catch(()=>{});});
 }
 
 function conversationButtonHtml(item){
@@ -85,7 +97,7 @@ function renderMessagesPanel(){
 function messageThreadHtml(item,data){
   const person=data.with?.name||item?.with?.name||'Someone',lastTheirs=[...data.messages].reverse().find(message=>!message.mine);
   const bubbles=data.messages.length?data.messages.map(message=>`<div class="message-bubble${message.mine?' mine':''}"><p>${message.text?escapeHtml(message.text):''}${attachmentHtml(message.attachment,!message.text)}</p><small>${message.mine?'You · ':''}${message.at?escapeHtml(timeAgo(message.at)):''}</small></div>`).join(''):'<p class="option-hint">No messages to show.</p>';
-  const limit=item?.platform==='instagram'?1000:2000,closed=item?.needsReply&&!item.canReply;
+  const limit=item?.platform==='instagram'?1000:2000,closed=typeof data.canReply==='boolean'?!data.canReply:item?.needsReply&&!item.canReply;
   replyContext.set(item?.id||'',{text:lastTheirs?.text||'',author:person,jobId:''});
   const form=closed?`<p class="option-hint">It’s been more than 24 hours since ${escapeHtml(person)} last wrote. Meta only lets a business answer from other apps within 24 hours, so reply in the ${item.platform==='instagram'?'Instagram':'Facebook'} app.</p>`
     :`<form class="comment-reply-form message-reply-form" data-message-to="${escapeHtml(item?.id||'')}" data-connection="${escapeHtml(item?.connectionId||'')}" data-client="${escapeHtml(item?.clientId||'')}" data-author="${escapeHtml(firstName(person))}"><button type="button" class="icon-button" data-reply-templates title="Reply templates" aria-label="Reply templates" aria-haspopup="menu">${icon('file')}</button><button type="button" class="icon-button" data-suggest-reply title="Suggest a reply (AI)" aria-label="Suggest a reply">${icon('sparkles')}</button><input class="field" maxlength="${limit}" placeholder="Message…" aria-label="Message ${escapeHtml(person)}"><button class="secondary-button" type="submit">Send</button></form>${item?.needsReply?`<small class="message-window">${escapeHtml(replyWindowText(item))}</small>`:''}`;
@@ -95,9 +107,12 @@ function messageThreadHtml(item,data){
 
 async function openConversation(connectionId,conversationId){
   activeDm={connectionId,conversationId};renderMessagesPanel();
-  const box=$('#message-thread'),item=findConversation(connectionId,conversationId);box.innerHTML='<p class="option-hint">Loading messages…</p>';
-  try{const data=await callSocialApi({action:'conversation',connectionId,conversationId});if(activeDm?.conversationId!==conversationId)return;box.innerHTML=messageThreadHtml(item,data);const list=$('.message-list',box);if(list)list.scrollTop=list.scrollHeight;}
-  catch(error){if(activeDm?.conversationId===conversationId)box.innerHTML=`<p class="option-hint">${escapeHtml(error.message)}</p>`;}
+  const box=$('#message-thread'),item=findConversation(connectionId,conversationId),key=`${connectionId}:${conversationId}`;
+  const show=data=>{if(activeDm?.conversationId!==conversationId)return;const draft=$('form[data-message-to] input',box)?.value||'';
+    if(item&&typeof data.canReply==='boolean')item.canReply=data.canReply;box.innerHTML=messageThreadHtml(item,data);const input=$('form[data-message-to] input',box);if(input&&draft)input.value=draft;const list=$('.message-list',box);if(list)list.scrollTop=list.scrollHeight;};
+  if(dmThreads.has(key))show(dmThreads.get(key));else box.innerHTML='<p class="option-hint">Loading messages…</p>';
+  try{const data=await callSocialApi({action:'conversation',connectionId,conversationId});dmThreads.set(key,data);show(data);}
+  catch(error){if(activeDm?.conversationId===conversationId&&!dmThreads.has(key))box.innerHTML=`<p class="option-hint">${escapeHtml(error.message)}</p>`;}
 }
 
 $('#conversation-list')?.addEventListener('click',event=>{const folder=event.target.closest('[data-message-folder]');if(folder){pickMessagesFolder(folder.dataset.messageFolder);return;}const button=event.target.closest('[data-conversation]');if(button)openConversation(button.dataset.connection,button.dataset.conversation);});
@@ -108,7 +123,8 @@ document.addEventListener('submit',async event=>{
   const form=event.target.closest('form[data-message-to]');if(!form)return;event.preventDefault();
   const input=$('input',form),text=input.value.trim(),{connection,messageTo}=form.dataset;if(!text)return;
   const button=$('button[type=submit]',form);button.disabled=true;
-  try{await callSocialApi({action:'send-message',connectionId:connection,conversationId:messageTo,text});toast('Message sent.');
+  try{const result=await callSocialApi({action:'send-message',connectionId:connection,conversationId:messageTo,text});toast('Message sent.');
+    const cached=dmThreads.get(`${connection}:${messageTo}`);if(cached)cached.messages=[...cached.messages,result.message||{text,mine:true,at:new Date().toISOString()}];
     const item=findConversation(connection,messageTo);if(item){item.last={text,mine:true,at:new Date().toISOString()};item.updatedAt=item.last.at;item.needsReply=false;}
     renderMessagesPanel();renderInboxCount();openConversation(connection,messageTo);}
   catch(error){toast(error.message);button.disabled=false;}

@@ -99,6 +99,13 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   const closed = await evaluate(`document.querySelector('#message-thread').innerText`);
   if (await evaluate(`!!document.querySelector('#message-thread form')`) || !/reply in the Facebook app/.test(closed)) fail('a closed window should point to the app');
 
+  // The list thought replies were open (our auto-reply came last), but the conversation shows they last wrote days ago.
+  await evaluate(`(()=>{const item=findConversation('c-fb','t1');Object.assign(item,{needsReply:false,canReply:true,last:{text:'Auto',mine:true,at:new Date().toISOString()}});const real=callSocialApi;callSocialApi=async body=>body.action==='conversation'&&body.conversationId==='t1'?{with:{name:'Ana Ruiz'},messages:[{id:'x1',text:'Hi',mine:false,at:new Date(Date.now()-30*3600000).toISOString()},{id:'x2',text:'Auto',mine:true,at:new Date().toISOString()}],replyBy:new Date(Date.now()-6*3600000).toISOString(),canReply:false}:real(body);messagesFolder='inbox';renderMessagesPanel();})()`); await wait(100);
+  await evaluate(`document.querySelector('[data-conversation="t1"]').click()`); await wait(300);
+  if (await evaluate(`!!document.querySelector('#message-thread form')`)) fail('an auto-reply after a closed window should not offer Send');
+  // Reopening a conversation shows it straight away from memory.
+  if (!(await evaluate(`dmThreads.has('c-fb:t1')`))) fail('opened conversations should be kept for instant reopening');
+
   // Before any account allows messages: one calm line, no list.
   await evaluate(`messagesCache={key:'',at:Date.now(),loading:false,error:'',data:{accounts:1,byClient:{[clients[0].id]:1},conversations:[],problems:[{connectionId:'c-fb',clientId:clients[0].id,platform:'facebook',error:'x',permission:true}]}};renderMessagesPanel()`);
   const off = await evaluate(`document.querySelector('#messages-panel').innerText`);

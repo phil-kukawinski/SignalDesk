@@ -49,6 +49,8 @@ global.fetch = async (input, options = {}) => {
       { id: 'i1', from: { id: 'igsid-1', username: 'dana' }, created_time: hoursAgo(2), story: { reply_to: { link: 'javascript:alert(1)' } } }] } });
   }
   if (path === 't_new' && method === 'GET') return reply({ participants: { data: [{ id: 'page1', name: 'Harbor Coffee' }, { id: 'psid-1', name: 'Ana Ruiz' }] }, messages: { data: [{ id: 'm1', message: 'Do you cater?', from: { id: 'psid-1' }, created_time: hoursAgo(2) }, { id: 'm0', from: { id: 'psid-1' }, created_time: hoursAgo(3) }] } });
+  // Our auto-reply came last, but they last wrote 30 hours ago: Meta's window has closed.
+  if (path === 't_auto' && method === 'GET') return reply({ participants: { data: [{ id: 'page1' }, { id: 'psid-5' }] }, messages: { data: [{ id: 'a2', message: 'Thanks, we’ll be in touch!', from: { id: 'page1' }, created_time: hoursAgo(1) }, { id: 'a1', message: 'Hi', from: { id: 'psid-5' }, created_time: hoursAgo(30) }] } });
   if (path === 'page1/messages' && method === 'POST') return reply({ recipient_id: body.recipient.id, message_id: 'mid.9' });
   return reply({ error: { message: `unexpected ${method} ${path}` } }, 400);
 };
@@ -82,6 +84,9 @@ const { listConversations, conversationMessages, sendMessage, setConversationArc
   assert.deepStrictEqual(thread.messages.map((item) => item.id), ['m0', 'm1']);
   assert.strictEqual(thread.messages[0].hasAttachment, true);
   assert.strictEqual(thread.with.name, 'Ana Ruiz');
+  assert.deepStrictEqual([thread.canReply, thread.replyBy], [true, new Date(now + 22 * 3600000).toISOString()], 'the window runs from their latest message');
+  const auto = await conversationMessages('ws-1', { connectionId: FB, conversationId: 't_auto', encryptionKey: KEY, now });
+  assert.strictEqual(auto.canReply, false, 'our auto-reply coming last doesn’t reopen the window');
 
   // Instagram: shared posts and story replies are named; only https links are kept; if Meta refuses the extra fields, plain messages still load.
   const ig = await conversationMessages('ws-1', { connectionId: 'c-ig', conversationId: 't_ig', encryptionKey: KEY });
