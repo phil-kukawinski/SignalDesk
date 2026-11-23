@@ -32,12 +32,12 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`showView('inbox')`); await wait(700);
   const panel = await evaluate(`document.querySelector('#messages-panel')?.hidden===false?document.querySelector('#messages-panel').innerText:''`);
   log.push('messages: ' + panel.replace(/\s+/g, ' ').slice(0, 300));
-  if (!/Messages\s*2/.test(panel) || !/PK Works\s*2/.test(panel)) fail('the heading should count conversations waiting for a reply');
-  const tabs = await evaluate(`[...document.querySelectorAll('#message-tabs [data-message-client]')].map(b=>b.innerText.replace(/\\s+/g,' ').trim()+(b.classList.contains('active')?'*':'')).join('|')`);
+  if (!/Messages\s*2/.test(panel) || !/PK Works\s*2/.test(await evaluate(`document.querySelector('#inbox-client-tabs').innerText`))) fail('the heading should count conversations waiting for a reply');
+  const tabs = await evaluate(`[...document.querySelectorAll('#inbox-client-tabs [data-inbox-client]')].map(b=>b.innerText.replace(/\\s+/g,' ').trim()+(b.classList.contains('active')?'*':'')).join('|')`);
   log.push('tabs: ' + tabs);
   if (!/\*/.test(tabs) || tabs.split('|').length !== 2) fail('each client with an account should have a tab, one chosen: ' + tabs);
   if (await evaluate(`document.querySelector('#conversation-list').innerText.includes('Cleo Park')`) === await evaluate(`document.querySelector('#conversation-list').innerText.includes('Ana Ruiz')`)) fail('only the chosen client’s conversations should show');
-  await evaluate(`document.querySelector('#message-tabs [data-message-client="'+clients[0].id+'"]').click()`); await wait(100);
+  await evaluate(`document.querySelector('#inbox-client-tabs [data-inbox-client="'+clients[0].id+'"]').click()`); await wait(100);
   if (!/Ana Ruiz/.test(panel) || !/Do you cater\?/.test(panel) || !/2[12] h left to reply/.test(panel)) fail('a conversation should show who wrote, their message, and the time left to reply');
   if (!/Reply window closed/.test(panel)) fail('an old conversation should say its window closed');
   if (!/Instagram @harbor/.test(panel) || !/Reconnect it in Social Accounts/.test(panel)) fail('an account without permission should be named');
@@ -58,6 +58,18 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!sent || !/"connectionId":"c-fb"/.test(sent) || !/"conversationId":"t1"/.test(sent) || !/Yes, we cater!/.test(sent)) fail('Send should reply in that conversation: ' + sent);
   if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '1') fail('after replying, only the other client’s message is waiting');
   if (await evaluate(`__calls.some(c=>c.action==='reply-comment')`)) fail('a message reply must not be sent as a comment');
+
+  // Comments follow the same client tab: only that client's posts, and Needs a reply checks that client.
+  await evaluate(`(()=>{const pub=(id,clientId,title)=>({id,clientId,title,scheduledFor:new Date(Date.now()-86400000).toISOString(),jobs:[{id:'j'+id,platform:'facebook',status:'published',provider:'direct'}]});serverPosts=[pub('a',clients[0].id,'First client post'),pub('b',clients[1].id,'Second client post')];renderCommentsPanel();})()`); await wait(200);
+  let posts = await evaluate(`document.querySelector('#comment-post-list').innerText`);
+  if (!/First client post/.test(posts) || /Second client post/.test(posts)) fail('Comments should list only the chosen client’s posts: ' + posts.replace(/\s+/g, ' '));
+  await evaluate(`document.querySelector('#inbox-client-tabs [data-inbox-client="'+clients[1].id+'"]').click()`); await wait(300);
+  posts = await evaluate(`document.querySelector('#comment-post-list').innerText`);
+  if (!/Second client post/.test(posts) || /First client post/.test(posts)) fail('switching clients should switch the posts');
+  if (!(await evaluate(`__calls.some(c=>c.action==='open-comments'&&c.clientId===clients[1].id)`))) fail('Needs a reply should check the chosen client');
+  if (/Ana Ruiz/.test(await evaluate(`document.querySelector('#conversation-list').innerText`))) fail('Messages should switch too');
+  await evaluate(`document.querySelector('#inbox-client-tabs [data-inbox-client="'+clients[0].id+'"]').click()`); await wait(300);
+  await evaluate(`document.querySelector('[data-conversation="t1"]').click()`); await wait(300);
 
   // Folders: Unread, Inbox, Archived.
   await evaluate(`try{localStorage.removeItem('signaldesk-messages-folder')}catch{};document.querySelector('[data-message-folder="unread"]').click()`); await wait(100);

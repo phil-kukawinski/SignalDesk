@@ -25,7 +25,7 @@ function replyFormHtml(comment,jobId,withJob=false){replyContext.set(String(comm
 
 // --- Needs a reply ---
 async function loadOpenComments(force=false){
-  if(!cloudFeaturesAvailable()||currentRole!=='admin')return null;const key=homeClientId()||'';
+  if(!cloudFeaturesAvailable()||currentRole!=='admin')return null;const key=($('#view-inbox')?.classList.contains('active')&&typeof currentInboxClient==='function'?currentInboxClient():homeClientId())||'';
   if(!force&&openCommentsCache.key===key&&Date.now()-openCommentsCache.at<OPEN_COMMENTS_TTL)return openCommentsCache.data;
   if(openCommentsCache.loading)return openCommentsCache.data;
   openCommentsCache.loading=true;renderNeedsReply();

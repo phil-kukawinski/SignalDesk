@@ -1956,9 +1956,9 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 .message-bubble p{margin:0;font-size:calc(13px*var(--fs,1));white-space:pre-wrap;overflow-wrap:anywhere}.message-bubble small{display:block;margin-top:2px;color:var(--text-muted);font-size:calc(11px*var(--fs,1))}
 .message-window{color:var(--warning-text);font-size:calc(12px*var(--fs,1))}
 .post-comments-layout[hidden]{display:none}
-.message-tabs{margin:0 16px 10px;flex-wrap:wrap;max-width:calc(100% - 32px)}.message-tabs[hidden]{display:none}
-.message-tabs button{display:inline-flex;align-items:center;gap:6px}.message-tabs .client-dot{width:8px;height:8px;border-radius:50%;flex:none}
-.message-tabs .count-badge{background:var(--warning-soft);color:var(--warning-text)}
+.inbox-client-tabs{margin:0 0 16px;flex-wrap:wrap;max-width:100%}.inbox-client-tabs[hidden]{display:none}
+.inbox-client-tabs button{display:inline-flex;align-items:center;gap:6px}.inbox-client-tabs .client-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.inbox-client-tabs .count-badge{background:var(--warning-soft);color:var(--warning-text)}
 .message-attachment{display:grid;gap:4px;font-size:calc(13px*var(--fs,1))}.message-attachment a{font-weight:600}
 .message-media{max-width:220px;max-height:220px;border-radius:10px;object-fit:cover}
 .message-folders{display:flex;margin:2px 2px 8px}.message-folders button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px}

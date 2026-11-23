@@ -2,26 +2,37 @@
 // from Meta (SignalDesk doesn't store them). Meta lets a business answer within 24 hours of the person's
 // last message, so each conversation that needs a reply shows how long is left.
 const MESSAGES_TTL=2*60000;
-let messagesCache={key:null,at:0,data:null,loading:false,error:''},activeDm=null,messagesClient=null;
+let messagesCache={key:null,at:0,data:null,loading:false,error:''},activeDm=null,inboxClient=null;
 const MESSAGES_CLIENT_KEY='signaldesk-messages-client',MESSAGES_FOLDER_KEY='signaldesk-messages-folder';
 // Unread: their message is the latest and nobody has answered. Inbox: everything not archived. Archived: put away here (Meta's copy is unchanged).
 const MESSAGE_FOLDERS=[['unread','Unread'],['inbox','Inbox'],['archived','Archived']];
 let messagesFolder='inbox';
-try{messagesClient=localStorage.getItem(MESSAGES_CLIENT_KEY);messagesFolder=MESSAGE_FOLDERS.some(([key])=>key===localStorage.getItem(MESSAGES_FOLDER_KEY))?localStorage.getItem(MESSAGES_FOLDER_KEY):'inbox';}catch{/* private window: start from the default */}
+try{inboxClient=localStorage.getItem(MESSAGES_CLIENT_KEY);messagesFolder=MESSAGE_FOLDERS.some(([key])=>key===localStorage.getItem(MESSAGES_FOLDER_KEY))?localStorage.getItem(MESSAGES_FOLDER_KEY):'inbox';}catch{/* private window: start from the default */}
 function inMessageFolder(item,folder){return folder==='archived'?item.archived:!item.archived&&(folder==='inbox'||item.needsReply);}
 
 function messagesNeedingReply(clientId=null){return(messagesCache.data?.conversations||[]).filter(item=>item.needsReply&&item.canReply&&!item.archived&&(clientId===null||item.clientId===clientId)).length;}
 // Clients with a Facebook or Instagram account, in the workspace's client order.
-function messageClients(){const byClient=messagesCache.data?.byClient||{};return clients.filter(client=>byClient[client.id]);}
+// One client at a time in the Social Inbox, for both Messages and Comments: clients with a Facebook or Instagram
+// account, or with posts SignalDesk published, in the workspace's client order.
+function inboxClients(){const byClient=messagesCache.data?.byClient||{},posted=new Set(commentablePosts().map(post=>post.clientId));return clients.filter(client=>byClient[client.id]||posted.has(client.id));}
 // The client shown: the one picked last, else Home's client, else one with messages waiting, else the first.
-function currentMessagesClient(){const list=messageClients(),has=id=>list.some(client=>client.id===id);if(has(messagesClient))return messagesClient;const home=homeClientId();if(has(home))return home;return(list.find(client=>messagesNeedingReply(client.id))||list[0])?.id||null;}
+function currentInboxClient(){const list=inboxClients(),has=id=>list.some(client=>client.id===id);if(has(inboxClient))return inboxClient;const home=homeClientId();if(has(home))return home;return(list.find(client=>messagesNeedingReply(client.id))||list[0])?.id||null;}
 function pickMessagesFolder(folder){messagesFolder=folder;try{localStorage.setItem(MESSAGES_FOLDER_KEY,folder);}catch{/* not remembered */}renderMessagesPanel();}
 async function archiveConversation(connectionId,conversationId,archived){
   const item=findConversation(connectionId,conversationId);
   try{await callSocialApi({action:'message-state',connectionId,conversationId,archived});if(item)item.archived=archived;toast(archived?'Archived. It comes back to the inbox if they write again.':'Moved back to the inbox.');renderMessagesPanel();renderInboxCount();openConversation(connectionId,conversationId);}
   catch(error){toast(error.message);}
 }
-function pickMessagesClient(id){messagesClient=id;try{localStorage.setItem(MESSAGES_CLIENT_KEY,id);}catch{/* not remembered */}activeDm=null;$('#message-thread').innerHTML='<p class="option-hint">Choose a conversation to read it and reply.</p>';renderMessagesPanel();}
+function pickInboxClient(id){inboxClient=id;try{localStorage.setItem(MESSAGES_CLIENT_KEY,id);}catch{/* not remembered */}
+  activeDm=null;const thread=$('#message-thread');if(thread)thread.innerHTML='<p class="option-hint">Choose a conversation to read it and reply.</p>';
+  activeCommentJob=null;const comments=$('#comment-thread');if(comments)comments.innerHTML='<p class="option-hint">Choose a post to see its comments.</p>';
+  renderMessagesPanel();renderCommentsPanel();loadOpenComments();}
+// Each tab counts unread messages, plus comments needing a reply once they've been checked for that client.
+function renderInboxTabs(){
+  const tabs=$('#inbox-client-tabs');if(!tabs)return;const list=inboxClients(),current=currentInboxClient();tabs.hidden=list.length<2;if(tabs.hidden)return;
+  tabs.innerHTML=list.map(client=>{const waiting=(messagesCache.data?.conversations||[]).filter(item=>item.clientId===client.id&&inMessageFolder(item,'unread')).length+(openCommentsCache.key===client.id?openCommentCount():0);
+    return`<button type="button" role="tab" aria-selected="${client.id===current}" class="${client.id===current?'active':''}" data-inbox-client="${escapeHtml(client.id)}"><span class="client-dot" style="background:${escapeHtml(client.color||'var(--accent)')}"></span>${escapeHtml(client.name)}${waiting?` <span class="count-badge">${waiting}</span>`:''}</button>`;}).join('');
+}
 function findConversation(connectionId,conversationId){return(messagesCache.data?.conversations||[]).find(item=>item.connectionId===connectionId&&item.id===conversationId);}
 function replyWindowText(item){if(!item?.needsReply||!item.replyBy)return'';const left=Date.parse(item.replyBy)-Date.now();if(left<=0||!item.canReply)return'Reply window closed';const hours=Math.floor(left/3600000);return hours>=1?`${hours} h left to reply`:`${Math.max(1,Math.round(left/60000))} min left to reply`;}
 const ATTACHMENT_LABELS={photo:'Photo',video:'Video',file:'File',share:'Shared a post',sticker:'Sticker','story-reply':'Replied to your story','story-mention':'Mentioned you in their story',unsupported:'A message type Meta doesn’t share with other apps',unknown:'A photo, video, or file'};
@@ -52,8 +63,7 @@ function renderMessagesPanel(){
   const badge=$('#messages-count');if(badge){badge.textContent=String(count);badge.hidden=!count;}
   if(error){notes.innerHTML=`<p class="option-hint">${escapeHtml(error)}</p>`;list.innerHTML='';return;}
   if(!data){notes.innerHTML='';list.innerHTML=skeletonRows(3);return;}
-  const tabs=$('#message-tabs'),list_=messageClients(),current=currentMessagesClient();
-  if(tabs){tabs.hidden=list_.length<2;tabs.innerHTML=list_.map(client=>{const waiting=(data.conversations||[]).filter(item=>item.clientId===client.id&&inMessageFolder(item,'unread')).length;return`<button type="button" role="tab" aria-selected="${client.id===current}" class="${client.id===current?'active':''}" data-message-client="${escapeHtml(client.id)}"><span class="client-dot" style="background:${escapeHtml(client.color||'var(--accent)')}"></span>${escapeHtml(client.name)}${waiting?` <span class="count-badge">${waiting}</span>`:''}</button>`;}).join('');}
+  const current=currentInboxClient();renderInboxTabs();
   notes.innerHTML=(data.problems||[]).filter(item=>item.clientId===current).map(item=>`<p class="messages-problem"><b>${escapeHtml(clients.find(entry=>entry.id===item.clientId)?.name||'Client')} · ${escapeHtml(platformLabel(item.platform))}${item.account?` ${escapeHtml(item.account)}`:''}</b> ${escapeHtml(item.error)}</p>`).join('');
   const layout=$('.post-comments-layout',panel),problems=data.problems||[];if(layout)layout.hidden=false;
   if(!data.accounts){list.innerHTML='<p class="option-hint">Connect a Facebook Page or Instagram account in Social Accounts to read and answer its messages here.</p>';return;}
@@ -88,7 +98,7 @@ async function openConversation(connectionId,conversationId){
 $('#conversation-list')?.addEventListener('click',event=>{const folder=event.target.closest('[data-message-folder]');if(folder){pickMessagesFolder(folder.dataset.messageFolder);return;}const button=event.target.closest('[data-conversation]');if(button)openConversation(button.dataset.connection,button.dataset.conversation);});
 $('#message-thread')?.addEventListener('click',event=>{const button=event.target.closest('[data-archive-conversation]');if(button&&activeDm)archiveConversation(activeDm.connectionId,activeDm.conversationId,button.dataset.archiveConversation==='1');});
 $('#refresh-messages')?.addEventListener('click',()=>loadMessages(true));
-$('#message-tabs')?.addEventListener('click',event=>{const tab=event.target.closest('[data-message-client]');if(tab)pickMessagesClient(tab.dataset.messageClient);});
+$('#inbox-client-tabs')?.addEventListener('click',event=>{const tab=event.target.closest('[data-inbox-client]');if(tab)pickInboxClient(tab.dataset.inboxClient);});
 document.addEventListener('submit',async event=>{
   const form=event.target.closest('form[data-message-to]');if(!form)return;event.preventDefault();
   const input=$('input',form),text=input.value.trim(),{connection,messageTo}=form.dataset;if(!text)return;
