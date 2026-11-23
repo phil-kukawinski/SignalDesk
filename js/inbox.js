@@ -35,7 +35,7 @@ async function loadOpenComments(force=false){
 }
 function openCommentCount(){return openCommentsCache.data?.comments?.length||0;}
 function markCommentAnswered(jobId,commentId){const data=openCommentsCache.data;if(!data)return;const before=data.comments.length;data.comments=data.comments.filter(item=>!(item.jobId===jobId&&item.id===commentId));if(data.comments.length!==before&&data.counts[jobId])data.counts[jobId]-=1;renderNeedsReply();renderCommentsPanel();renderInboxCount();}
-function renderInboxCount(){const badge=$('.nav-item[data-view="inbox"] .nav-count');if(!badge)return;const count=openCommentCount();badge.textContent=count>99?'99+':String(count);badge.hidden=!count;}
+function renderInboxCount(){const badge=$('.nav-item[data-view="inbox"] .nav-count');if(!badge)return;const count=openCommentCount()+(typeof messagesNeedingReply==='function'?messagesNeedingReply():0);badge.textContent=count>99?'99+':String(count);badge.hidden=!count;}
 function renderNeedsReply(){
   const panel=$('#post-comments-panel');if(!panel||panel.hidden)return;let box=$('#needs-reply');
   if(!box){box=document.createElement('section');box.id='needs-reply';box.className='needs-reply';box.setAttribute('aria-label','Comments that need a reply');$('.panel-header',panel).insertAdjacentElement('afterend',box);}
@@ -88,7 +88,7 @@ const replyContext=new Map();
 function jobClientId(jobId){if(!jobId)return '';return serverPosts.find(post=>post.jobs?.some(job=>job.id===jobId))?.clientId||networkCache?.posts?.find?.(post=>post.jobId===jobId||post.id===jobId)?.clientId||'';}
 function closeReplySuggestions(){$('#reply-suggest-menu')?.remove();}
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-suggest-reply]');if(!button){if(!event.target.closest('#reply-suggest-menu'))closeReplySuggestions();return;}event.stopPropagation();closeReplySuggestions();
-  const form=button.closest('form'),context=replyContext.get(form.dataset.replyTo)||{},post=serverPosts.find(item=>item.jobs?.some(job=>job.id===context.jobId)),job=post?.jobs.find(item=>item.id===context.jobId);
+  const form=button.closest('form'),context=replyContext.get(form.dataset.replyTo||form.dataset.messageTo)||{},post=serverPosts.find(item=>item.jobs?.some(job=>job.id===context.jobId)),job=post?.jobs.find(item=>item.id===context.jobId);
   button.disabled=true;button.classList.add('busy');
   try{const{replies}=await callSocialApi({action:'suggest-reply',clientId:form.dataset.client||'',comment:context.text,author:context.author,post:post?.text||'',network:job?platformLabel(job.platform):''});
     if(!replies.length){toast('No reply suggested. It may be spam, or best left alone.');return;}

@@ -1,6 +1,6 @@
 # Meta App Review: what to screen record
 
-One video, about 4–6 minutes once trimmed, covering all 11 permissions. Upload the **same video** to every permission in App Review → Requests, and in each permission's notes give the timestamp where it's shown (template at the end).
+One video, about 4–6 minutes once trimmed, covering all 14 permissions. Upload the **same video** to every permission in App Review → Requests, and in each permission's notes give the timestamp where it's shown (template at the end).
 
 Business Verification itself doesn't need a video: it's documents only. This recording is for **App Review**, which comes after verification.
 
@@ -22,8 +22,11 @@ In the Meta App Dashboard, go to **Facebook Login for Business → Configuration
 - `instagram_manage_comments`
 - `instagram_manage_insights`
 - `business_management`
+- `pages_messaging`
+- `instagram_manage_messages`
+- `pages_manage_metadata`
 
-`read_insights` and `pages_read_user_content` are the two most likely to be missing. Add any that are, and save.
+`read_insights`, `pages_read_user_content` and the three messaging permissions are the most likely to be missing. Add any that are, and save. If Meta won't offer the messaging permissions, add the messaging use cases first (task 17a in README-tasks).
 
 ### 2. Make Facebook ask for permission again
 On Facebook, open **Settings & privacy → Settings → Business integrations**, find SignalDesk, and **Remove** it. That way the recording shows Facebook's full permission screen instead of skipping it. Your existing connections in SignalDesk will need reconnecting afterward; the recording does that for the demo client.
@@ -32,7 +35,9 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 - **The reviewer login** (task 9 in README-tasks), with the **App Review Demo** client. The reviewer account must not have two-factor sign-in turned on.
 - **A Facebook Page and linked Instagram professional account** to post to. PK Works' own is fine; the post goes out for real.
 - **One image** on your desktop: a JPG, 1080×1350 or 1080×1080, nothing that needs explaining.
-- **A second Facebook account and a second Instagram account** to leave comments from. Your phone works for this.
+- **A second Facebook account and a second Instagram account** to leave comments and send messages from. Your phone works for this.
+- **That second Facebook account added as a Tester** on the Meta app (App roles → Roles → Add people → Tester), and the invite accepted. Until Meta approves, SignalDesk can only reply to people with a role on the app, so a reply to anyone else fails.
+- **Instagram set to share messages:** in the Instagram app on the business account, go to **Settings → Messages and story replies → Message controls → Connected tools** and turn on **Allow access to messages**.
 - **One older post with numbers:** something posted at least a day ago, so Analytics has reach and engagement to show. Fresh posts take a few hours.
 - **One post made directly on Facebook or Instagram** (not through SignalDesk) in the last week or two, so you can show it on the calendar.
 - **An Instagram business username to look up**, for the collaborator step. You'll only look it up, not post with it.
@@ -104,17 +109,28 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 
 **Say:** "Comments people leave on posts SignalDesk published show up here with their name, so the team can answer them in one place. The replies appear on Facebook and Instagram."
 
-### 5. Results (about 1 minute)
+### 5. Answer direct messages (about 1½ minutes)
+*Shows `pages_messaging`, `instagram_manage_messages`, `pages_manage_metadata`.*
+
+26. **Pause the recording.** From your second Facebook account, send the Page a Messenger message, for example *"Hi! Are you open on Sunday?"* From your second Instagram account, send the Instagram account a direct message. Then resume.
+27. In SignalDesk, stay in **Social Inbox** and go to **Messages** at the top. Select **Check again**. Point at the two conversations: each shows who wrote, the client, the network and how long is left to reply. ⏱ **messages**
+28. Open the Facebook conversation, type a reply, for example *"Hi! Yes, 9 to 3 on Sundays."*, and select **Send**.
+29. Open the Instagram conversation and do the same.
+30. Go to Messenger and Instagram (on your phone or in the browser tabs) as the second accounts, and show the replies arriving. ⏱ **message-replies**
+
+**Say:** "Messages people send the client's Page and Instagram account show up here too, so the team answers customers in one place. A person writes every reply, and SignalDesk only replies within Meta's 24-hour window."
+
+### 6. Results (about 1 minute)
 *Shows `pages_read_engagement`, `read_insights`, `instagram_manage_insights`, `instagram_basic`.*
 
-26. In the sidebar, select **Analytics & Reports**. Point at the Facebook and Instagram numbers: reach, views and engagement. ⏱ **analytics**
-27. Scroll to **Weekly Top Posts**, and open the older post from Part A to show its reactions, comments, shares, reach and views.
-28. In the sidebar, select **Content Calendar** and open the post you made directly on Facebook or Instagram. ⏱ **outside-posts**
+31. In the sidebar, select **Analytics & Reports**. Point at the Facebook and Instagram numbers: reach, views and engagement. ⏱ **analytics**
+32. Scroll to **Weekly Top Posts**, and open the older post from Part A to show its reactions, comments, shares, reach and views.
+33. In the sidebar, select **Content Calendar** and open the post you made directly on Facebook or Instagram. ⏱ **outside-posts**
 
 **Say:** "SignalDesk shows each post's reach and engagement for the client's reports. That includes posts made directly on Facebook or Instagram, like this one, so the calendar and reports cover the whole account. New posts fill in after a few hours, which is why I'm showing an older one."
 
-### 6. Removing access (about 15 seconds)
-29. Go back to **Social Accounts**. On the Facebook card, select **Disconnect** and confirm. ⏱ **disconnect**
+### 7. Removing access (about 15 seconds)
+34. Go back to **Social Accounts**. On the Facebook card, select **Disconnect** and confirm. ⏱ **disconnect**
 
 **Say:** "Anyone can disconnect at any time, and SignalDesk deletes the stored access."
 
@@ -126,7 +142,8 @@ Stop recording.
 
 - **Trim** the waits and join the clips. In iMovie, use File → New Movie, drag the clips in, then **File → Share → File** at 1080p.
 - **Watch it once without sound.** Each permission's result should be visible on screen, not only described in the narration.
-- **Reconnect your real accounts.** The disconnect in step 29 only affected App Review Demo. Removing the app in Part A step 2 may also have logged out your other clients' Facebook connections, so check Social Accounts for each client and reconnect any that need it.
+- **Reconnect your real accounts.** The disconnect in step 34 only affected App Review Demo. Removing the app in Part A step 2 may also have logged out your other clients' Facebook connections, so check Social Accounts for each client and reconnect any that need it.
+- **Remove the tester role** from your second Facebook account if you don't want to keep it.
 - **Delete the demo post** from the Page and Instagram if you don't want it kept.
 
 ## Part D: notes to paste next to each permission
@@ -146,6 +163,9 @@ Fill in the times you noted at each ⏱ marker:
 | `pages_read_engagement` | Shown at [analytics]: the post's reactions, comments and shares. Also at [outside-posts]: posts made directly on Facebook appear on the calendar. |
 | `read_insights` | Shown at [analytics]: reach and views for the Page's posts. |
 | `instagram_manage_insights` | Shown at [analytics]: reach, views, likes, comments and saves for Instagram posts. |
+| `pages_messaging` | Shown at [messages]: a Messenger conversation with the Page, read in SignalDesk. At [message-replies]: the reply written in SignalDesk arrives in Messenger. |
+| `instagram_manage_messages` | Shown at [messages]: an Instagram direct message, read in SignalDesk. At [message-replies]: the reply arrives in Instagram. |
+| `pages_manage_metadata` | Shown at [messages]: the Page's and Instagram account's conversations listed in SignalDesk's Social Inbox. |
 
 The written answers for each permission are in [app-review.md](app-review.md) under **Permission answers**. Paste those as well; the notes above only point to the video.
 

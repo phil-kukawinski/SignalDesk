@@ -110,6 +110,8 @@ function privacyPage() {
 <h3>Information from the networks about your posts</h3>
 <p>If you turn on click counting, links in your posts are replaced with short SignalDesk links. When someone opens one, we add one to that link’s click count for the day and send them on. We don’t store who clicked, their IP address, or any cookie.</p>
 <p>For accounts you connect, we read and store your posts, including ones made outside SignalDesk (text, media, links, and dates), the performance numbers for those posts such as reach, impressions, likes, comments, shares, saves, and clicks, and account numbers such as followers, reach, and views. We use these to show your calendar, analytics, and reports, and to write the weekly planning notes described below. If you use the comment inbox, we read the comments on your posts, including the commenter’s name or username as the network provides it, and send the replies you write.</p>
+<h3>Direct messages</h3>
+<p>If you connect a Facebook Page or Instagram professional account, workspace admins can read and answer the messages people send it from SignalDesk’s Social Inbox. When an admin opens the inbox, we ask Meta for the recent conversations, with each person’s name or username, and show them. Replies are sent only when an admin writes and sends one. We don’t store message contents; they stay with Meta.</p>
 <h3>Client reviewers</h3>
 <p>If you share a review link, the person reviewing can enter their name, approve posts, and leave comments. We store what they enter.</p>
 <h3>Activity log</h3>
@@ -123,7 +125,7 @@ function privacyPage() {
 <ul>
 <li>To publish your posts to the networks you chose, at the time you chose.</li>
 <li>To show your calendar, approvals, post history, analytics, and client reports.</li>
-<li>To read and reply to comments when you ask.</li>
+<li>To read and reply to comments and direct messages when you ask.</li>
 <li>To send the notifications, digests, and reports you turned on.</li>
 <li>To run AI features when you use them, such as drafting captions or describing an image.</li>
 <li>To write a planning note about once a week for each active client, automatically, with ideas for what to post next, unless a workspace admin turns this off in Settings.</li>

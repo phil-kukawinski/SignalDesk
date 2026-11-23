@@ -95,7 +95,9 @@ function httpKind(status) {
 
 const META_SCOPES = [
   'pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_engagement', 'read_insights',
-  'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights', 'business_management'
+  'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights', 'business_management',
+  // Direct messages in the Social Inbox.
+  'pages_messaging', 'instagram_manage_messages', 'pages_manage_metadata'
 ];
 
 function appSecretProof(token) {
@@ -1016,6 +1018,6 @@ function adapterFor(platform) {
   return PROVIDERS[DIRECT_PLATFORMS[platform]];
 }
 
-module.exports = { instagramAccountPosts,
+module.exports = { instagramAccountPosts, graph,
   CONNECTION_PLATFORM, accountHistory, lookupInstagramAccount, DIRECT_PLATFORMS, PROVIDERS, COMMENTABLE, PublishError, providerConfigured, adapterFor, mediaKind, linkedInCommentary, redirectUri
 };

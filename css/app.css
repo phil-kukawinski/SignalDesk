@@ -1942,3 +1942,17 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 /* Campaign cards carry their client's brand color: a band on top, a light wash, and a colored dot by the client's name. */
 .board-card{position:relative;overflow:hidden;border-top:0}.board-card::before{content:"";position:absolute;inset:0 0 auto;height:5px;background:var(--client-color,var(--accent))}.board-card::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,color-mix(in srgb,var(--client-color,var(--accent)) 13%,transparent),transparent 65%);pointer-events:none}.board-card>*{position:relative;z-index:1}.board-card:hover{border-color:color-mix(in srgb,var(--client-color,var(--accent)) 55%,var(--border))}.board-card .board-client{display:inline-flex;align-items:center;gap:6px;font-weight:600;color:color-mix(in srgb,var(--client-color,var(--accent)) 70%,var(--text))}.board-card .board-client i{width:9px;height:9px;border-radius:50%;background:var(--client-color,var(--accent));flex:none}
 .board-title{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}.board-rename-button{font-size:13px;font-weight:600}.board-rename{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 4px}.board-rename .field{flex:1 1 240px;max-width:420px;font-size:18px;font-weight:700}
+
+/* Social Inbox → Messages */
+.messages-panel .panel-header h2 .count-badge{background:var(--warning-soft);color:var(--warning-text);vertical-align:middle}
+.messages-notes:empty{display:none}.messages-notes{padding:0 16px 10px;display:grid;gap:6px}
+.messages-problem{margin:0;font-size:calc(12px*var(--fs,1));color:var(--warning-text);background:var(--warning-soft);border-radius:8px;padding:6px 10px}
+.conversation .conversation-last{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;color:var(--text-2)}
+.conversation.unread b{font-weight:700}.conversation .comment-state{display:inline-block;margin-top:4px}
+.message-head{display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}.message-head small{color:var(--text-muted)}
+.message-list{display:grid;gap:8px;max-height:380px;overflow:auto;padding:4px 2px}
+.message-bubble{max-width:80%;justify-self:start;background:var(--surface-3);border-radius:14px 14px 14px 4px;padding:8px 12px}
+.message-bubble.mine{justify-self:end;background:var(--accent-soft);border-radius:14px 14px 4px 14px}
+.message-bubble p{margin:0;font-size:calc(13px*var(--fs,1));white-space:pre-wrap;overflow-wrap:anywhere}.message-bubble small{display:block;margin-top:2px;color:var(--text-muted);font-size:calc(11px*var(--fs,1))}
+.message-window{color:var(--warning-text);font-size:calc(12px*var(--fs,1))}
+.post-comments-layout[hidden]{display:none}

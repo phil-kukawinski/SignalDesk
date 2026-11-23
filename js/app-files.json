@@ -50,6 +50,7 @@
   "js/campaign-builder.js",
   "js/planning.js",
   "js/inbox.js",
+  "js/messages.js",
   "js/tour.js",
   "js/auth.js",
   "js/billing.js",

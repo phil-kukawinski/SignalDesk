@@ -1,6 +1,6 @@
 # SignalDesk: your task list
 
-Last updated November 18, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
+Last updated November 23, 2026. Tasks are ranked easiest first, and times are rough estimates of your hands-on work, not how long a platform takes to respond.
 
 I can't see the developer portals, so some of these may already be done. Check off anything you've finished, and tell me if a task's status has changed.
 
@@ -51,7 +51,14 @@ Added November 5, 2026, from the outside review.
 
 - [ ] **15. Get a lawyer to review the legal pages.** Do this before opening SignalDesk to other people: `/privacy`, `/terms`, `/data-deletion`, and the new `/backups` guide. Ask specifically about keeping a deleted person's name and email in the activity log and post history, and how that fits deletion requests under laws like GDPR and California's. Also ask about sending uploaded documents to Anthropic for campaign plans, since they may include client material, and about client confidentiality when agencies use the automatic planning notes, which admins can now turn off. Check Anthropic's current data-use and retention terms for the API so the privacy policy states them correctly.
 - [ ] **16. Complete Meta Business Verification.** It's done for PK Works in Meta's business settings and can take days or longer. Start it before you record anything for App Review.
-- [ ] **17. Complete Meta App Review.** Needs tasks 7, 9, and 16. Use each feature once, record the screencast, and paste the answers from [app-review.md](app-review.md). List Anthropic as a service provider.
+- [ ] **17a. New: turn on Meta messaging (before recording).** Direct messages in the Social Inbox are built. In the Meta app dashboard:
+  1. Add the messaging use cases: **Engage with customers on Messenger from Meta** and the Instagram messaging one (**Manage messaging & content on Instagram**, or similar). The earlier "Invalid Scopes" error came from these use cases being added while the login configuration didn't match, so do step 2 straight after.
+  2. In **Facebook Login for Business → Configurations**, add `pages_messaging`, `instagram_manage_messages` and `pages_manage_metadata`, and save.
+  3. Under **App roles → Roles**, add your second Facebook account as a **Tester** and accept the invite on that account.
+  4. On the Instagram business accounts: **Settings → Messages and story replies → Message controls → Connected tools → Allow access to messages**.
+  5. In SignalDesk, reconnect PK Works' Facebook (Social Accounts → Facebook → Reconnect) and allow the new permissions.
+  6. Test it: from the second account, message the PK Works Page and Instagram, then open **Social Inbox → Messages** and reply. Tell me what you see, including any error.
+- [ ] **17. Complete Meta App Review.** Needs tasks 7, 9, 16 and 17a. Use each feature once, record the screencast, and paste the answers from [app-review.md](app-review.md). List Anthropic as a service provider.
 
 ## Optional: the other four networks
 
