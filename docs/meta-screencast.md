@@ -165,7 +165,7 @@ Fill in the times you noted at each ⏱ marker:
 | `instagram_manage_insights` | Shown at [analytics]: reach, views, likes, comments and saves for Instagram posts. |
 | `pages_messaging` | Shown at [messages]: a Messenger conversation with the Page, read in SignalDesk. At [message-replies]: the reply written in SignalDesk arrives in Messenger. |
 | `instagram_manage_messages` | Shown at [messages]: an Instagram direct message, read in SignalDesk. At [message-replies]: the reply arrives in Instagram. |
-| `pages_manage_metadata` | Shown at [messages]: the Page's and Instagram account's conversations listed in SignalDesk's Social Inbox. |
+| `pages_manage_metadata` | Shown at [messages]: the Page's and Instagram account's conversations listed in SignalDesk's Social Inbox. If Meta shows no notes box for this permission, skip it; the `pages_messaging` notes cover it. |
 
 The written answers for each permission are in [app-review.md](app-review.md) under **Permission answers**. Paste those as well; the notes above only point to the video.
 
