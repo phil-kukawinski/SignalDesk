@@ -102,6 +102,8 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 **`instagram_manage_messages`**
 > The same Social Inbox shows the Instagram Direct conversations people start with a client's Instagram professional account, and lets a team admin answer them. Replies are written by a person, sent only to the person in that conversation, and only within 24 hours of their last message. Nothing is sent automatically, and message contents aren't stored. Listing the Instagram account's conversations goes through its linked Page, which is why `pages_manage_metadata` is also requested.
 > **To test:** from another Instagram account, send the client's Instagram account a direct message. In SignalDesk, open **Social Inbox → Messages**, choose the conversation, type a reply, and select **Send**. The reply appears in that Instagram conversation.
+> **Note for the reviewer:** while the app has Standard Access, Meta only delivers Instagram replies to people with a role on both the app and the Instagram account, and refuses others with "(#10) This message is sent outside of allowed window". If the screencast shows that message, it is this limit and not the 24-hour window: the Messenger reply in the same screencast uses the same flow and arrives.
+> *(Leave this note out if the Instagram reply arrives in your recording.)*
 
 **`pages_manage_metadata`**
 > *(Meta may not show a separate answer box for this one. If it doesn't, the two messaging answers above cover it.)*

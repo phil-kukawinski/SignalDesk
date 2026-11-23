@@ -37,6 +37,10 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 - **One image** on your desktop: a JPG, 1080×1350 or 1080×1080, nothing that needs explaining.
 - **A second Facebook account and a second Instagram account** to leave comments and send messages from. Your phone works for this.
 - **That second Facebook account added as a Tester** on the Meta app (App roles → Roles → Add people → Tester), and the invite accepted. Until Meta approves, SignalDesk can only reply to people with a role on the app, so a reply to anyone else fails.
+- **The second Instagram account set up to receive replies.** Facebook replies work with just the Tester role (tested November 23). Instagram is stricter before approval: the person messaging needs a role on the app *and* a role on the business's Instagram account. Otherwise the reply fails with "(#10) This message is sent outside of allowed window", even minutes after their message. To give it both:
+  1. In **Accounts Center**, link the second Instagram account to the second Facebook account (the Tester).
+  2. In **Meta Business Suite → Settings → People**, give that Facebook account access to the PK Works Instagram account (partial access with messages is enough).
+  3. Test it before recording: send a direct message from the second Instagram account, then reply from SignalDesk. If it still fails, record step 29 anyway, using the fallback in that step.
 - **Instagram set to share messages:** in the Instagram app on the business account, go to **Settings → Messages and story replies → Message controls → Connected tools** and turn on **Allow access to messages**.
 - **One older post with numbers:** something posted at least a day ago, so Analytics has reach and engagement to show. Fresh posts take a few hours.
 - **One post made directly on Facebook or Instagram** (not through SignalDesk) in the last week or two, so you can show it on the calendar.
@@ -115,7 +119,7 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 26. **Pause the recording.** From your second Facebook account, send the Page a Messenger message, for example *"Hi! Are you open on Sunday?"* From your second Instagram account, send the Instagram account a direct message. Then resume.
 27. In SignalDesk, scroll back up to **Messages** (still on the **App Review Demo** tab, in the **Inbox** folder). Select **Check again**. Point at the two conversations: each shows who wrote, the network and how long is left to reply. ⏱ **messages**
 28. Open the Facebook conversation, type a reply, for example *"Hi! Yes, 9 to 3 on Sundays."*, and select **Send**.
-29. Open the Instagram conversation and do the same.
+29. Open the Instagram conversation and do the same. *If Meta refuses the reply* (the second Instagram account couldn't get a role, see the prep list), keep recording: show the message arriving in SignalDesk and the reply being typed and sent, and let the error show. Then say aloud, or add a caption: "Before approval, Meta only allows replies to people with a role on the app. The Facebook reply above shows the same flow working." The review notes explain this too.
 30. Go to Messenger and Instagram (on your phone or in the browser tabs) as the second accounts, and show the replies arriving. ⏱ **message-replies**
 
 **Say:** "Messages people send the client's Page and Instagram account show up here too, so the team answers customers in one place. A person writes every reply, and SignalDesk only replies within Meta's 24-hour window."
