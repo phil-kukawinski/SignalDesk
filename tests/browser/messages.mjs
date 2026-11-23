@@ -114,4 +114,12 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // Users (not admins) don't see messages.
   await evaluate(`currentRole='user';loadMessages()`); await wait(100);
   if (!(await evaluate(`document.querySelector('#messages-panel').hidden`))) fail('only admins see messages');
+
+  // A tab left open learns about a new version and offers a reload; the same version stays quiet.
+  const realFetch = 'window.__fetch=window.__fetch||window.fetch';
+  await evaluate(`${realFetch};window.fetch=async()=>({text:async()=>'<script src="js/app.min.js?v='+loadedAppVersion+'"></script>'});appVersionCheckedAt=0;checkAppVersion()`); await wait(200);
+  if (await evaluate(`!!document.querySelector('#update-banner')`)) fail('the same version should not offer a reload');
+  await evaluate(`window.fetch=async()=>({text:async()=>'<script src="js/app.min.js?v=newer1"></script>'});appVersionCheckedAt=0;checkAppVersion()`); await wait(200);
+  if (!/SignalDesk was updated/.test(await evaluate(`document.querySelector('#update-banner')?.innerText||''`))) fail('a new version should offer a reload');
+  await evaluate(`document.querySelector('[data-dismiss-update]').click();window.fetch=window.__fetch`);
 };

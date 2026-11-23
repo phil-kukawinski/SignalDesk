@@ -3,6 +3,7 @@
 // Meta lets a business answer only within 24 hours of the person's last message.
 const { httpError, databaseRequest } = require('./core');
 const { graph } = require('./platforms');
+const { recordAppError } = require('./platform');
 const { listConnections, loadConnection, ensureFreshToken } = require('./publishing');
 
 const MESSAGE_WINDOW_MS = 24 * 3600000;
@@ -116,7 +117,11 @@ async function sendMessage(workspaceId, { connectionId, conversationId, text, en
     const result = await graph(`${pageIdFor(connection)}/messages`, { method: 'POST', token: connection.token, sending: true, params: { recipient: { id: recipient.id }, message: { text: message }, ...(connection.platform === 'facebook' ? { messaging_type: 'RESPONSE' } : {}) } });
     return { id: result.message_id || null, text: message, at: new Date().toISOString(), mine: true };
   } catch (error) {
-    throw error.status ? error : messageError(error);
+    if (error.status) throw error;
+    // Keep Meta's own words: in the message shown, and in Settings → Beta invites → Server errors.
+    const shown = messageError(error), said = String(error.message || '').slice(0, 300);
+    await recordAppError('api/messages', `Reply on ${connection.platform} refused. Meta said: ${said}`, workspaceId);
+    throw httpError(shown.status, said && !shown.message.includes(said) ? `${shown.message} (Meta said: ${said})` : shown.message);
   }
 }
 

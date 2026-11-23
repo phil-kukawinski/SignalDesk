@@ -1964,3 +1964,5 @@ tr.net-row>td:first-child{box-shadow:inset 3px 0 0 var(--net)}
 .message-folders{display:flex;margin:2px 2px 8px}.message-folders button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px}
 .message-folders .count-badge{background:var(--warning-soft);color:var(--warning-text)}
 .message-head .message-archive{margin-left:auto}
+.update-banner{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);padding:10px 12px 10px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 8px 30px rgb(0 0 0/.25)}
+.update-banner span{flex:1}

@@ -114,7 +114,7 @@ async function recentErrors(hours = 24) {
 
 // Emails platform owners about new server errors and widespread publishing failures, at most every 6 hours.
 // Plain names for where an error came from, in alert emails.
-const ERROR_SOURCES = { 'backup-check': 'Daily backup check', backup: 'Daily backup', browser: 'Someone’s browser', 'api/social': 'App server', 'api/review': 'Client review page', 'api/cron': 'Scheduled jobs', 'api/stripe': 'Payments (Stripe)', 'api/inbound': 'Email replies', 'api/oauth': 'Account connections' };
+const ERROR_SOURCES = { 'backup-check': 'Daily backup check', backup: 'Daily backup', browser: 'Someone’s browser', 'api/social': 'App server', 'api/messages': 'Message replies', 'api/review': 'Client review page', 'api/cron': 'Scheduled jobs', 'api/stripe': 'Payments (Stripe)', 'api/inbound': 'Email replies', 'api/oauth': 'Account connections' };
 
 async function alertPlatformAdmins({ lastAlert } = {}) {
   const admins = platformAdmins();
