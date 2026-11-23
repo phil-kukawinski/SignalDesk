@@ -104,14 +104,16 @@ async function conversationMessages(workspaceId, { connectionId, conversationId,
 }
 
 // Sends a text reply. The recipient comes from the conversation itself, never from the browser.
-async function sendMessage(workspaceId, { connectionId, conversationId, text, encryptionKey }) {
+async function sendMessage(workspaceId, { connectionId, conversationId, text, encryptionKey, now = Date.now() }) {
   if (typeof conversationId !== 'string' || !ID.test(conversationId)) throw httpError(400, 'Choose a conversation.');
   const connection = await messagingConnection(workspaceId, connectionId, encryptionKey);
   const message = typeof text === 'string' ? text.trim() : '';
   const limit = TEXT_LIMITS[connection.platform];
   if (!message || message.length > limit) throw httpError(400, `Write a message up to ${limit.toLocaleString('en-US')} characters.`);
+  let theyWroteRecently = false;
   try {
-    const conversation = await graph(conversationId, { token: connection.token, params: { fields: 'participants' } });
+    const conversation = await graph(conversationId, { token: connection.token, params: { fields: 'participants,messages.limit(10){from,created_time}' } });
+    theyWroteRecently = (conversation.messages?.data || []).some((item) => !isMine(connection, item.from) && now - Date.parse(item.created_time) < MESSAGE_WINDOW_MS);
     const recipient = otherPerson(connection, conversation.participants);
     if (!recipient.id) throw httpError(404, 'That conversation wasn’t found.');
     const result = await graph(`${pageIdFor(connection)}/messages`, { method: 'POST', token: connection.token, sending: true, params: { recipient: { id: recipient.id }, message: { text: message }, ...(connection.platform === 'facebook' ? { messaging_type: 'RESPONSE' } : {}) } });
@@ -119,7 +121,11 @@ async function sendMessage(workspaceId, { connectionId, conversationId, text, en
   } catch (error) {
     if (error.status) throw error;
     // Keep Meta's own words: in the message shown, and in Settings → Beta invites → Server errors.
-    const shown = messageError(error), said = String(error.message || '').slice(0, 300);
+    let shown = messageError(error);
+    const said = String(error.message || '').slice(0, 300);
+    // Before Meta approves messaging, a reply to someone without a role on the app is refused with the same
+    // "outside of allowed window" error, even when they wrote minutes ago.
+    if (theyWroteRecently && /allowed window|24 hour/i.test(said)) shown = httpError(400, `Meta refused this reply even though they wrote within 24 hours. Until Meta approves SignalDesk for messaging, replies only reach people with a role on the SignalDesk app${connection.platform === 'instagram' ? ' (for Instagram, an Instagram Tester who has accepted the invite)' : ' (for example a Tester)'}. Reply in the ${connection.platform === 'instagram' ? 'Instagram' : 'Facebook'} app for now.`);
     await recordAppError('api/messages', `Reply on ${connection.platform} refused. Meta said: ${said}`, workspaceId);
     throw httpError(shown.status, said && !shown.message.includes(said) ? `${shown.message} (Meta said: ${said})` : shown.message);
   }

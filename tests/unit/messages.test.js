@@ -51,7 +51,8 @@ global.fetch = async (input, options = {}) => {
   if (path === 't_new' && method === 'GET') return reply({ participants: { data: [{ id: 'page1', name: 'Harbor Coffee' }, { id: 'psid-1', name: 'Ana Ruiz' }] }, messages: { data: [{ id: 'm1', message: 'Do you cater?', from: { id: 'psid-1' }, created_time: hoursAgo(2) }, { id: 'm0', from: { id: 'psid-1' }, created_time: hoursAgo(3) }] } });
   // Our auto-reply came last, but they last wrote 30 hours ago: Meta's window has closed.
   if (path === 't_auto' && method === 'GET') return reply({ participants: { data: [{ id: 'page1' }, { id: 'psid-5' }] }, messages: { data: [{ id: 'a2', message: 'Thanks, we’ll be in touch!', from: { id: 'page1' }, created_time: hoursAgo(1) }, { id: 'a1', message: 'Hi', from: { id: 'psid-5' }, created_time: hoursAgo(30) }] } });
-  if (path === 't_closed' && method === 'GET') return reply({ participants: { data: [{ id: 'page1' }, { id: 'psid-9' }] } });
+  if (path === 't_closed' && method === 'GET') return reply({ participants: { data: [{ id: 'page1' }, { id: 'psid-9' }] }, messages: { data: [{ from: { id: 'psid-9' }, created_time: hoursAgo(30) }] } });
+  if (path === 't_recent' && method === 'GET') return reply({ participants: { data: [{ id: 'page1' }, { id: 'psid-9' }] }, messages: { data: [{ from: { id: 'psid-9' }, created_time: hoursAgo(1) }] } });
   if (path === 'page1/messages' && method === 'POST' && body.recipient.id === 'psid-9') return reply({ error: { code: 10, error_subcode: 2018278, message: '(#10) This message is sent outside of allowed window.' } }, 400);
   if (path === 'page1/messages' && method === 'POST') return reply({ recipient_id: body.recipient.id, message_id: 'mid.9' });
   return reply({ error: { message: `unexpected ${method} ${path}` } }, 400);
@@ -109,6 +110,7 @@ const { listConversations, conversationMessages, sendMessage, setConversationArc
   await assert.rejects(sendMessage('ws-1', { connectionId: 'c-ig', conversationId: 't_new', text: 'x'.repeat(1001), encryptionKey: KEY }), /up to 1,000 characters/, 'Instagram allows 1,000 characters');
   await assert.rejects(sendMessage('ws-1', { connectionId: FB, conversationId: 't_new', text: '   ', encryptionKey: KEY }), /Write a message/);
   await assert.rejects(sendMessage('ws-1', { connectionId: FB, conversationId: 't_closed', text: 'hi', encryptionKey: KEY }), (error) => error.status === 400 && /more than 24 hours/.test(error.message) && /Meta said: \(#10\) This message is sent outside/.test(error.message), 'a refused reply gives the plain reason and Meta’s own words');
+  await assert.rejects(sendMessage('ws-1', { connectionId: FB, conversationId: 't_recent', text: 'hi', encryptionKey: KEY, now }), (error) => /even though they wrote within 24 hours/.test(error.message) && /role on the SignalDesk app/.test(error.message) && !/more than 24 hours/.test(error.message), 'a recent message refused as “outside the window” is the app-role limit, not the clock');
   await assert.rejects(sendMessage('ws-1', { connectionId: 'c-other', conversationId: 't_new', text: 'hi', encryptionKey: KEY }), (error) => error.status === 404, 'another workspace’s account is not found');
   await assert.rejects(conversationMessages('ws-1', { connectionId: 'c-li', conversationId: 't_new', encryptionKey: KEY }), (error) => error.status === 404, 'LinkedIn has no messages here');
   await assert.rejects(conversationMessages('ws-1', { connectionId: FB, conversationId: '../me?x', encryptionKey: KEY }), /Choose a conversation/);

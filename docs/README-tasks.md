@@ -55,6 +55,7 @@ Added November 5, 2026, from the outside review.
   1. Add the messaging use cases: **Engage with customers on Messenger from Meta** and the Instagram messaging one (**Manage messaging & content on Instagram**, or similar). The earlier "Invalid Scopes" error came from these use cases being added while the login configuration didn't match, so do step 2 straight after.
   2. In **Facebook Login for Business → Configurations**, add `pages_messaging`, `instagram_manage_messages` and `pages_manage_metadata`, and save.
   3. Under **App roles → Roles**, add your second Facebook account as a **Tester** and accept the invite on that account.
+     For Instagram replies, the personal Instagram account you test from must also count as having a role. Link it to a Facebook account that has a role, in Meta's **Accounts Center**. Until then, Instagram refuses the reply with "outside of allowed window" even minutes after the message.
   4. On the Instagram business accounts: **Settings → Messages and story replies → Message controls → Connected tools → Allow access to messages**.
   5. In SignalDesk, reconnect PK Works' Facebook (Social Accounts → Facebook → Reconnect) and allow the new permissions.
   6. Test it: from the second account, message the PK Works Page and Instagram, then open **Social Inbox → Messages** and reply. Tell me what you see, including any error.
