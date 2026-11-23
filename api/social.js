@@ -819,7 +819,7 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
       await recordWorkerRun('backup', result);
       return send(res, 200, { backup: result });
     }
-    const [only, invites, errors] = await Promise.all([inviteOnly(), listInvites(), recentErrors(24)]);
+    const [only, invites, errors] = await Promise.all([inviteOnly(), listInvites(), recentErrors(24 * 7)]);
     return send(res, 200, { inviteOnly: only, invites, errors });
   }
 

@@ -2,7 +2,7 @@ const { databaseRequest } = require('./core');
 const { lastWorkerRun, recordWorkerRun } = require('./publishing');
 const crypto = require('crypto');
 const { emailConfigured, sendEmail, renderEmail, appUrl, STATUS_LEVELS } = require('./notify');
-const { platformAdmins } = require('./platform');
+const { platformAdmins, ERROR_SOURCES } = require('./platform');
 const { missingFromDatabase } = require('./health');
 
 // Once a week, checks that the whole platform still works and emails the platform owners the result,
@@ -119,15 +119,17 @@ async function weekInReview(now) {
   const [jobs, reauth, errors] = await Promise.all([
     databaseRequest(`publish_jobs?updated_at=gte.${since}&status=in.(published,failed,unknown)&select=status&limit=5000`),
     databaseRequest('social_connections?status=eq.needs_reauth&select=id&limit=500'),
-    databaseRequest(`app_errors?last_seen=gte.${since}&select=count&limit=500`)
+    databaseRequest(`app_errors?last_seen=gte.${since}&select=source,message,count,last_seen&order=last_seen.desc&limit=500`)
   ]);
   const published = (jobs || []).filter((job) => job.status === 'published').length, failed = (jobs || []).length - published;
   const errorCount = (errors || []).reduce((sum, row) => sum + (row.count || 0), 0);
+  const latest = errors?.[0], kinds = (errors || []).length;
+  const errorText = latest ? `${errorCount} this week${kinds > 1 ? `, ${kinds} different kinds` : ''}. Latest: ${ERROR_SOURCES[latest.source] || latest.source}, “${String(latest.message).slice(0, 160)}” (${new Date(latest.last_seen).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}). Settings → Beta invites lists the week’s errors.` : '';
   return {
     results: [
       failed ? fail('Failed posts', `${failed} post${failed === 1 ? '' : 's'} failed or couldn’t be confirmed this week, out of ${failed + published}.`) : pass('Posts', `${published} published this week, none failed.`),
       reauth?.length ? attention('Accounts', `${reauth.length} account${reauth.length === 1 ? ' needs' : 's need'} reconnecting.`) : pass('Accounts', 'None need reconnecting.'),
-      errorCount ? attention('Server errors', `${errorCount} this week. See Settings → Beta invites.`) : pass('Server errors', 'None this week.')
+      errorCount ? attention('Server errors', errorText) : pass('Server errors', 'None this week.')
     ]
   };
 }

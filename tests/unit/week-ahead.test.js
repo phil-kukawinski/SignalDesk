@@ -24,4 +24,15 @@ const user = weekAheadSections({ posts, clients, member: { user_id: 'someone', r
 assert.deepStrictEqual(titles(user), ['Going out this week (3)', 'Needs a look (1)'], 'users are not asked to approve');
 assert.deepStrictEqual(weekAheadSections({ posts: [], clients, member: { user_id: 'x', role: 'admin' }, now, timeZone: 'UTC' }), [], 'nothing to say means no email');
 assert.strictEqual(DEFAULT_PREFERENCES.week_ahead, true, 'on by default');
+
+// A Story series is one row with its time span; a regular post with the same text stays its own row.
+const base = Date.parse(at(5));
+const story = (n) => ({ id: `s${n}`, title: 'Norway', client_id: 'c1', status: 'scheduled', scheduled_for: new Date(base + n * 60000).toISOString(), publish_jobs: [{ platform: 'instagram_story', status: 'queued' }] });
+const series = weekAheadSections({ posts: [{ ...story(0), id: 'feed', publish_jobs: [{ platform: 'instagram', status: 'queued' }] }, ...[1, 2, 3, 4, 5, 6, 7, 8].map(story)], clients, member: { user_id: 'x', role: 'user' }, now, timeZone: 'America/New_York' })[0];
+assert.strictEqual(series.title, 'Going out this week (9)', 'the count is still posts');
+assert.strictEqual(series.items.length, 2);
+assert.match(series.items[1].body, /Instagram Story · 8 Stories in a series/);
+assert.match(series.items[1].meta, / – \d/, 'shows the time span');
+const many = weekAheadSections({ posts: Array.from({ length: 14 }, (_, n) => ({ ...story(0), id: `p${n}`, title: `Post ${n}`, scheduled_for: at(1 + n * 0.3), publish_jobs: jobs })), clients, member: { user_id: 'x', role: 'user' }, now, timeZone: 'America/New_York' })[0];
+assert.strictEqual(many.items[12].title, 'And 2 more');
 console.log('week-ahead: ok');

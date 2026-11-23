@@ -356,7 +356,18 @@ function weekAheadSections({ posts, clients, member, now, timeZone }) {
   if (upcoming.length) {
     const byClient = new Map();
     upcoming.forEach((post) => byClient.set(post.client_id, (byClient.get(post.client_id) || 0) + 1));
-    sections.push({ title: `Going out this week (${upcoming.length})`, items: [...upcoming.slice(0, 12).map(item), ...(upcoming.length > 12 ? [{ title: `And ${upcoming.length - 12} more`, body: [...byClient].map(([id, count]) => `${nameOf(id)}: ${count}`).join(' · ') }] : [])] });
+    // Stories with the same client, text and networks, minutes apart, are a series: one row with the time span.
+    const rows = [];
+    for (const post of upcoming) {
+      const last = rows[rows.length - 1], key = `${post.client_id}|${post.title}|${nets(post)}`;
+      const stories = (post.publish_jobs || []).filter((job) => job.status !== 'canceled').every((job) => job.platform.endsWith('_story'));
+      if (stories && last?.key === key && Date.parse(post.scheduled_for) - Date.parse(last.posts[last.posts.length - 1].scheduled_for) <= 10 * 60000) last.posts.push(post);
+      else rows.push({ key: stories ? key : post.id, posts: [post] });
+    }
+    const clock = (iso) => new Date(iso).toLocaleString('en-US', { timeZone, hour: 'numeric', minute: '2-digit' });
+    const rowItem = ({ posts: series }) => series.length === 1 ? item(series[0]) : { ...item(series[0]), body: `${nets(series[0])} · ${series.length} Stories in a series`, meta: `${when(series[0].scheduled_for)} – ${clock(series[series.length - 1].scheduled_for)}` };
+    const shown = rows.slice(0, 12), hidden = rows.slice(12).reduce((sum, row) => sum + row.posts.length, 0);
+    sections.push({ title: `Going out this week (${upcoming.length})`, items: [...shown.map(rowItem), ...(hidden ? [{ title: `And ${hidden} more`, body: [...byClient].map(([id, count]) => `${nameOf(id)}: ${count}`).join(' · ') }] : [])] });
   }
   if (failed.length) sections.push({ title: `Needs a look (${failed.length})`, items: failed.slice(0, 10).map((post) => ({ ...item(post), badge: post.status === 'partial' ? 'Partly published' : 'Failed', color: STATUS_LEVELS.warning.color })) });
   return sections;

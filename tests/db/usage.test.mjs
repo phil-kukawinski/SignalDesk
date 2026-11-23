@@ -83,6 +83,7 @@ assert.equal(usage.ready, true);
 const [a, b] = usage.workspaces;
 assert.deepEqual([a.name, a.members, a.clients, a.aiRequests, a.files, a.storageBytes], ['Agency A', 1, 2, 3, 2, 32000000]);
 assert.equal(Math.round(a.aiCost * 1e5) / 1e5, 0.47024);
+assert.deepEqual([a.admins, b.admins], [['a@x.com'], ['b@x.com']], 'each workspace shows who runs it');
 assert.deepEqual([b.name, b.clients, b.aiRequests, b.storageBytes], ['Agency B', 1, 1, 500000], 'requests older than the period are left out');
 const scans = usage.costs.find((row) => row.action === 'trends-refresh');
 assert.deepEqual([scans.requests, scans.averageCost, scans.highestCost, scans.searches, scans.averageOutput], [2, 0.23312, 0.25, 10, 6580]);

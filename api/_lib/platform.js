@@ -149,11 +149,12 @@ async function platformUsage({ days = 30, now = Date.now() } = {}) {
   const since = new Date(now - days * 86400000).toISOString();
   const rpc = (name) => databaseRequest(`rpc/${name}`, { method: 'POST', body: JSON.stringify({ p_since: since }) });
   try {
-    const [workspaces, costs] = await Promise.all([rpc('platform_workspace_usage'), rpc('platform_ai_costs')]);
+    const [workspaces, costs, admins] = await Promise.all([rpc('platform_workspace_usage'), rpc('platform_ai_costs'), databaseRequest('workspace_members?role=eq.admin&select=workspace_id,email&order=created_at.asc&limit=1000').catch(() => [])]);
+    const adminsOf = (id) => (admins || []).filter((row) => row.workspace_id === id && row.email).map((row) => row.email);
     return {
       ready: true, days,
       workspaces: (workspaces || []).map((row) => ({
-        id: row.workspace_id, name: row.name || 'Workspace', createdAt: row.created_at, members: Number(row.members) || 0, clients: Number(row.clients) || 0,
+        id: row.workspace_id, name: row.name || 'Workspace', admins: adminsOf(row.workspace_id), createdAt: row.created_at, members: Number(row.members) || 0, clients: Number(row.clients) || 0,
         posts: Number(row.posts) || 0, aiRequests: Number(row.ai_requests) || 0, aiCost: Number(row.ai_cost) || 0, files: Number(row.files) || 0, storageBytes: Number(row.storage_bytes) || 0
       })),
       costs: (costs || []).map((row) => ({
@@ -166,4 +167,4 @@ async function platformUsage({ days = 30, now = Date.now() } = {}) {
   }
 }
 
-module.exports = { platformUsage, isPlatformAdmin, platformAdmins, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors, alertPlatformAdmins, inviteLink };
+module.exports = { platformUsage, isPlatformAdmin, platformAdmins, inviteOnly, setInviteOnly, listInvites, createInvite, revokeInvite, recordAppError, recentErrors, alertPlatformAdmins, ERROR_SOURCES, inviteLink };
