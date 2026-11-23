@@ -64,7 +64,7 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 
 ### 1. Sign in (about 20 seconds)
 1. On the SignalDesk tab, select **Sign in** and enter the reviewer email and password.
-2. Close the "What's new" card or anything else that pops up.
+2. If a **New in SignalDesk** card appears on the Command Center, select **Got it** to close it. Close anything else that pops up.
 
 **Say:** "This is SignalDesk, a social media scheduling tool. I'm signing in with the test account provided for review."
 
@@ -102,7 +102,7 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 *Shows `pages_read_user_content`, `pages_manage_engagement`, `instagram_manage_comments`.*
 
 21. **Pause the recording** (stop it and start a new clip). From your second Facebook account, comment on the new Facebook post. From your second Instagram account, comment on the new Instagram post. Then resume.
-22. In SignalDesk, select **Social Inbox**, then **Comments on your posts**. ⏱ **inbox**
+22. In SignalDesk, select **Social Inbox**. If there are client tabs at the top, choose **App Review Demo**. Scroll past **Messages** to **Comments on your posts**. ⏱ **inbox**
 23. Choose the Facebook post. Show the comment with the commenter's name, type a reply, and send it.
 24. Choose the Instagram post and do the same.
 25. Go to the **Facebook tab**, refresh, and show your reply under the comment. Do the same on the **Instagram tab**. ⏱ **replies**
@@ -113,7 +113,7 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 *Shows `pages_messaging`, `instagram_manage_messages`, `pages_manage_metadata`.*
 
 26. **Pause the recording.** From your second Facebook account, send the Page a Messenger message, for example *"Hi! Are you open on Sunday?"* From your second Instagram account, send the Instagram account a direct message. Then resume.
-27. In SignalDesk, stay in **Social Inbox** and go to **Messages** at the top. Select **Check again**. Point at the two conversations: each shows who wrote, the client, the network and how long is left to reply. ⏱ **messages**
+27. In SignalDesk, scroll back up to **Messages** (still on the **App Review Demo** tab, in the **Inbox** folder). Select **Check again**. Point at the two conversations: each shows who wrote, the network and how long is left to reply. ⏱ **messages**
 28. Open the Facebook conversation, type a reply, for example *"Hi! Yes, 9 to 3 on Sundays."*, and select **Send**.
 29. Open the Instagram conversation and do the same.
 30. Go to Messenger and Instagram (on your phone or in the browser tabs) as the second accounts, and show the replies arriving. ⏱ **message-replies**
@@ -123,8 +123,8 @@ On Facebook, open **Settings & privacy → Settings → Business integrations**,
 ### 6. Results (about 1 minute)
 *Shows `pages_read_engagement`, `read_insights`, `instagram_manage_insights`, `instagram_basic`.*
 
-31. In the sidebar, select **Analytics & Reports**. Point at the Facebook and Instagram numbers: reach, views and engagement. ⏱ **analytics**
-32. Scroll to **Weekly Top Posts**, and open the older post from Part A to show its reactions, comments, shares, reach and views.
+31. In the sidebar, select **Analytics & Reports**. On the **Overview** tab, point at the Facebook and Instagram numbers: reach, views and engagement. ⏱ **analytics**
+32. Select the **Reports** tab at the top of Analytics and scroll to **Weekly Top Posts**. Open the older post from Part A to show its reactions, comments, shares, reach and views.
 33. In the sidebar, select **Content Calendar** and open the post you made directly on Facebook or Instagram. ⏱ **outside-posts**
 
 **Say:** "SignalDesk shows each post's reach and engagement for the client's reports. That includes posts made directly on Facebook or Instagram, like this one, so the calendar and reports cover the whole account. New posts fill in after a few hours, which is why I'm showing an older one."

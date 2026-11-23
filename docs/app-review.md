@@ -61,7 +61,7 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 
 **`pages_read_engagement`**
 > SignalDesk reads the Page's name and follower count, and its published posts with their reactions, comments, and share counts, including posts made outside SignalDesk. Teams see everything on the account in one calendar and in Analytics and monthly client reports, not only what they scheduled here. It's also required to get the Page access token used for publishing. Without it, SignalDesk couldn't publish or report results.
-> **To test:** open a published post's details from the calendar, or Analytics → Weekly Top Posts, to see its reactions, comments, and shares. Posts made directly on Facebook also appear on the Content Calendar. Numbers refresh every few hours.
+> **To test:** open a published post's details from the calendar, or Analytics → Reports → Weekly Top Posts, to see its reactions, comments, and shares. Posts made directly on Facebook also appear on the Content Calendar. Numbers refresh every few hours.
 
 **`pages_manage_engagement`**
 > Teams can add a first comment that SignalDesk posts right after the post publishes (often a link or hashtags), and they can reply to comments on their posts from SignalDesk's Social Inbox. Without it, first comments and replies wouldn't work.
@@ -89,7 +89,7 @@ Each answer covers what Meta asks: how the app uses the permission, why it's nee
 
 **`instagram_manage_insights`**
 > SignalDesk reads views, reach, likes, comments, shares, and saves for the account's recent posts, including posts made outside SignalDesk, plus the account's follower count and daily reach and views. These show in Analytics, Weekly Top Posts, follower growth, and monthly client reports. We use them only to show the person their own results.
-> **To test:** open Analytics → Weekly Top Posts a few hours after an Instagram post publishes to see its numbers.
+> **To test:** open Analytics → Reports → Weekly Top Posts a few hours after an Instagram post publishes to see its numbers.
 
 **`business_management`**
 > Many of our clients' Pages and Instagram accounts are owned by a Meta Business portfolio rather than a personal profile. This permission lets the person grant SignalDesk access to those business-owned Pages and Instagram accounts during Facebook Login for Business, so they appear in the list of Pages to connect. We don't create, change, or read anything else in the business portfolio.
