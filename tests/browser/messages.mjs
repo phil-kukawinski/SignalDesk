@@ -24,6 +24,11 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
       return{};};
   })()`);
 
+  // Opening the Inbox before sign-in finishes (straight from its address): Messages appears once the role is known.
+  await evaluate(`window.__cloud=cloudFeaturesAvailable;cloudFeaturesAvailable=()=>false;showView('inbox')`); await wait(200);
+  if (!(await evaluate(`document.querySelector('#messages-panel').hidden`))) fail('before sign-in Messages is hidden');
+  await evaluate(`cloudFeaturesAvailable=__cloud;renderCommentsPanel()`); await wait(500);
+  if (await evaluate(`document.querySelector('#messages-panel').hidden`)) fail('Messages should appear once sign-in finishes');
   await evaluate(`showView('inbox')`); await wait(700);
   const panel = await evaluate(`document.querySelector('#messages-panel')?.hidden===false?document.querySelector('#messages-panel').innerText:''`);
   log.push('messages: ' + panel.replace(/\s+/g, ' ').slice(0, 300));
