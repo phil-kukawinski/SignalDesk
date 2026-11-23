@@ -24,7 +24,7 @@ const TABLES = {
   autopilot_items: 'id', social_connections: 'id', publish_jobs: 'id', scheduled_comments: 'id', notifications: 'id', notification_preferences: 'user_id',
   post_submissions: 'workspace_id,provider_post_id', weekly_reports: 'id', trend_reports: 'id', publish_attempts: 'id', review_links: 'id', post_notes: 'id',
   post_history: 'id', push_subscriptions: 'endpoint', bio_pages: 'slug', short_links: 'code', link_click_days: 'code,day', network_posts: 'id',
-  account_stats: 'connection_id,day', post_metric_days: 'workspace_id,platform,external_id,day', planning_notes: 'id', comment_states: 'workspace_id,job_id,comment_id',
+  account_stats: 'connection_id,day', post_metric_days: 'workspace_id,platform,external_id,day', planning_notes: 'id', comment_states: 'workspace_id,job_id,comment_id', message_states: 'workspace_id,connection_id,conversation_id',
   invite_requests: 'id', data_deletion_requests: 'code', worker_runs: 'name', beta_invites: 'code', beta_redemptions: 'code,user_id', app_settings: 'key',
   app_errors: 'id', ai_usage: 'id', media_files: 'path', activity_log: 'id', client_uploads: 'id', email_reply_codes: 'code', credit_ledger: 'id', stripe_events: 'id'
 };

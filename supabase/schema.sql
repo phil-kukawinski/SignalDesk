@@ -1452,3 +1452,18 @@ create trigger start_trial before insert on public.workspaces for each row execu
 -- Weekly planning reminders use their own notification category.
 alter table public.notifications drop constraint if exists notifications_category_check;
 alter table public.notifications add constraint notifications_category_check check (category in ('approvals', 'autopilot', 'reports', 'team', 'publishing', 'planning'));
+
+-- Social Inbox → Messages: conversations a team archived. Meta doesn't let apps archive, so this is SignalDesk's
+-- own list; a conversation comes back to the inbox when the person writes again. Only the server reads or writes it.
+create table if not exists public.message_states (
+  workspace_id uuid not null references public.workspaces (id) on delete cascade,
+  connection_id uuid not null references public.social_connections (id) on delete cascade,
+  conversation_id text not null,
+  state text not null check (state in ('archived')),
+  user_id uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, connection_id, conversation_id)
+);
+alter table public.message_states enable row level security;
+revoke all on public.message_states from anon, authenticated;
+grant all on public.message_states to service_role;

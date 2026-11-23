@@ -52,7 +52,7 @@ const WORKSPACE_ACTIONS = new Set([
   'post-history', 'manual-done', 'draft-captions', 'alt-text', 'save-bio', 'push-config', 'push-subscribe', 'push-unsubscribe', 'export', 'record-restore',
   'system-status', 'stock-search', 'stock-use', 'link-preview',
   'platform-status', 'platform-usage', 'backup-now', 'backup-download', 'create-invite', 'revoke-invite', 'set-invite-only', 'brand-from-site', 'network-posts', 'sync-now', 'copy-posts', 'rename-campaign', 'post-metrics-history', 'campaigns', 'campaign-posts', 'posts-by-id',
-  'planning-note', 'open-comments', 'comment-state', 'conversations', 'conversation', 'send-message', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
+  'planning-note', 'open-comments', 'comment-state', 'conversations', 'conversation', 'send-message', 'message-state', 'activity', 'campaign-questions', 'campaign-plan', 'campaign-post'
 ]);
 // Users may load accounts, submit and view posts, withdraw their own pending posts, and use
 // trends and checks; everything else is reserved for admins.
@@ -644,8 +644,9 @@ async function handleWorkspaceAction(action, body, { user, membership, encryptio
   }
 
   // Direct messages (Social Inbox → Messages), read live from Meta.
-  if (action === 'conversations' || action === 'conversation' || action === 'send-message') {
-    const { listConversations, conversationMessages, sendMessage } = require('./_lib/messages');
+  if (action === 'conversations' || action === 'conversation' || action === 'send-message' || action === 'message-state') {
+    const { listConversations, conversationMessages, sendMessage, setConversationArchived } = require('./_lib/messages');
+    if (action === 'message-state') return send(res, 200, await setConversationArchived(workspaceId, { connectionId: body.connectionId, conversationId: body.conversationId, archived: body.archived === true, userId: user.id }));
     if (action === 'conversations') return send(res, 200, await listConversations(workspaceId, { clientId: typeof body.clientId === 'string' ? body.clientId : '', encryptionKey }));
     if (action === 'conversation') return send(res, 200, await conversationMessages(workspaceId, { connectionId: body.connectionId, conversationId: body.conversationId, encryptionKey }));
     return send(res, 200, { message: await sendMessage(workspaceId, { connectionId: body.connectionId, conversationId: body.conversationId, text: body.text, encryptionKey }) });

@@ -58,4 +58,6 @@ expectAllowed('autopilot_items.status', new Set([...statusWrites('api/_lib/publi
 expectAllowed('scheduled_posts.client_status', new Set([...read('api/review.js').matchAll(/client_status: '([a-z_]+)'/g)].map((m) => m[1])), 'the review page');
 expectAllowed('comment_states.state', new Set([...read('api/_lib/publishing.js').matchAll(/setCommentState\([^)]*'([a-z_]+)'/g), ...social.matchAll(/setCommentState\([^)]*'([a-z_]+)'/g)].map((m) => m[1])), 'comment states');
 
+expectAllowed('message_states.state', new Set([...read('api/_lib/messages.js').matchAll(/\bstate: '([a-z_]+)'/g)].map((m) => m[1])), 'Messages');
+
 console.log('schema values ok');

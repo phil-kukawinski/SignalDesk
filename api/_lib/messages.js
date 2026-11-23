@@ -1,7 +1,7 @@
 // Direct messages to connected Facebook Pages and Instagram professional accounts, read live from Meta's
 // Conversations API and answered with the Send API. Nothing is stored: each look at the inbox asks Meta.
 // Meta lets a business answer only within 24 hours of the person's last message.
-const { httpError } = require('./core');
+const { httpError, databaseRequest } = require('./core');
 const { graph } = require('./platforms');
 const { listConnections, loadConnection, ensureFreshToken } = require('./publishing');
 
@@ -13,7 +13,22 @@ const ID = /^[A-Za-z0-9_:=.-]{1,300}$/;
 // The Page that owns the conversations: the Page itself, or the Page an Instagram account is linked to.
 const pageIdFor = (connection) => (connection.platform === 'facebook' ? connection.external_id : connection.meta?.pageId);
 const isMine = (connection, from = {}) => from.id === connection.external_id || from.id === pageIdFor(connection) || Boolean(connection.username && from.username === connection.username);
-const shapeMessage = (connection, item) => ({ id: item.id, text: item.message || '', at: item.created_time || null, mine: isMine(connection, item.from), hasAttachment: !item.message });
+const safeUrl = (value) => (typeof value === 'string' && /^https:\/\//.test(value) ? value : '');
+// What a message without text is: a photo, video, file, shared post, or story reply or mention.
+function attachmentOf(item) {
+  const file = item.attachments?.data?.[0], share = item.shares?.data?.[0];
+  if (item.story?.reply_to) return { kind: 'story-reply', url: safeUrl(item.story.reply_to.link) };
+  if (item.story?.mention) return { kind: 'story-mention', url: safeUrl(item.story.mention.link) };
+  if (file?.image_data) return { kind: 'photo', url: safeUrl(file.image_data.url), preview: safeUrl(file.image_data.preview_url || file.image_data.url) };
+  if (file?.video_data) return { kind: 'video', url: safeUrl(file.video_data.url), preview: safeUrl(file.video_data.preview_url) };
+  if (share) return { kind: 'share', url: safeUrl(share.link), name: String(share.name || '').slice(0, 200) };
+  if (file) return { kind: 'file', url: safeUrl(file.file_url), name: String(file.name || '').slice(0, 200) };
+  if (item.sticker) return { kind: 'sticker', preview: safeUrl(item.sticker) };
+  return item.message ? null : { kind: item.is_unsupported ? 'unsupported' : 'unknown' };
+}
+const shapeMessage = (connection, item) => ({ id: item.id, text: item.message || '', at: item.created_time || null, mine: isMine(connection, item.from), hasAttachment: !item.message, attachment: attachmentOf(item) });
+// Extra fields differ by network; if Meta refuses them, the plain messages still load.
+const DETAIL_FIELDS = { instagram: 'attachments,shares,story,is_unsupported', facebook: 'attachments,shares,sticker' };
 function otherPerson(connection, participants) {
   const person = (participants?.data || []).find((item) => !isMine(connection, item)) || {};
   return { id: person.id || '', name: person.name || (person.username ? `@${person.username}` : connection.platform === 'instagram' ? 'Instagram user' : 'Facebook user') };
@@ -41,6 +56,9 @@ async function messagingConnection(workspaceId, connectionId, encryptionKey) {
 // when the last message is theirs; `replyBy` is when Meta's 24-hour window closes.
 async function listConversations(workspaceId, { clientId = '', encryptionKey, now = Date.now() } = {}) {
   const accounts = (await listConnections(workspaceId, clientId || null)).filter((row) => MESSAGE_NETWORKS[row.platform] && row.status === 'active');
+  // Archived conversations (null until the database has the table).
+  const stateRows = await databaseRequest(`message_states?workspace_id=eq.${workspaceId}&select=connection_id,conversation_id,state,updated_at&limit=5000`).catch(() => null);
+  const archivedAt = new Map((stateRows || []).filter((row) => row.state === 'archived').map((row) => [`${row.connection_id}:${row.conversation_id}`, Date.parse(row.updated_at)]));
   const results = await Promise.allSettled(accounts.map(async (row) => {
     const connection = await messagingConnection(workspaceId, row.id, encryptionKey);
     const result = await graph(`${pageIdFor(connection)}/conversations`, { token: connection.token, params: { platform: MESSAGE_NETWORKS[connection.platform], fields: 'id,updated_time,participants,messages.limit(1){id,message,from,created_time}', limit: '25' } });
@@ -48,7 +66,8 @@ async function listConversations(workspaceId, { clientId = '', encryptionKey, no
       const last = item.messages?.data?.[0] ? shapeMessage(connection, item.messages.data[0]) : null;
       const needsReply = Boolean(last && !last.mine);
       const replyBy = needsReply && last.at ? new Date(Date.parse(last.at) + MESSAGE_WINDOW_MS).toISOString() : null;
-      return { id: item.id, connectionId: row.id, clientId: row.client_id, platform: row.platform, account: row.username ? `@${row.username}` : row.display_name || '', with: otherPerson(connection, item.participants), updatedAt: item.updated_time || last?.at || null, last, needsReply, replyBy, canReply: !replyBy || Date.parse(replyBy) > now };
+      const archived = archivedAt.get(`${row.id}:${item.id}`);
+      return { archived: Boolean(archived && archived >= Date.parse(last?.at || item.updated_time || 0)), id: item.id, connectionId: row.id, clientId: row.client_id, platform: row.platform, account: row.username ? `@${row.username}` : row.display_name || '', with: otherPerson(connection, item.participants), updatedAt: item.updated_time || last?.at || null, last, needsReply, replyBy, canReply: !replyBy || Date.parse(replyBy) > now };
     });
   }));
   const conversations = [], problems = [];
@@ -57,7 +76,9 @@ async function listConversations(workspaceId, { clientId = '', encryptionKey, no
     else problems.push({ connectionId: accounts[index].id, clientId: accounts[index].client_id, platform: accounts[index].platform, account: accounts[index].username ? `@${accounts[index].username}` : accounts[index].display_name || '', ...(() => { const error = result.reason.status ? result.reason : messageError(result.reason); return { error: error.message, permission: /allow messages/.test(error.message) }; })() });
   });
   conversations.sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
-  return { conversations, problems, accounts: accounts.length };
+  const byClient = {};
+  accounts.forEach((row) => { byClient[row.client_id] = (byClient[row.client_id] || 0) + 1; });
+  return { conversations, problems, accounts: accounts.length, byClient, archiving: stateRows !== null };
 }
 
 // One conversation's recent messages, oldest first. Meta returns only the 20 most recent.
@@ -65,7 +86,9 @@ async function conversationMessages(workspaceId, { connectionId, conversationId,
   if (typeof conversationId !== 'string' || !ID.test(conversationId)) throw httpError(400, 'Choose a conversation.');
   const connection = await messagingConnection(workspaceId, connectionId, encryptionKey);
   try {
-    const result = await graph(conversationId, { token: connection.token, params: { fields: 'participants,messages.limit(20){id,message,from,created_time}' } });
+    const fields = (extra) => `participants,messages.limit(20){id,message,from,created_time${extra ? `,${extra}` : ''}}`;
+    const result = await graph(conversationId, { token: connection.token, params: { fields: fields(DETAIL_FIELDS[connection.platform]) } })
+      .catch((error) => (error.kind === 'invalid' ? graph(conversationId, { token: connection.token, params: { fields: fields('') } }) : Promise.reject(error)));
     return { with: otherPerson(connection, result.participants), messages: (result.messages?.data || []).map((item) => shapeMessage(connection, item)).reverse() };
   } catch (error) {
     throw messageError(error);
@@ -90,4 +113,21 @@ async function sendMessage(workspaceId, { connectionId, conversationId, text, en
   }
 }
 
-module.exports = { listConversations, conversationMessages, sendMessage, MESSAGE_WINDOW_MS, TEXT_LIMITS };
+// Archives a conversation in SignalDesk (or moves it back to the inbox). Meta's copy is unchanged.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function setConversationArchived(workspaceId, { connectionId, conversationId, archived, userId = null }) {
+  if (typeof connectionId !== 'string' || !UUID.test(connectionId) || typeof conversationId !== 'string' || !ID.test(conversationId)) throw httpError(400, 'Choose a conversation.');
+  const [owned] = await databaseRequest(`social_connections?id=eq.${connectionId}&workspace_id=eq.${workspaceId}&select=id`) || [];
+  if (!owned) throw httpError(404, 'That account isn’t connected to this workspace.');
+  const key = `workspace_id=eq.${workspaceId}&connection_id=eq.${connectionId}&conversation_id=eq.${encodeURIComponent(conversationId)}`;
+  try {
+    if (!archived) await databaseRequest(`message_states?${key}`, { method: 'DELETE' });
+    else await databaseRequest('message_states?on_conflict=workspace_id,connection_id,conversation_id', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ workspace_id: workspaceId, connection_id: connectionId, conversation_id: conversationId, state: 'archived', user_id: userId, updated_at: new Date().toISOString() }) });
+  } catch (error) {
+    if (/message_states|schema cache|does not exist/i.test(error.message)) throw httpError(400, 'Archiving needs a quick database update. Run supabase/schema.sql in Supabase.');
+    throw error;
+  }
+  return { archived: Boolean(archived) };
+}
+
+module.exports = { setConversationArchived, listConversations, conversationMessages, sendMessage, MESSAGE_WINDOW_MS, TEXT_LIMITS };
