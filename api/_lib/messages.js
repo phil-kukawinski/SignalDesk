@@ -125,7 +125,7 @@ async function sendMessage(workspaceId, { connectionId, conversationId, text, en
     const said = String(error.message || '').slice(0, 300);
     // Before Meta approves messaging, a reply to someone without a role on the app is refused with the same
     // "outside of allowed window" error, even when they wrote minutes ago.
-    if (theyWroteRecently && /allowed window|24 hour/i.test(said)) shown = httpError(400, `Meta refused this reply even though they wrote within 24 hours. Until Meta approves SignalDesk for messaging, replies only reach people with a role on the SignalDesk app${connection.platform === 'instagram' ? ' (for Instagram, an Instagram Tester who has accepted the invite)' : ' (for example a Tester)'}. Reply in the ${connection.platform === 'instagram' ? 'Instagram' : 'Facebook'} app for now.`);
+    if (theyWroteRecently && /allowed window|24 hour/i.test(said)) shown = httpError(400, `Meta refused this reply even though they wrote within 24 hours. Until Meta approves SignalDesk for messaging, replies only reach people with a role on the SignalDesk app${connection.platform === 'instagram' ? ' (for Instagram, a role on both the app and this Instagram account)' : ' (for example a Tester)'}. Reply in the ${connection.platform === 'instagram' ? 'Instagram' : 'Facebook'} app for now.`);
     await recordAppError('api/messages', `Reply on ${connection.platform} refused. Meta said: ${said}`, workspaceId);
     throw httpError(shown.status, said && !shown.message.includes(said) ? `${shown.message} (Meta said: ${said})` : shown.message);
   }
