@@ -61,6 +61,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`const i=document.querySelector('#message-thread input');i.value='Yes, we cater!';i.form.requestSubmit()`); await wait(400);
   const sent = await evaluate(`JSON.stringify(__calls.find(c=>c.action==='send-message'))`);
   if (!sent || !/"connectionId":"c-fb"/.test(sent) || !/"conversationId":"t1"/.test(sent) || !/Yes, we cater!/.test(sent)) fail('Send should reply in that conversation: ' + sent);
+  if (await evaluate(`document.querySelector('#message-thread input')?.value||''`)) fail('the reply box should be empty after sending');
   if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '2') fail('after replying, one fewer is waiting');
   if (await evaluate(`__calls.some(c=>c.action==='reply-comment')`)) fail('a message reply must not be sent as a comment');
 

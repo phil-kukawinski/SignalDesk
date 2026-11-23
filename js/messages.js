@@ -123,7 +123,7 @@ document.addEventListener('submit',async event=>{
   const form=event.target.closest('form[data-message-to]');if(!form)return;event.preventDefault();
   const input=$('input',form),text=input.value.trim(),{connection,messageTo}=form.dataset;if(!text)return;
   const button=$('button[type=submit]',form);button.disabled=true;
-  try{const result=await callSocialApi({action:'send-message',connectionId:connection,conversationId:messageTo,text});toast('Message sent.');
+  try{const result=await callSocialApi({action:'send-message',connectionId:connection,conversationId:messageTo,text});toast('Message sent.');input.value='';
     const cached=dmThreads.get(`${connection}:${messageTo}`);if(cached)cached.messages=[...cached.messages,result.message||{text,mine:true,at:new Date().toISOString()}];
     const item=findConversation(connection,messageTo);if(item){item.last={text,mine:true,at:new Date().toISOString()};item.updatedAt=item.last.at;item.needsReply=false;}
     renderMessagesPanel();renderInboxCount();openConversation(connection,messageTo);}
