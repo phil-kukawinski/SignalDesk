@@ -16,6 +16,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
       if(body.action==='open-comments')return{comments:[],counts:{}};
       if(body.action==='conversations')return{accounts:3,byClient:{[client]:2,[clients[1].id]:1},problems:[{connectionId:'c-ig',clientId:client,platform:'instagram',account:'@harbor',error:'This account hasn’t allowed SignalDesk to read and answer messages. Reconnect it in Social Accounts and allow messages.'}],conversations:[
         {id:'t1',connectionId:'c-fb',clientId:client,platform:'facebook',account:'Harbor Coffee',with:{id:'p1',name:'Ana Ruiz'},updatedAt:ago(2),last:{text:'Do you cater?',mine:false,at:ago(2)},needsReply:true,replyBy:new Date(Date.now()+22*3600000).toISOString(),canReply:true},
+        {id:'t4',connectionId:'c-fb',clientId:client,platform:'facebook',account:'Harbor Coffee',with:{id:'p4',name:'Dee Old'},updatedAt:ago(240),last:{text:'Still open?',mine:false,at:ago(240)},needsReply:true,replyBy:ago(216),canReply:false},
         {id:'t3',connectionId:'c-fb2',clientId:clients[1].id,platform:'facebook',account:'Other Page',with:{id:'p3',name:'Cleo Park'},updatedAt:ago(1),last:{text:'Hello?',mine:false,at:ago(1)},needsReply:true,replyBy:new Date(Date.now()+23*3600000).toISOString(),canReply:true},
         {id:'t2',connectionId:'c-fb',clientId:client,platform:'facebook',account:'Harbor Coffee',with:{id:'p2',name:'Ben Ortiz'},updatedAt:ago(30),last:{text:'Open Sunday?',mine:false,at:ago(30)},needsReply:true,replyBy:ago(6),canReply:false}]};
       if(body.action==='conversation')return body.conversationId==='t1'?{with:{name:'Ana Ruiz'},messages:[{id:'m0',text:'',mine:false,at:ago(3),hasAttachment:true,attachment:{kind:'share',url:'https://www.instagram.com/p/abc/'}},{id:'m1',text:'Do you cater?',mine:false,at:ago(2)}]}:{with:{name:'Ben Ortiz'},messages:[{id:'m2',text:'Open Sunday?',mine:false,at:ago(30)}]};
@@ -23,6 +24,10 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
       if(body.action==='message-state')return{archived:body.archived};
       return{};};
   })()`);
+
+  // Business days: a Friday afternoon message counts through Wednesday, not Thursday.
+  const days = await evaluate(`[businessDaysSince('2026-11-20T17:00:00',new Date('2026-11-25T23:00:00')),businessDaysSince('2026-11-20T17:00:00',new Date('2026-11-26T09:00:00')),businessDaysSince('2026-11-23T09:00:00',new Date('2026-11-23T18:00:00'))].join()`);
+  if (days !== '3,4,0') fail('business days since a message: ' + days);
 
   // Opening the Inbox before sign-in finishes (straight from its address): Messages appears once the role is known.
   await evaluate(`window.__cloud=cloudFeaturesAvailable;cloudFeaturesAvailable=()=>false;showView('inbox')`); await wait(200);
@@ -41,7 +46,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (!/Ana Ruiz/.test(panel) || !/Do you cater\?/.test(panel) || !/2[12] h left to reply/.test(panel)) fail('a conversation should show who wrote, their message, and the time left to reply');
   if (!/Reply window closed/.test(panel)) fail('an old conversation should say its window closed');
   if (!/Instagram @harbor/.test(panel) || !/Reconnect it in Social Accounts/.test(panel)) fail('an account without permission should be named');
-  if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '2') fail('the Social Inbox nav should count messages waiting');
+  if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '3') fail('the Social Inbox nav should count unread from the last 3 business days');
 
   // Open and reply.
   await evaluate(`document.querySelector('[data-conversation="t1"]').click()`); await wait(300);
@@ -56,7 +61,7 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   await evaluate(`const i=document.querySelector('#message-thread input');i.value='Yes, we cater!';i.form.requestSubmit()`); await wait(400);
   const sent = await evaluate(`JSON.stringify(__calls.find(c=>c.action==='send-message'))`);
   if (!sent || !/"connectionId":"c-fb"/.test(sent) || !/"conversationId":"t1"/.test(sent) || !/Yes, we cater!/.test(sent)) fail('Send should reply in that conversation: ' + sent);
-  if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '1') fail('after replying, only the other client’s message is waiting');
+  if (await evaluate(`document.querySelector('.nav-item[data-view="inbox"] .nav-count')?.textContent`) !== '2') fail('after replying, one fewer is waiting');
   if (await evaluate(`__calls.some(c=>c.action==='reply-comment')`)) fail('a message reply must not be sent as a comment');
 
   // Comments follow the same client tab: only that client's posts, and Needs a reply checks that client.
@@ -74,16 +79,19 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   // Folders: Unread, Inbox, Archived.
   await evaluate(`try{localStorage.removeItem('signaldesk-messages-folder')}catch{};document.querySelector('[data-message-folder="unread"]').click()`); await wait(100);
   let shown = await evaluate(`document.querySelector('#conversation-list').innerText`);
-  if (!/Ben Ortiz/.test(shown) || /Ana Ruiz/.test(shown)) fail('Unread should list only conversations whose latest message is theirs: ' + shown.replace(/\s+/g, ' '));
+  if (!/Ben Ortiz/.test(shown) || !/Dee Old/.test(shown) || /Ana Ruiz/.test(shown)) fail('Unread should list conversations whose latest message is theirs, old ones too: ' + shown.replace(/\s+/g, ' '));
+  if (!/Unread\s*1\b/.test(shown)) fail('only recent unread should be counted: ' + shown.replace(/\s+/g, ' ').slice(0, 80));
   await evaluate(`document.querySelector('[data-message-folder="inbox"]').click()`); await wait(100);
   await evaluate(`document.querySelector('[data-conversation="t1"]').click()`); await wait(300);
   await evaluate(`document.querySelector('[data-archive-conversation="1"]').click()`); await wait(300);
-  if (!(await evaluate(`__calls.some(c=>c.action==='message-state'&&c.conversationId==='t1'&&c.archived===true)`))) fail('Archive should save');
+  if (!(await evaluate(`__calls.some(c=>c.action==='message-state'&&c.conversationId==='t1'&&c.archived===true)`))) fail('Mark done should save');
+  if (!/Marked done/.test(await evaluate(`document.querySelector('.toast, #toast')?.innerText||document.body.innerText`))) fail('the toast should say Marked done');
   shown = await evaluate(`document.querySelector('#conversation-list').innerText`);
-  if (/Ana Ruiz/.test(shown)) fail('an archived conversation leaves the inbox');
-  await evaluate(`document.querySelector('[data-message-folder="archived"]').click()`); await wait(100);
-  if (!/Ana Ruiz/.test(await evaluate(`document.querySelector('#conversation-list').innerText`))) fail('Archived should list it');
-  if (!(await evaluate(`!!document.querySelector('[data-archive-conversation="0"]')`))) fail('an archived conversation offers Move to inbox');
+  if (/Ana Ruiz/.test(shown)) fail('a done conversation leaves the inbox');
+  await evaluate(`document.querySelector('[data-message-folder="done"]').click()`); await wait(100);
+  if (!/Ana Ruiz/.test(await evaluate(`document.querySelector('#conversation-list').innerText`))) fail('Done should list it');
+  if (!(await evaluate(`!!document.querySelector('[data-archive-conversation="0"]')`))) fail('a done conversation offers Reopen');
+  if (!/Reopen/.test(await evaluate(`document.querySelector('[data-archive-conversation="0"]').innerText`))) fail('the button should read Reopen');
   await evaluate(`document.querySelector('[data-message-folder="inbox"]').click()`); await wait(100);
 
   // A closed window: no form, a pointer to the app.

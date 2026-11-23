@@ -4,13 +4,18 @@
 const MESSAGES_TTL=2*60000;
 let messagesCache={key:null,at:0,data:null,loading:false,error:''},activeDm=null,inboxClient=null;
 const MESSAGES_CLIENT_KEY='signaldesk-messages-client',MESSAGES_FOLDER_KEY='signaldesk-messages-folder';
-// Unread: their message is the latest and nobody has answered. Inbox: everything not archived. Archived: put away here (Meta's copy is unchanged).
-const MESSAGE_FOLDERS=[['unread','Unread'],['inbox','Inbox'],['archived','Archived']];
+// Unread: their message is the latest and nobody has answered. Inbox: everything not marked done. Done: handled
+// (stored as "archived"; Meta's copy is unchanged). Counts include only unread from the last 3 business days.
+const MESSAGE_FOLDERS=[['unread','Unread'],['inbox','Inbox'],['done','Done']];
+const UNREAD_BUSINESS_DAYS=3;
 let messagesFolder='inbox';
 try{inboxClient=localStorage.getItem(MESSAGES_CLIENT_KEY);messagesFolder=MESSAGE_FOLDERS.some(([key])=>key===localStorage.getItem(MESSAGES_FOLDER_KEY))?localStorage.getItem(MESSAGES_FOLDER_KEY):'inbox';}catch{/* private window: start from the default */}
-function inMessageFolder(item,folder){return folder==='archived'?item.archived:!item.archived&&(folder==='inbox'||item.needsReply);}
+function inMessageFolder(item,folder){return folder==='done'?item.archived:!item.archived&&(folder==='inbox'||item.needsReply);}
+// Weekdays since their last message, not counting the day it came: a Friday message counts through Wednesday.
+function businessDaysSince(iso,now=new Date()){const day=new Date(iso);if(!Number.isFinite(day.getTime()))return Infinity;day.setHours(0,0,0,0);let count=0;const end=new Date(now);end.setHours(0,0,0,0);while(day<end&&count<=UNREAD_BUSINESS_DAYS){day.setDate(day.getDate()+1);if(day.getDay()%6)count++;}return count;}
+function countsAsUnread(item){return inMessageFolder(item,'unread')&&businessDaysSince(item.last?.at||item.updatedAt)<=UNREAD_BUSINESS_DAYS;}
 
-function messagesNeedingReply(clientId=null){return(messagesCache.data?.conversations||[]).filter(item=>item.needsReply&&item.canReply&&!item.archived&&(clientId===null||item.clientId===clientId)).length;}
+function messagesNeedingReply(clientId=null){return(messagesCache.data?.conversations||[]).filter(item=>countsAsUnread(item)&&(clientId===null||item.clientId===clientId)).length;}
 // Clients with a Facebook or Instagram account, in the workspace's client order.
 // One client at a time in the Social Inbox, for both Messages and Comments: clients with a Facebook or Instagram
 // account, or with posts SignalDesk published, in the workspace's client order.
@@ -20,7 +25,7 @@ function currentInboxClient(){const list=inboxClients(),has=id=>list.some(client
 function pickMessagesFolder(folder){messagesFolder=folder;try{localStorage.setItem(MESSAGES_FOLDER_KEY,folder);}catch{/* not remembered */}renderMessagesPanel();}
 async function archiveConversation(connectionId,conversationId,archived){
   const item=findConversation(connectionId,conversationId);
-  try{await callSocialApi({action:'message-state',connectionId,conversationId,archived});if(item)item.archived=archived;toast(archived?'Archived. It comes back to the inbox if they write again.':'Moved back to the inbox.');renderMessagesPanel();renderInboxCount();openConversation(connectionId,conversationId);}
+  try{await callSocialApi({action:'message-state',connectionId,conversationId,archived});if(item)item.archived=archived;toast(archived?'Marked done. It comes back to the inbox if they write again.':'Moved back to the inbox.');renderMessagesPanel();renderInboxCount();openConversation(connectionId,conversationId);}
   catch(error){toast(error.message);}
 }
 function pickInboxClient(id){inboxClient=id;try{localStorage.setItem(MESSAGES_CLIENT_KEY,id);}catch{/* not remembered */}
@@ -30,13 +35,13 @@ function pickInboxClient(id){inboxClient=id;try{localStorage.setItem(MESSAGES_CL
 // Each tab counts unread messages, plus comments needing a reply once they've been checked for that client.
 function renderInboxTabs(){
   const tabs=$('#inbox-client-tabs');if(!tabs)return;const list=inboxClients(),current=currentInboxClient();tabs.hidden=list.length<2;if(tabs.hidden)return;
-  tabs.innerHTML=list.map(client=>{const waiting=(messagesCache.data?.conversations||[]).filter(item=>item.clientId===client.id&&inMessageFolder(item,'unread')).length+(openCommentsCache.key===client.id?openCommentCount():0);
+  tabs.innerHTML=list.map(client=>{const waiting=(messagesCache.data?.conversations||[]).filter(item=>item.clientId===client.id&&countsAsUnread(item)).length+(openCommentsCache.key===client.id?openCommentCount():0);
     return`<button type="button" role="tab" aria-selected="${client.id===current}" class="${client.id===current?'active':''}" data-inbox-client="${escapeHtml(client.id)}"><span class="client-dot" style="background:${escapeHtml(client.color||'var(--accent)')}"></span>${escapeHtml(client.name)}${waiting?` <span class="count-badge">${waiting}</span>`:''}</button>`;}).join('');
 }
 function findConversation(connectionId,conversationId){return(messagesCache.data?.conversations||[]).find(item=>item.connectionId===connectionId&&item.id===conversationId);}
 function replyWindowText(item){if(!item?.needsReply||!item.replyBy)return'';const left=Date.parse(item.replyBy)-Date.now();if(left<=0||!item.canReply)return'Reply window closed';const hours=Math.floor(left/3600000);return hours>=1?`${hours} h left to reply`:`${Math.max(1,Math.round(left/60000))} min left to reply`;}
-const ATTACHMENT_LABELS={photo:'Photo',video:'Video',file:'File',share:'Shared a post',sticker:'Sticker','story-reply':'Replied to your story','story-mention':'Mentioned you in their story',unsupported:'A message type Meta doesn’t share with other apps',unknown:'A photo, video, or file'};
-function attachmentHtml(attachment,alone){if(!attachment)return'';const label=ATTACHMENT_LABELS[attachment.kind]||ATTACHMENT_LABELS.unknown,name=attachment.name?` · ${escapeHtml(attachment.name)}`:'';const picture=attachment.preview&&['photo','video','sticker'].includes(attachment.kind)?`<img class="message-media" src="${escapeHtml(attachment.preview)}" alt="${escapeHtml(label)}" loading="lazy">`:'';const link=attachment.url?` <a href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">Open ↗</a>`:alone&&!picture?' <span>Open the conversation in the app to see it.</span>':'';return`<span class="message-attachment">${picture}<i>${escapeHtml(label)}${name}</i>${link}</span>`;}
+const ATTACHMENT_LABELS={photo:'Photo',video:'Video',file:'File',share:'Shared a post',sticker:'Sticker','story-reply':'Replied to your story','story-mention':'Mentioned you in their story',unsupported:'Shared something only the app shows, often a Reel or post. Open the conversation in the app to see it.',unknown:'A photo, video, or file'};
+function attachmentHtml(attachment,alone){if(!attachment)return'';const label=ATTACHMENT_LABELS[attachment.kind]||ATTACHMENT_LABELS.unknown,name=attachment.name?` · ${escapeHtml(attachment.name)}`:'';const picture=attachment.preview&&['photo','video','sticker'].includes(attachment.kind)?`<img class="message-media" src="${escapeHtml(attachment.preview)}" alt="${escapeHtml(label)}" loading="lazy">`:'';const link=attachment.url?` <a href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">Open ↗</a>`:alone&&!picture&&attachment.kind!=='unsupported'?' <span>Open the conversation in the app to see it.</span>':'';return`<span class="message-attachment">${picture}<i>${escapeHtml(label)}${name}</i>${link}</span>`;}
 function networkGlyph(platform){return escapeHtml(SOCIAL_NETWORKS.find(item=>item[0]===platform)?.[2]||'•');}
 
 async function loadMessages(force=false){
@@ -58,7 +63,7 @@ function conversationButtonHtml(item){
 
 function renderMessagesPanel(){
   const panel=$('#messages-panel');if(!panel||panel.hidden)return;
-  const{data,loading,error}=messagesCache,list=$('#conversation-list'),notes=$('#messages-notes'),refresh=$('#refresh-messages'),count=messagesNeedingReply();
+  const{data,loading,error}=messagesCache,list=$('#conversation-list'),notes=$('#messages-notes'),refresh=$('#refresh-messages'),count=messagesNeedingReply(currentInboxClient());
   if(refresh){refresh.disabled=loading;refresh.innerHTML=`${icon('refresh')}${loading?'Checking…':'Check again'}`;}
   const badge=$('#messages-count');if(badge){badge.textContent=String(count);badge.hidden=!count;}
   if(error){notes.innerHTML=`<p class="option-hint">${escapeHtml(error)}</p>`;list.innerHTML='';return;}
@@ -71,9 +76,9 @@ function renderMessagesPanel(){
   const mine=problems.filter(item=>item.clientId===current);
   if(mine.length&&mine.length===(data.byClient?.[current]||0)&&mine.every(item=>item.permission)){notes.innerHTML='<p class="option-hint">Messages aren’t turned on for your connected accounts yet. Once Meta allows them, reconnect your Facebook and Instagram accounts in Social Accounts and allow messages.</p>';if(layout)layout.hidden=true;return;}
   const forClient=(data.conversations||[]).filter(item=>item.clientId===current),items=forClient.filter(item=>inMessageFolder(item,messagesFolder));
-  const unread=forClient.filter(item=>inMessageFolder(item,'unread')).length;
+  const unread=forClient.filter(countsAsUnread).length;
   const folders=`<div class="view-tabs message-folders" role="tablist" aria-label="Show">${MESSAGE_FOLDERS.map(([key,label])=>`<button type="button" role="tab" aria-selected="${key===messagesFolder}" class="${key===messagesFolder?'active':''}" data-message-folder="${key}">${label}${key==='unread'&&unread?` <span class="count-badge">${unread}</span>`:''}</button>`).join('')}</div>`;
-  const empty={unread:'Nothing unread. Every conversation has an answer.',inbox:forClient.length?'Everything here is archived.':'No messages yet. When someone messages this client’s Page or Instagram account, it shows up here.',archived:'Nothing archived. Archive a conversation to put it away; it comes back if they write again.'}[messagesFolder];
+  const empty={unread:'Nothing unread. Every conversation has an answer.',inbox:forClient.length?'Everything here is done.':'No messages yet. When someone messages this client’s Page or Instagram account, it shows up here.',done:'Nothing marked done yet. Mark a conversation done once it’s handled; it comes back if they write again.'}[messagesFolder];
   list.innerHTML=folders+(items.length?items.map(conversationButtonHtml).join(''):`<p class="option-hint">${empty}</p>`);
 }
 
@@ -84,7 +89,7 @@ function messageThreadHtml(item,data){
   replyContext.set(item?.id||'',{text:lastTheirs?.text||'',author:person,jobId:''});
   const form=closed?`<p class="option-hint">It’s been more than 24 hours since ${escapeHtml(person)} last wrote. Meta only lets a business answer from other apps within 24 hours, so reply in the ${item.platform==='instagram'?'Instagram':'Facebook'} app.</p>`
     :`<form class="comment-reply-form message-reply-form" data-message-to="${escapeHtml(item?.id||'')}" data-connection="${escapeHtml(item?.connectionId||'')}" data-client="${escapeHtml(item?.clientId||'')}" data-author="${escapeHtml(firstName(person))}"><button type="button" class="icon-button" data-reply-templates title="Reply templates" aria-label="Reply templates" aria-haspopup="menu">${icon('file')}</button><button type="button" class="icon-button" data-suggest-reply title="Suggest a reply (AI)" aria-label="Suggest a reply">${icon('sparkles')}</button><input class="field" maxlength="${limit}" placeholder="Message…" aria-label="Message ${escapeHtml(person)}"><button class="secondary-button" type="submit">Send</button></form>${item?.needsReply?`<small class="message-window">${escapeHtml(replyWindowText(item))}</small>`:''}`;
-  const archive=item?`<button type="button" class="text-button message-archive" data-archive-conversation="${item.archived?'0':'1'}">${icon(item.archived?'inbox':'archive')}${item.archived?'Move to inbox':'Archive'}</button>`:'';
+  const archive=item?`<button type="button" class="text-button message-archive" data-archive-conversation="${item.archived?'0':'1'}">${icon(item.archived?'inbox':'check')}${item.archived?'Reopen':'Mark done'}</button>`:'';
   return`<div class="message-head"><span class="platform-icon ${escapeHtml(item?.platform||'')}">${networkGlyph(item?.platform)}</span><b>${escapeHtml(person)}</b><small>${escapeHtml(item?.account||'')}</small>${archive}</div><div class="message-list">${bubbles}</div>${form}`;
 }
 
