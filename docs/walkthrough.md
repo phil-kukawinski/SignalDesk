@@ -3,7 +3,7 @@
 Your guide to running SignalDesk: what's set up, what's left, how to use it day to day, and what to do when something breaks.
 
 Live site: **https://socialsignaldesk.com**
-Last updated: November 18, 2026
+Last updated: November 24, 2026
 
 ---
 
@@ -99,7 +99,7 @@ The sidebar is grouped into **Plan** (Home, calendar, Publishing Studio, Campaig
 
 Times read the friendly way across lists and the post panel: "In 4 hours", "Tomorrow, 9:00 AM".
 
-After an update, a short **New in SignalDesk** note on the Command Center lists what changed. **Got it** hides it on that device.
+After an update, a short **New in SignalDesk** note on the Command Center lists what changed. **Got it** hides it on that device. A tab left open checks for a newer version every 10 minutes (and when you come back to it) and offers **Reload** in a bar at the bottom.
 
 Press **?** anywhere for keyboard shortcuts: **N** starts a new post, **/** searches, and **G** then **C** jumps to the calendar (**H** home, **A** analytics, **S** social accounts).
 
@@ -181,7 +181,10 @@ The brand kit opens after you add a client. You can also open it any time from t
 ### After it publishes
 
 - **Post details** show each network's status, a **View** link, and link clicks.
-- **Social Inbox → Comments on your posts:** read and reply to comments on Facebook, Instagram, and LinkedIn.
+- **Social Inbox:** one client at a time. The tabs across the top pick the client (each counts what's waiting), and both panels follow that choice.
+  - **Messages:** direct messages to the client's Facebook Page and Instagram account, read live from Meta (not stored). Folders: **Unread** (their message is the latest), **Inbox** (everything not done), and **Done**. **Mark done** clears a conversation; it comes back by itself when they write again, and **Reopen** brings it back by hand. Counts include unread from the last 3 business days; older ones stay in Unread marked **Reply window closed**.
+  - **Replying:** Meta allows answers from SignalDesk only within 24 hours of the person's last message (an auto-reply after it doesn't extend this). After that, the reply box is replaced by a pointer to the Facebook or Instagram app. Templates and **Suggest a reply** work as they do for comments. Shared Reels, posts, and some story replies can only be seen in the app; the conversation says so.
+  - **Comments on your posts:** read and reply to comments on Facebook, Instagram, and LinkedIn. **Needs a reply** lists unanswered comments on the client's recent posts.
 - **Analytics & Reports**, in three tabs:
   - Each network keeps the **same color** everywhere: charts, tables, the client report, and the report emails. A one-line summary sits at the top of Overview and Posts.
   - **Overview:** reach, engagements, engagement rate, published posts, and engagement over time. Switch the chart between **All networks** and **By network** (one line each); click a legend entry to hide or show it.
@@ -278,7 +281,7 @@ Emergency and warning emails also start their subject with "Emergency:" or "Warn
 **As platform owner** you also get:
 
 - **The Monday check** (after 8 AM Eastern): a health check of the site, database, scheduler, sign-in, accounts, and recent errors, grouped from Emergency down to Working. "All good" means nothing needs you.
-- **Problem alerts,** at most every 6 hours, when server errors are logged or posts fail across workspaces. Settings → Beta invites → **Server errors in the last 24 hours** shows the same list.
+- **Problem alerts,** at most every 6 hours, when server errors are logged or posts fail across workspaces. Settings → Beta invites → **Server errors this week** shows the same list, including refused message replies with Meta's own words. The Monday check names the latest one.
 
 ### The scheduler
 
@@ -335,6 +338,9 @@ A full rebuild into a new project also needs `supabase/schema.sql` first and the
 | The whole site shows "Vercel Security Checkpoint" to tools | Vercel's automatic protection after a burst of requests | It clears on its own within the hour. If it doesn't, check Vercel → Firewall → Attack Challenge Mode is off. |
 | A push to GitHub didn't update the site | Vercel's build hasn't started yet | Wait a few minutes. Check Vercel → Deployments, or select Redeploy. |
 | Setup & health says the site and server use different projects | `js/config.js` and the Vercel `SUPABASE_*` settings disagree | Point both at `zuckwjjzhrcesrzbfdak`, then redeploy. |
+| A message reply says Meta refused it | More than 24 hours since they last wrote, or, before Meta approves messaging, the person has no role on the app (Instagram also needs a role on the business account) | The message ends with Meta's own words. Reply in the Facebook or Instagram app; after approval, replies within 24 hours work for everyone. |
+| Messages say they aren't turned on, or one account is missing | The account hasn't allowed messages | On Instagram: Settings → Messages and story replies → Message controls → Connected tools → **Allow access to messages**. Then reconnect the account in Social Accounts and allow messages. |
+| The app looks out of date after an update | The tab was open before the update | Select **Reload** in the bar at the bottom, or reload the page. |
 | Settings → Beta invites is missing | Your email isn't in `PLATFORM_ADMIN_EMAILS`, or the site wasn't redeployed after setting it | Check the setting in Vercel, then redeploy. |
 
 ---

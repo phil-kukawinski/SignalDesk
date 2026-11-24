@@ -1,10 +1,10 @@
 // A short "New in SignalDesk" note on Home, shown once per device after an update, so people notice
 // what changed without a tour. Bump WHATS_NEW.id when the list changes. Brand-new people skip it:
 // they get the welcome tour instead.
-const WHATS_NEW={id:'2026-11-20',items:[
+const WHATS_NEW={id:'2026-11-24',items:[
+  'Social Inbox now has direct messages from each client’s Facebook Page and Instagram, one client at a time. Mark a conversation done once it’s handled.',
   'Assign posts to teammates, @mention them in notes, and get a week-ahead email on Mondays.',
   'The calendar can color by network, status, or content pillar, show gaps, and move several posts at once.',
-  'Clients can send you photos and see their results from their review link.',
   'Analytics has What works and a Compare tab, and client reports download as a PDF.',
   'Bluesky and Mastodon now post directly. Turn on two-factor sign-in under Settings → Security.'
 ]};

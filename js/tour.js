@@ -19,7 +19,8 @@ const TOUR_STEPS=[
   {view:'composer',target:'#suggested-times',title:'Post at the right moment',body:'One tap picks a good time. As results come in, SignalDesk learns this client’s best times.',optional:true},
   {view:'composer',target:'#composer-actions',title:'Schedule it',body:'Schedule the post, save a draft, or send it for approval. It goes out on time, even with SignalDesk closed.'},
   {view:'calendar',target:'.calendar-panel',title:'Plan the month',body:'Everything planned and already published, in one calendar. Drag a post to move it; use Filter to focus.'},
-  {view:'analytics',target:'.analytics-stats',title:'Know what works',body:'Reach, engagement, and audience growth from every source, including posts made outside SignalDesk. Export a report any time.'},
+  {view:'inbox',target:'#inbox-client-tabs, #messages-panel, #view-inbox .panel',title:'Answer people in one place',body:'Messages to each client’s Facebook Page and Instagram, and comments on their posts. Pick a client at the top; Unread shows who’s waiting, and Mark done clears a conversation until they write again.',admin:true},
+  {view:'analytics',target:'.analytics-stats',title:'Know what works',body:'Reach, engagement, and audience growth from every source, including posts made outside SignalDesk. Overview, Posts, and Reports tabs; the client report and Weekly Top Posts live under Reports.'},
   {view:'social-accounts',target:'#social-account-grid',title:'Connect each client’s accounts',body:'Sign in on each network’s own page. Tokens stay encrypted on the server; SignalDesk never sees passwords.',admin:true},
   {view:'overview',target:'#search-button',title:'Find anything, fast',body:'Search posts, clients, and files with ⌘K. Press ? any time for keyboard shortcuts, like N for a new post.'}
 ];

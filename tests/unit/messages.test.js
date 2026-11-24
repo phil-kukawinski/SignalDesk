@@ -83,7 +83,7 @@ const { listConversations, conversationMessages, sendMessage, setConversationArc
   assert.ok(calls.some((call) => call.url.pathname.endsWith('page1/conversations') && call.url.searchParams.get('platform') === 'instagram' && call.url.searchParams.get('access_token') === 'token-c-ig'));
 
   // One conversation, oldest message first; a message without text is an attachment.
-  const thread = await conversationMessages('ws-1', { connectionId: FB, conversationId: 't_new', encryptionKey: KEY });
+  const thread = await conversationMessages('ws-1', { connectionId: FB, conversationId: 't_new', encryptionKey: KEY, now });
   assert.deepStrictEqual(thread.messages.map((item) => item.id), ['m0', 'm1']);
   assert.strictEqual(thread.messages[0].hasAttachment, true);
   assert.strictEqual(thread.with.name, 'Ana Ruiz');
