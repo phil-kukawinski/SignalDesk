@@ -42,6 +42,9 @@ button,input,textarea{font:inherit}
 .review-filter button{border:0;background:transparent;border-radius:7px;padding:6px 14px;cursor:pointer;color:var(--muted);font-weight:500;font-size:13px}
 .review-filter button.active{background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
 .review-list{display:grid;gap:14px}
+.review-count:empty{display:none}.review-count{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:999px;background:var(--surface-3);font-size:11px;line-height:18px;text-align:center}
+.review-filter button.active .review-count{background:var(--accent-soft);color:var(--accent-text)}
+.review-card.leaving{opacity:0;transform:translateX(24px);transition:opacity .3s ease,transform .3s ease}
 .review-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
 .review-card-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
 .review-card-head h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}

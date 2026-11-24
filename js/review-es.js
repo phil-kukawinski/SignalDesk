@@ -4,7 +4,7 @@
   const PHRASES = {
     'Content review': 'Revisión de contenido', 'Loading…': 'Cargando…', 'Your name': 'Tu nombre', 'So the team knows who reviewed': 'Para que el equipo sepa quién revisó',
     'Posts': 'Publicaciones', 'Results': 'Resultados', 'Send files': 'Enviar archivos', 'Loading upcoming posts…': 'Cargando las próximas publicaciones…',
-    'All upcoming': 'Todas las próximas', 'Waiting for you': 'Esperan tu aprobación', 'Add these posts to my calendar': 'Agregar estas publicaciones a mi calendario',
+    'Upcoming': 'Próximas', 'Approved': 'Aprobadas', 'Waiting for you': 'Esperan tu aprobación', 'Nothing approved yet. Posts you approve move here.': 'Aún no hay nada aprobado. Las publicaciones que apruebes aparecen aquí.', 'Everything is approved. Thank you! Approved posts are under Approved.': 'Todo está aprobado. ¡Gracias! Las publicaciones aprobadas están en Aprobadas.', 'Add these posts to my calendar': 'Agregar estas publicaciones a mi calendario',
     'Google Calendar, Outlook, or Apple Calendar. It stays up to date.': 'Google Calendar, Outlook o Apple Calendar. Se mantiene al día.',
     'Loading results…': 'Cargando resultados…', 'Send photos or videos for upcoming posts. They go straight to the team’s content library. Up to 10 files at a time, 50 MB each.': 'Envía fotos o videos para las próximas publicaciones. Llegan directo a la biblioteca de contenido del equipo. Hasta 10 archivos a la vez, de 50 MB cada uno.',
     'Choose photos or videos': 'Elegir fotos o videos', 'Note for the team': 'Nota para el equipo', '(optional)': '(opcional)', 'For example: for the fall launch posts': 'Por ejemplo: para las publicaciones del lanzamiento de otoño',

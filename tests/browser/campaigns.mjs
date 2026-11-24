@@ -216,5 +216,13 @@ export default async ({ send, evaluate, wait, log, sampleData }) => {
   if (JSON.stringify(batches) !== JSON.stringify([[25, false, 29, 'Dana'], [4, true, 29, 'Dana']])) fail('approve all should send batches and notify once');
   const after = await json(`{hidden:document.querySelector('#review-approve-all').hidden,changes:document.querySelectorAll('.review-chip.changes').length,approved:document.querySelectorAll('.review-chip.approved').length}`);
   log.push('after: ' + JSON.stringify(after));
-  if (!after.hidden || after.changes !== 1 || after.approved !== 29) fail('a post with changes requested should stay undecided after approving the rest');
+  if (!after.hidden || after.changes !== 1 || after.approved !== 0) fail('approved posts leave Upcoming; the one with changes requested stays');
+  if (await evaluate(`document.querySelector('#count-approved').textContent`) !== '29') fail('the Approved tab should count 29');
+  // Approving one more: it slides out of Upcoming and into Approved.
+  await evaluate(`document.querySelector('.review-card .approve').click()`); await wait(700);
+  const moved = await json(`{cards:document.querySelectorAll('#review-list .review-card').length,empty:document.querySelector('.review-empty')?.textContent||'',count:document.querySelector('#count-approved').textContent}`);
+  if (moved.cards !== 0 || !/Everything is approved/.test(moved.empty) || moved.count !== '30') fail('an approved post should move to Approved: ' + JSON.stringify(moved));
+  await evaluate(`document.querySelector('[data-filter="approved"]').click()`); await wait(200);
+  const tab = await json(`{cards:document.querySelectorAll('#review-list .review-card').length,chips:document.querySelectorAll('.review-chip.approved').length,approve:document.querySelectorAll('#review-list .approve').length,changes:document.querySelectorAll('#review-list [data-decision="changes_requested"]').length}`);
+  if (tab.cards !== 30 || tab.chips !== 30 || tab.approve !== 0 || tab.changes !== 30) fail('the Approved tab lists them, without Approve but with Request changes: ' + JSON.stringify(tab));
 };

@@ -27,8 +27,9 @@
     <p class="review-intro" id="review-intro">Loading upcoming posts…</p>
     <div class="review-toolbar">
       <div class="review-filter" id="review-filter" hidden>
-        <button type="button" class="active" data-filter="all">All upcoming</button>
-        <button type="button" data-filter="waiting">Waiting for you</button>
+        <button type="button" class="active" data-filter="upcoming">Upcoming <span class="review-count" id="count-upcoming"></span></button>
+        <button type="button" data-filter="waiting">Waiting for you <span class="review-count" id="count-waiting"></span></button>
+        <button type="button" data-filter="approved">Approved <span class="review-count" id="count-approved"></span></button>
       </div>
       <button type="button" class="review-approve-all" id="review-approve-all" hidden></button>
     </div>

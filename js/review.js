@@ -3,7 +3,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const hash = new URLSearchParams(location.hash.slice(1)), token = hash.get('t') || '', campaign = hash.get('campaign') || '';
   const NAME_KEY = 'signaldesk-review-name';
-  let posts = [], filter = 'all', approveArmed = false;
+  let posts = [], filter = 'upcoming', approveArmed = false;
   const approvable = () => posts.filter((post) => !post.clientStatus);
   const BATCH = 25;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -59,12 +59,24 @@
     render();
   }
 
+  // Upcoming and Waiting leave out what the client approved; those move to the Approved tab.
+  const isApproved = (post) => post.clientStatus === 'approved';
+  const FILTERS = { upcoming: (post) => !isApproved(post), waiting: (post) => !isApproved(post) && post.status === 'waiting', approved: isApproved };
+  function renderCounts() {
+    Object.entries(FILTERS).forEach(([key, test]) => { const count = posts.filter(test).length, el = $(`#count-${key}`); if (el) el.textContent = count ? String(count) : ''; });
+  }
+  function emptyText() {
+    if (!posts.length) return 'No upcoming posts right now. Check back later.';
+    if (filter === 'approved') return 'Nothing approved yet. Posts you approve move here.';
+    return posts.some(isApproved) && !posts.some((post) => !isApproved(post)) ? 'Everything is approved. Thank you! Approved posts are under Approved.' : 'Nothing is waiting for your approval.';
+  }
   function render() {
     renderApproveAll();
+    renderCounts();
     const list = $('#review-list');
-    const shown = posts.filter((post) => filter === 'all' || (post.status === 'waiting' && post.clientStatus !== 'approved'));
+    const shown = posts.filter(FILTERS[filter] || FILTERS.upcoming);
     if (!shown.length) {
-      list.innerHTML = `<div class="review-empty">${posts.length ? 'Nothing is waiting for your approval.' : 'No upcoming posts right now. Check back later.'}</div>`;
+      list.innerHTML = `<div class="review-empty">${emptyText()}</div>`;
       return;
     }
     list.innerHTML = shown.map((post) => {
@@ -76,7 +88,7 @@
         <div class="review-version">${post.versions[0] ? versionHtml(post.versions[0]) : ''}</div>
         ${notes ? `<ul class="review-notes">${notes}</ul>` : ''}
         <div class="review-actions"><textarea placeholder="Comments or requested changes (optional for approval)" maxlength="2000" aria-label="Comment"></textarea>
-          <div class="review-buttons"><button type="button" class="approve" data-decision="approved">✓ Approve</button><button type="button" data-decision="changes_requested">Request changes</button><button type="button" data-comment>Comment only</button></div></div>
+          <div class="review-buttons">${isApproved(post) ? '' : '<button type="button" class="approve" data-decision="approved">✓ Approve</button>'}<button type="button" data-decision="changes_requested">Request changes</button><button type="button" data-comment>Comment only</button></div></div>
       </article>`;
     }).join('');
   }
@@ -118,6 +130,9 @@
         toast('Comment sent.');
       }
       post.notes.push({ author: name, body: comment, decision: button.dataset.decision || null });
+      // An approved post slides out of Upcoming and into the Approved tab.
+      const leaving = button.dataset.decision === 'approved' && filter !== 'approved';
+      if (leaving && !matchMedia('(prefers-reduced-motion: reduce)').matches) { card.classList.add('leaving'); renderCounts(); await new Promise((done) => setTimeout(done, 320)); }
       render();
     } catch (error) {
       toast(error.message);
